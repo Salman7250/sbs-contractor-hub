@@ -71,6 +71,7 @@ function Icon({
     | "jobs"
     | "estimates"
     | "invoices"
+    | "billing"
     | "settings"
     | "search"
     | "menu"
@@ -150,6 +151,16 @@ function Icon({
           <path d="M8 7h8" />
           <path d="M8 11h8" />
           <path d="M8 15h5" />
+        </svg>
+      );
+
+    case "billing":
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="M3 10h18" />
+          <path d="M7 15h4" />
+          <path d="M16 15h1" />
         </svg>
       );
 
@@ -265,6 +276,12 @@ export default function AppShell({
       icon: <Icon name="invoices" />,
     },
   ];
+
+  const billingItem: NavItem = {
+    label: "Billing",
+    href: "/billing",
+    icon: <Icon name="billing" />,
+  };
 
   const settingsItem: NavItem = {
     label: "Settings",
@@ -486,6 +503,8 @@ export default function AppShell({
   }
 
   function navigateTo(href: string) {
+    setMobileOpen(false);
+    setProfileOpen(false);
     router.push(href);
   }
 
@@ -665,6 +684,26 @@ export default function AppShell({
               <span className="sbs-nav-label">
                 Administration
               </span>
+
+              <button
+                type="button"
+                className={`sbs-nav-item ${
+                  isActive(billingItem.href)
+                    ? "is-active"
+                    : ""
+                }`}
+                onClick={() =>
+                  navigateTo(billingItem.href)
+                }
+              >
+                <span className="sbs-nav-icon">
+                  {billingItem.icon}
+                </span>
+
+                <span className="sbs-nav-text">
+                  {billingItem.label}
+                </span>
+              </button>
 
               <button
                 type="button"
@@ -1733,6 +1772,7 @@ function getPageTitle(pathname: string) {
   if (pathname.startsWith("/jobs")) return "Jobs";
   if (pathname.startsWith("/estimates")) return "Estimates";
   if (pathname.startsWith("/invoices")) return "Invoices";
+  if (pathname.startsWith("/billing")) return "Billing";
   if (pathname.startsWith("/settings")) return "Settings";
 
   return "Dashboard";
