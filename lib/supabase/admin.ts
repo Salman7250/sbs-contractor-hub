@@ -2,28 +2,34 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL;
+function getSupabaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-const supabaseServiceRoleKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL environment variable."
+    );
+  }
 
-if (!supabaseUrl) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL environment variable."
-  );
+  return url;
 }
 
-if (!supabaseServiceRoleKey) {
-  throw new Error(
-    "Missing SUPABASE_SERVICE_ROLE_KEY environment variable."
-  );
+function getSupabaseServiceRoleKey(): string {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!key) {
+    throw new Error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY environment variable."
+    );
+  }
+
+  return key;
 }
 
 export function createAdminClient() {
   return createClient(
-    supabaseUrl,
-    supabaseServiceRoleKey,
+    getSupabaseUrl(),
+    getSupabaseServiceRoleKey(),
     {
       auth: {
         autoRefreshToken: false,

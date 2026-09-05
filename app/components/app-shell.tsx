@@ -16,69 +16,244 @@ type AppShellProps = {
   actions?: ReactNode;
 };
 
-type Company = {
-  id: string;
-  name: string;
-  currency: string | null;
-  timezone: string | null;
-};
-
-type Profile = {
-  id: string;
-  full_name: string | null;
-};
-
-type Membership = {
-  company_id: string;
-  role: string;
-};
-
-type CompanyUpdatedDetail = {
-  id: string;
-  name: string;
-  currency?: string | null;
-  timezone?: string | null;
-};
+type IconName =
+  | "dashboard"
+  | "customers"
+  | "quotes"
+  | "orders"
+  | "invoices"
+  | "payments"
+  | "products"
+  | "serials"
+  | "inventory"
+  | "warehouses"
+  | "pricing"
+  | "suppliers"
+  | "purchases"
+  | "expenses"
+  | "warranty"
+  | "repairs"
+  | "rma"
+  | "portal"
+  | "reports"
+  | "employees"
+  | "documents"
+  | "settings"
+  | "search"
+  | "menu"
+  | "close"
+  | "logout"
+  | "chevron"
+  | "bell";
 
 type NavItem = {
   label: string;
   href: string;
-  icon: ReactNode;
+  icon: IconName;
+  available: boolean;
 };
 
-function getInitials(name: string) {
-  const cleanName = name.trim();
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
 
-  if (!cleanName) return "U";
+type WorkspaceCompany = {
+  id: string;
+  name: string;
+  currency: string | null;
+  timezone: string | null;
+  business_type: "product" | "service" | null;
+};
 
-  const parts = cleanName.split(/\s+/).filter(Boolean);
+type WorkspaceProfile = {
+  full_name: string | null;
+  avatar_url: string | null;
+};
 
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
+function getWorkspaceSections(): NavSection[] {
+  return [
+    {
+      label: "MAIN",
+      items: [
+        {
+          label: "Dashboard",
+          href: "/",
+          icon: "dashboard",
+          available: true,
+        },
+      ],
+    },
 
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    {
+      label: "SALES",
+      items: [
+        {
+          label: "Customers",
+          href: "/customers",
+          icon: "customers",
+          available: true,
+        },
+        {
+          label: "Quotes",
+          href: "/estimates",
+          icon: "quotes",
+          available: true,
+        },
+        {
+          label: "Sales & Orders",
+          href: "/sales",
+          icon: "orders",
+          available: true,
+        },
+        {
+          label: "Invoices",
+          href: "/invoices",
+          icon: "invoices",
+          available: true,
+        },
+        {
+  label: "Payments",
+  href: "/payments",
+  icon: "payments",
+  available: true,
+},
+      ],
+    },
+
+    {
+      label: "PRODUCTS & INVENTORY",
+      items: [
+        {
+          label: "Products",
+          href: "/products",
+          icon: "products",
+          available: true,
+        },
+        {
+          label: "Serial Numbers",
+          href: "/serial-numbers",
+          icon: "serials",
+          available: true,
+        },
+        {
+          label: "Inventory",
+          href: "/inventory",
+          icon: "inventory",
+          available: false,
+        },
+        {
+          label: "Warehouses",
+          href: "/warehouses",
+          icon: "warehouses",
+          available: false,
+        },
+        {
+          label: "Pricing",
+          href: "/pricing",
+          icon: "pricing",
+          available: false,
+        },
+      ],
+    },
+
+    {
+      label: "PROCUREMENT",
+      items: [
+        {
+          label: "Suppliers",
+          href: "/suppliers",
+          icon: "suppliers",
+          available: false,
+        },
+        {
+          label: "Purchase Orders",
+          href: "/purchases",
+          icon: "purchases",
+          available: false,
+        },
+        {
+          label: "Expenses",
+          href: "/expenses",
+          icon: "expenses",
+          available: false,
+        },
+      ],
+    },
+
+    {
+      label: "SERVICE",
+      items: [
+        {
+          label: "Warranty",
+          href: "/warranty",
+          icon: "warranty",
+          available: false,
+        },
+        {
+          label: "Repairs",
+          href: "/repairs",
+          icon: "repairs",
+          available: false,
+        },
+        {
+          label: "RMA",
+          href: "/rma",
+          icon: "rma",
+          available: false,
+        },
+      ],
+    },
+
+    {
+      label: "BUSINESS",
+      items: [
+        {
+          label: "B2B Client Portal",
+          href: "/portal",
+          icon: "portal",
+          available: false,
+        },
+        {
+          label: "Reports & Analytics",
+          href: "/reports",
+          icon: "reports",
+          available: false,
+        },
+        {
+          label: "Employees",
+          href: "/employees",
+          icon: "employees",
+          available: false,
+        },
+        {
+          label: "Documents",
+          href: "/documents",
+          icon: "documents",
+          available: false,
+        },
+      ],
+    },
+
+    {
+      label: "SYSTEM",
+      items: [
+        {
+          label: "Settings",
+          href: "/settings",
+          icon: "settings",
+          available: true,
+        },
+      ],
+    },
+  ];
 }
 
 function Icon({
   name,
-  size = 19,
+  size = 20,
 }: {
-  name:
-    | "dashboard"
-    | "leads"
-    | "customers"
-    | "jobs"
-    | "estimates"
-    | "invoices"
-    | "billing"
-    | "settings"
-    | "search"
-    | "menu"
-    | "close"
-    | "logout"
-    | "chevron"
-    | "bell";
+  name: IconName;
   size?: number;
 }) {
   const common = {
@@ -97,20 +272,10 @@ function Icon({
     case "dashboard":
       return (
         <svg {...common}>
-          <rect x="3" y="3" width="7" height="7" rx="1.5" />
-          <rect x="14" y="3" width="7" height="7" rx="1.5" />
-          <rect x="3" y="14" width="7" height="7" rx="1.5" />
-          <rect x="14" y="14" width="7" height="7" rx="1.5" />
-        </svg>
-      );
-
-    case "leads":
-      return (
-        <svg {...common}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M19 8v6" />
-          <path d="M22 11h-6" />
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
       );
 
@@ -124,17 +289,108 @@ function Icon({
         </svg>
       );
 
-    case "jobs":
+    case "quotes":
       return (
         <svg {...common}>
-          <rect x="3" y="7" width="18" height="13" rx="2" />
-          <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <path d="M3 12h18" />
-          <path d="M10 12v2h4v-2" />
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="8" y1="13" x2="16" y2="13" />
+          <line x1="8" y1="17" x2="16" y2="17" />
+          <line x1="8" y1="9" x2="10" y2="9" />
         </svg>
       );
 
-    case "estimates":
+    case "orders":
+      return (
+        <svg {...common}>
+          <path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
+          <path d="M14 2v6h6" />
+          <path d="M8 13h8" />
+          <path d="M8 17h6" />
+          <path d="M8 9h2" />
+        </svg>
+      );
+
+    case "invoices":
+      return (
+        <svg {...common}>
+          <path d="M6 2h9l5 5v15l-3-2-3 2-3-2-3 2-3-2V4a2 2 0 0 1 2-2Z" />
+          <path d="M14 2v6h6" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+          <line x1="8" y1="16" x2="16" y2="16" />
+        </svg>
+      );
+
+    case "payments":
+      return (
+        <svg {...common}>
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <line x1="2" y1="10" x2="22" y2="10" />
+          <line x1="6" y1="15" x2="10" y2="15" />
+        </svg>
+      );
+
+    case "products":
+      return (
+        <svg {...common}>
+          <path d="m21 8-9 5-9-5 9-5 9 5Z" />
+          <path d="m3 8 9 5 9-5" />
+          <path d="M3 8v8l9 5 9-5V8" />
+          <path d="M12 13v8" />
+        </svg>
+      );
+
+    case "serials":
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="7" y1="8" x2="7" y2="16" />
+          <line x1="10" y1="8" x2="10" y2="16" />
+          <line x1="14" y1="8" x2="14" y2="16" />
+          <line x1="17" y1="8" x2="17" y2="16" />
+        </svg>
+      );
+
+    case "inventory":
+      return (
+        <svg {...common}>
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+          <path d="M7 4v16" />
+          <path d="M17 4v16" />
+        </svg>
+      );
+
+    case "warehouses":
+      return (
+        <svg {...common}>
+          <path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10Z" />
+          <path d="M8 21v-6h8v6" />
+        </svg>
+      );
+
+    case "pricing":
+      return (
+        <svg {...common}>
+          <path d="M12 1v22" />
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H7" />
+        </svg>
+      );
+
+    case "suppliers":
+      return (
+        <svg {...common}>
+          <path d="M3 21h18" />
+          <path d="M5 21V5a2 2 0 0 1 2-2h6v18" />
+          <path d="M13 8h4a2 2 0 0 1 2 2v11" />
+          <line x1="8" y1="7" x2="10" y2="7" />
+          <line x1="8" y1="11" x2="10" y2="11" />
+          <line x1="8" y1="15" x2="10" y2="15" />
+        </svg>
+      );
+
+    case "purchases":
       return (
         <svg {...common}>
           <path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
@@ -144,31 +400,85 @@ function Icon({
         </svg>
       );
 
-    case "invoices":
+    case "expenses":
       return (
         <svg {...common}>
-          <path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z" />
-          <path d="M8 7h8" />
-          <path d="M8 11h8" />
-          <path d="M8 15h5" />
+          <circle cx="12" cy="12" r="9" />
+          <path d="M15 8.5c-.7-.6-1.7-1-3-1-1.7 0-3 1-3 2.2 0 1.4 1.4 2 3 2.3 1.6.3 3 1 3 2.4 0 1.3-1.3 2.3-3 2.3-1.2 0-2.3-.4-3-1" />
+          <line x1="12" y1="6" x2="12" y2="18" />
         </svg>
       );
 
-    case "billing":
+    case "warranty":
       return (
         <svg {...common}>
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="M3 10h18" />
-          <path d="M7 15h4" />
-          <path d="M16 15h1" />
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+      );
+
+    case "repairs":
+      return (
+        <svg {...common}>
+          <path d="M14.7 6.3a4 4 0 0 0-5.7 5.7l-6 6a2 2 0 0 0 2.8 2.8l6-6a4 4 0 0 0 5.7-5.7l-2.2 2.2-2.8-2.8 2.2-2.2Z" />
+        </svg>
+      );
+
+    case "rma":
+      return (
+        <svg {...common}>
+          <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+          <path d="M3 21v-5h5" />
+        </svg>
+      );
+
+    case "portal":
+      return (
+        <svg {...common}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <circle cx="7" cy="6.5" r=".5" />
+          <circle cx="10" cy="6.5" r=".5" />
+        </svg>
+      );
+
+    case "reports":
+      return (
+        <svg {...common}>
+          <line x1="4" y1="20" x2="4" y2="10" />
+          <line x1="10" y1="20" x2="10" y2="4" />
+          <line x1="16" y1="20" x2="16" y2="13" />
+          <line x1="22" y1="20" x2="22" y2="7" />
+        </svg>
+      );
+
+    case "employees":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="7" r="4" />
+          <path d="M2 21a7 7 0 0 1 14 0" />
+          <path d="M19 8v6" />
+          <path d="M16 11h6" />
+        </svg>
+      );
+
+    case "documents":
+      return (
+        <svg {...common}>
+          <path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" />
+          <path d="M14 2v6h6" />
+          <line x1="8" y1="13" x2="16" y2="13" />
+          <line x1="8" y1="17" x2="14" y2="17" />
         </svg>
       );
 
     case "settings":
       return (
         <svg {...common}>
-          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-          <path d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4V19a2 2 0 0 1-4 0v-.2a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 3.6 11H3.5a2 2 0 0 1 0-4h.2a2 2 0 0 0 1.4-3.4L5 3.5a2 2 0 1 1 2.8-2.8l.1.1A2 2 0 0 0 11.3 2V1.9a2 2 0 0 1 4 0V2a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A2 2 0 0 0 20.9 9h.1a2 2 0 0 1 0 4h-.1a2 2 0 0 0-1.5 2Z" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-2.6v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.6h.4A1.7 1.7 0 0 0 8 10.4a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h2.6v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.4V13h-.4a1.7 1.7 0 0 0-1.6 1Z" />
         </svg>
       );
 
@@ -176,24 +486,24 @@ function Icon({
       return (
         <svg {...common}>
           <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
+          <line x1="16.5" y1="16.5" x2="21" y2="21" />
         </svg>
       );
 
     case "menu":
       return (
         <svg {...common}>
-          <path d="M4 6h16" />
-          <path d="M4 12h16" />
-          <path d="M4 18h16" />
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
         </svg>
       );
 
     case "close":
       return (
         <svg {...common}>
-          <path d="m6 6 12 12" />
-          <path d="m18 6-12 12" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+          <line x1="18" y1="6" x2="6" y2="18" />
         </svg>
       );
 
@@ -202,14 +512,14 @@ function Icon({
         <svg {...common}>
           <path d="M10 17l5-5-5-5" />
           <path d="M15 12H3" />
-          <path d="M21 19V5a2 2 0 0 0-2-2h-5" />
+          <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
         </svg>
       );
 
     case "chevron":
       return (
         <svg {...common}>
-          <path d="m6 9 6 6 6-6" />
+          <polyline points="9 18 15 12 9 6" />
         </svg>
       );
 
@@ -226,6 +536,10 @@ function Icon({
   }
 }
 
+function normalizeSearchText(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export default function AppShell({
   children,
   title,
@@ -234,1346 +548,602 @@ export default function AppShell({
 }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+
   const supabase = useMemo(() => createClient(), []);
 
-  const [loading, setLoading] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [company, setCompany] = useState<WorkspaceCompany | null>(null);
+  const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const [company, setCompany] = useState<Company | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [membership, setMembership] = useState<Membership | null>(null);
+  const sections = useMemo(() => getWorkspaceSections(), []);
 
-  const navItems: NavItem[] = [
-    {
-      label: "Dashboard",
-      href: "/",
-      icon: <Icon name="dashboard" />,
-    },
-    {
-      label: "Leads",
-      href: "/leads",
-      icon: <Icon name="leads" />,
-    },
-    {
-      label: "Customers",
-      href: "/customers",
-      icon: <Icon name="customers" />,
-    },
-    {
-      label: "Jobs",
-      href: "/jobs",
-      icon: <Icon name="jobs" />,
-    },
-    {
-      label: "Estimates",
-      href: "/estimates",
-      icon: <Icon name="estimates" />,
-    },
-    {
-      label: "Invoices",
-      href: "/invoices",
-      icon: <Icon name="invoices" />,
-    },
-  ];
+  const allNavItems = useMemo(() => {
+    return sections.flatMap((section) => section.items);
+  }, [sections]);
 
-  const billingItem: NavItem = {
-    label: "Billing",
-    href: "/billing",
-    icon: <Icon name="billing" />,
-  };
-
-  const settingsItem: NavItem = {
-    label: "Settings",
-    href: "/settings",
-    icon: <Icon name="settings" />,
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadAppContext() {
-      setLoading(true);
-
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          router.replace("/login");
-          return;
-        }
-
-        const { data: membershipData, error: membershipError } =
-          await supabase
-            .from("company_members")
-            .select("company_id, role")
-            .eq("user_id", user.id)
-            .limit(1)
-            .maybeSingle();
-
-        if (membershipError || !membershipData) {
-          console.error(
-            "Unable to load company membership.",
-            membershipError
-          );
-          return;
-        }
-
-        const { data: companyData, error: companyError } =
-          await supabase
-            .from("companies")
-            .select("id, name, currency, timezone")
-            .eq("id", membershipData.company_id)
-            .maybeSingle();
-
-        if (companyError || !companyData) {
-          console.error(
-            "Unable to load company.",
-            companyError
-          );
-          return;
-        }
-
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (!mounted) return;
-
-        setMembership(membershipData);
-        setCompany(companyData);
-        setProfile(profileData ?? null);
-      } catch (error) {
-        console.error(
-          "App shell initialization failed:",
-          error
-        );
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadAppContext();
-
-    return () => {
-      mounted = false;
-    };
-  }, [router, supabase]);
-
-  useEffect(() => {
-    setMobileOpen(false);
-    setProfileOpen(false);
-  }, [pathname]);
-
-  /*
-   * Company synchronization.
-   *
-   * Settings sends a CustomEvent containing the already-updated
-   * company. We use that immediately so the sidebar/topbar never
-   * depends on a second database request.
-   *
-   * If an older plain Event is dispatched, we fall back to
-   * fetching the company from Supabase.
-   */
-  useEffect(() => {
-    async function refreshCompany() {
-      if (!membership?.company_id) return;
-
-      const { data, error } = await supabase
-        .from("companies")
-        .select("id, name, currency, timezone")
-        .eq("id", membership.company_id)
-        .maybeSingle();
-
-      if (error) {
-        console.error(
-          "Unable to refresh company:",
-          error
-        );
-        return;
-      }
-
-      if (data) {
-        setCompany(data);
-      }
-    }
-
-    function handleCompanyUpdated(event: Event) {
-      const customEvent =
-        event as CustomEvent<CompanyUpdatedDetail>;
-
-      const detail = customEvent.detail;
-
-      if (
-        detail &&
-        detail.id &&
-        detail.id === membership?.company_id
-      ) {
-        setCompany((previous) => ({
-          id: detail.id,
-          name: detail.name,
-          currency:
-            detail.currency ??
-            previous?.currency ??
-            null,
-          timezone:
-            detail.timezone ??
-            previous?.timezone ??
-            null,
-        }));
-
-        return;
-      }
-
-      void refreshCompany();
-    }
-
-    window.addEventListener(
-      "sbs-company-updated",
-      handleCompanyUpdated
-    );
-
-    return () => {
-      window.removeEventListener(
-        "sbs-company-updated",
-        handleCompanyUpdated
-      );
-    };
-  }, [membership?.company_id, supabase]);
-
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setMobileOpen(false);
-        setProfileOpen(false);
-      }
-    }
-
-    window.addEventListener(
-      "keydown",
-      handleEscape
-    );
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleEscape
-      );
-    };
-  }, []);
-
-  const companyName = company?.name || "Your Company";
-  const userName = profile?.full_name || "User";
-
-  const role = membership?.role
-    ? membership.role.charAt(0).toUpperCase() +
-      membership.role.slice(1)
-    : "Member";
-
-  const companyInitials = getInitials(companyName);
-  const userInitials = getInitials(userName);
-
-  function isActive(href: string) {
-    if (href === "/") {
-      return pathname === "/";
+  const activeItem = useMemo(() => {
+    if (pathname === "/") {
+      return allNavItems.find((item) => item.href === "/") ?? null;
     }
 
     return (
-      pathname === href ||
-      pathname.startsWith(`${href}/`)
+      allNavItems
+        .filter((item) => item.href !== "/")
+        .sort((a, b) => b.href.length - a.href.length)
+        .find((item) => pathname.startsWith(item.href)) ?? null
     );
+  }, [allNavItems, pathname]);
+
+  const activeTitle =
+    title || activeItem?.label || "Sharif Business Solutions";
+
+  const activeDescription =
+    description ||
+    (activeItem?.label === "Sales & Orders"
+      ? "Manage your sales, orders and customer transactions."
+      : undefined);
+
+  async function loadWorkspace() {
+    try {
+      setLoadingWorkspace(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return;
+      }
+
+      const { data: membership } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (membership?.company_id) {
+        const { data: companyData } = await supabase
+          .from("companies")
+          .select(
+            "id, name, currency, timezone, business_type"
+          )
+          .eq("id", membership.company_id)
+          .maybeSingle();
+
+        if (companyData) {
+          setCompany(companyData as WorkspaceCompany);
+        }
+      }
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name, avatar_url")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profileData) {
+        setProfile(profileData as WorkspaceProfile);
+      }
+    } catch (error) {
+      console.error("Failed to load workspace:", error);
+    } finally {
+      setLoadingWorkspace(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadWorkspace();
+
+    const channel = supabase
+      .channel("sbs-company-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "companies",
+        },
+        () => {
+          void loadWorkspace();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [pathname]);
+
+  function isActive(item: NavItem) {
+    if (item.href === "/") {
+      return pathname === "/";
+    }
+
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  }
+
+  function handleNavigation(item: NavItem) {
+    if (!item.available) {
+      return;
+    }
+
+    setMobileSidebarOpen(false);
+    setSearchValue("");
+    router.push(item.href);
+  }
+
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const query = normalizeSearchText(searchValue);
+
+    if (!query) {
+      return;
+    }
+
+    const exactMatch = allNavItems.find(
+      (item) =>
+        item.available &&
+        normalizeSearchText(item.label) === query
+    );
+
+    if (exactMatch) {
+      handleNavigation(exactMatch);
+      return;
+    }
+
+    const partialMatch = allNavItems.find(
+      (item) =>
+        item.available &&
+        normalizeSearchText(item.label).includes(query)
+    );
+
+    if (partialMatch) {
+      handleNavigation(partialMatch);
+    }
   }
 
   async function handleLogout() {
-    setProfileOpen(false);
+    if (loggingOut) {
+      return;
+    }
+
+    setLoggingOut(true);
 
     try {
       await supabase.auth.signOut();
     } finally {
-      router.replace("/login");
-      router.refresh();
+      window.location.replace("/login");
     }
   }
 
-  function navigateTo(href: string) {
-    setMobileOpen(false);
-    setProfileOpen(false);
-    router.push(href);
-  }
+  const initials = useMemo(() => {
+    const name =
+      profile?.full_name ||
+      company?.name ||
+      "SBS";
 
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <div className="app-loading-card">
-          <div className="app-loading-logo">SBS</div>
-          <div className="app-loading-line app-loading-line-lg" />
-          <div className="app-loading-line" />
-          <div className="app-loading-line app-loading-line-sm" />
-        </div>
+    const parts = name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
 
-        <style jsx>{`
-          .app-loading {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f3f6fa;
-            padding: 24px;
-          }
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
 
-          .app-loading-card {
-            width: 280px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-          }
-
-          .app-loading-logo {
-            width: 52px;
-            height: 52px;
-            border-radius: 14px;
-            display: grid;
-            place-items: center;
-            background: #172033;
-            color: white;
-            font-size: 14px;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            margin-bottom: 10px;
-          }
-
-          .app-loading-line {
-            width: 100%;
-            height: 12px;
-            border-radius: 999px;
-            background: linear-gradient(
-              90deg,
-              #e6ebf1 25%,
-              #f5f7fa 50%,
-              #e6ebf1 75%
-            );
-            background-size: 200% 100%;
-            animation: loading 1.4s infinite;
-          }
-
-          .app-loading-line-lg {
-            width: 80%;
-          }
-
-          .app-loading-line-sm {
-            width: 55%;
-          }
-
-          @keyframes loading {
-            from {
-              background-position: 200% 0;
-            }
-
-            to {
-              background-position: -200% 0;
-            }
-          }
-        `}</style>
-      </div>
-    );
-  }
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }, [profile?.full_name, company?.name]);
 
   return (
-    <div className="sbs-app">
-      <aside
-        className={`sbs-sidebar ${
-          mobileOpen ? "is-open" : ""
-        }`}
-      >
-        <div className="sbs-sidebar-inner">
-          <div className="sbs-brand">
-            <button
-              type="button"
-              className="sbs-brand-button"
-              onClick={() => navigateTo("/")}
-              aria-label="Go to dashboard"
-            >
-              <div className="sbs-brand-mark">SBS</div>
-
-              <div className="sbs-brand-text">
-                <span className="sbs-brand-name">
-                  Sharif Business
-                </span>
-
-                <span className="sbs-brand-subtitle">
-                  Contractor Hub
-                </span>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              className="sbs-mobile-close"
-              onClick={() => setMobileOpen(false)}
-              aria-label="Close navigation"
-            >
-              <Icon name="close" size={20} />
-            </button>
-          </div>
-
-          <div className="sbs-company">
-            <div className="sbs-company-avatar">
-              {companyInitials}
-            </div>
-
-            <div className="sbs-company-info">
-              <span className="sbs-company-label">
-                Company
-              </span>
-
-              <span
-                className="sbs-company-name"
-                title={companyName}
-              >
-                {companyName}
-              </span>
-            </div>
-          </div>
-
-          <nav
-            className="sbs-nav"
-            aria-label="Main navigation"
-          >
-            <div className="sbs-nav-section">
-              <span className="sbs-nav-label">
-                Workspace
-              </span>
-
-              <div className="sbs-nav-list">
-                {navItems.map((item) => {
-                  const active = isActive(item.href);
-
-                  return (
-                    <button
-                      key={item.href}
-                      type="button"
-                      className={`sbs-nav-item ${
-                        active ? "is-active" : ""
-                      }`}
-                      onClick={() =>
-                        navigateTo(item.href)
-                      }
-                    >
-                      <span className="sbs-nav-icon">
-                        {item.icon}
-                      </span>
-
-                      <span className="sbs-nav-text">
-                        {item.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="sbs-nav-section sbs-settings-section">
-              <span className="sbs-nav-label">
-                Administration
-              </span>
-
-              <button
-                type="button"
-                className={`sbs-nav-item ${
-                  isActive(billingItem.href)
-                    ? "is-active"
-                    : ""
-                }`}
-                onClick={() =>
-                  navigateTo(billingItem.href)
-                }
-              >
-                <span className="sbs-nav-icon">
-                  {billingItem.icon}
-                </span>
-
-                <span className="sbs-nav-text">
-                  {billingItem.label}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={`sbs-nav-item ${
-                  isActive(settingsItem.href)
-                    ? "is-active"
-                    : ""
-                }`}
-                onClick={() =>
-                  navigateTo(settingsItem.href)
-                }
-              >
-                <span className="sbs-nav-icon">
-                  {settingsItem.icon}
-                </span>
-
-                <span className="sbs-nav-text">
-                  {settingsItem.label}
-                </span>
-              </button>
-            </div>
-          </nav>
-
-          <div className="sbs-sidebar-bottom">
-            <div className="sbs-user-card">
-              <div className="sbs-user-avatar">
-                {userInitials}
-              </div>
-
-              <div className="sbs-user-info">
-                <span
-                  className="sbs-user-name"
-                  title={userName}
-                >
-                  {userName}
-                </span>
-
-                <span className="sbs-user-role">
-                  {role}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                className="sbs-user-menu-button"
-                onClick={() =>
-                  setProfileOpen(
-                    (current) => !current
-                  )
-                }
-                aria-label="Open user menu"
-                aria-expanded={profileOpen}
-              >
-                <Icon
-                  name="chevron"
-                  size={17}
-                />
-              </button>
-            </div>
-
-            {profileOpen && (
-              <div className="sbs-user-menu">
-                <button
-                  type="button"
-                  className="sbs-user-menu-item"
-                  onClick={() =>
-                    navigateTo("/settings")
-                  }
-                >
-                  <Icon
-                    name="settings"
-                    size={17}
-                  />
-                  <span>Account Settings</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="sbs-user-menu-item sbs-user-menu-danger"
-                  onClick={handleLogout}
-                >
-                  <Icon
-                    name="logout"
-                    size={17}
-                  />
-                  <span>Log out</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
-
-      {mobileOpen && (
-        <button
-          type="button"
-          className="sbs-sidebar-overlay"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Close navigation"
-        />
-      )}
-
-      <div className="sbs-main">
-        <header className="sbs-topbar">
-          <div className="sbs-topbar-left">
-            <button
-              type="button"
-              className="sbs-mobile-menu"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Icon name="menu" size={21} />
-            </button>
-
-            <div className="sbs-page-heading">
-              <div className="sbs-breadcrumb">
-                <span>Contractor Hub</span>
-
-                <span className="sbs-breadcrumb-separator">
-                  /
-                </span>
-
-                <span className="sbs-breadcrumb-current">
-                  {title ||
-                    getPageTitle(pathname)}
-                </span>
-              </div>
-
-              {title && (
-                <h1 className="sbs-topbar-title">
-                  {title}
-                </h1>
-              )}
-            </div>
-          </div>
-
-          <div className="sbs-topbar-center">
-            <div className="sbs-global-search">
-              <span className="sbs-search-icon">
-                <Icon
-                  name="search"
-                  size={18}
-                />
-              </span>
-
-              <input
-                type="search"
-                placeholder="Search anything..."
-                aria-label="Search"
-              />
-
-              <span className="sbs-search-shortcut">
-                ⌘ K
-              </span>
-            </div>
-          </div>
-
-          <div className="sbs-topbar-right">
-            <button
-              type="button"
-              className="sbs-company-topbar"
-              onClick={() =>
-                navigateTo("/settings")
-              }
-              title="Open company settings"
-            >
-              <span className="sbs-company-topbar-avatar">
-                {companyInitials}
-              </span>
-
-              <span className="sbs-company-topbar-name">
-                {companyName}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className="sbs-notification-button"
-              aria-label="Notifications"
-            >
-              <Icon
-                name="bell"
-                size={19}
-              />
-
-              <span className="sbs-notification-dot" />
-            </button>
-
-            <button
-              type="button"
-              className="sbs-profile-button"
-              onClick={() =>
-                setProfileOpen(
-                  (current) => !current
-                )
-              }
-              aria-label="Open profile menu"
-              aria-expanded={profileOpen}
-            >
-              <span className="sbs-profile-avatar">
-                {userInitials}
-              </span>
-
-              <span className="sbs-profile-details">
-                <span className="sbs-profile-name">
-                  {userName}
-                </span>
-
-                <span className="sbs-profile-role">
-                  {role}
-                </span>
-              </span>
-
-              <Icon
-                name="chevron"
-                size={16}
-              />
-            </button>
-          </div>
-        </header>
-
-        <main className="sbs-content">
-          <div className="sbs-content-inner">
-            {(title ||
-              description ||
-              actions) && (
-              <div className="sbs-page-header">
-                <div className="sbs-page-header-copy">
-                  {title && (
-                    <h2 className="sbs-page-title">
-                      {title}
-                    </h2>
-                  )}
-
-                  {description && (
-                    <p className="sbs-page-description">
-                      {description}
-                    </p>
-                  )}
-                </div>
-
-                {actions && (
-                  <div className="sbs-page-actions">
-                    {actions}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {children}
-          </div>
-        </main>
-      </div>
-
+    <div className="sbs-app-shell">
       <style jsx global>{`
-        :root {
-          --sbs-bg: #f3f6fa;
-          --sbs-surface: #ffffff;
-          --sbs-surface-soft: #f8fafc;
-          --sbs-border: #e1e7ee;
-          --sbs-border-strong: #d3dbe5;
-          --sbs-text: #17202b;
-          --sbs-text-soft: #5f6b7a;
-          --sbs-text-muted: #8a95a3;
-          --sbs-primary: #172033;
-          --sbs-primary-hover: #273249;
-          --sbs-primary-soft: #eef1f6;
-          --sbs-success: #15803d;
-          --sbs-danger: #b42318;
-          --sbs-sidebar-width: 258px;
-          --sbs-topbar-height: 74px;
-          --sbs-radius: 14px;
-          --sbs-shadow-sm: 0 2px 8px rgba(16, 24, 40, 0.04);
-          --sbs-shadow-md: 0 10px 30px rgba(16, 24, 40, 0.08);
-        }
-
-        * {
-          box-sizing: border-box;
-        }
-
-        .sbs-app {
+        .sbs-app-shell {
           min-height: 100vh;
-          background: var(--sbs-bg);
-          color: var(--sbs-text);
+          background: #f6f7f9;
+          color: #111827;
         }
 
         .sbs-sidebar {
           position: fixed;
           inset: 0 auto 0 0;
-          width: var(--sbs-sidebar-width);
+          width: 285px;
+          height: 100vh;
+          background: #ffffff;
+          border-right: 1px solid #e5e7eb;
           z-index: 100;
-          background: var(--sbs-surface);
-          border-right: 1px solid var(--sbs-border);
-        }
-
-        .sbs-sidebar-inner {
-          height: 100%;
           display: flex;
           flex-direction: column;
-          padding: 18px 14px 14px;
+          overflow: hidden;
+          transition: transform 0.25s ease;
+        }
+
+        .sbs-sidebar-header {
+          height: 76px;
+          padding: 0 22px;
+          display: flex;
+          align-items: center;
+          border-bottom: 1px solid #f0f1f3;
+          flex-shrink: 0;
         }
 
         .sbs-brand {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          min-height: 58px;
-          padding: 0 6px 16px;
-        }
-
-        .sbs-brand-button {
-          display: flex;
-          align-items: center;
-          gap: 11px;
+          gap: 12px;
           min-width: 0;
-          border: 0;
-          background: transparent;
-          padding: 0;
-          cursor: pointer;
-          text-align: left;
+          text-decoration: none;
+          color: inherit;
         }
 
         .sbs-brand-mark {
-          width: 40px;
-          height: 40px;
-          flex: 0 0 40px;
-          display: grid;
-          place-items: center;
-          border-radius: 11px;
-          background: var(--sbs-primary);
-          color: #fff;
-          font-size: 11px;
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          background: #111827;
+          color: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 15px;
           font-weight: 800;
-          letter-spacing: 0.06em;
-          box-shadow: 0 5px 14px rgba(23, 32, 51, 0.16);
+          letter-spacing: -0.04em;
+          flex-shrink: 0;
         }
 
         .sbs-brand-text {
           min-width: 0;
-          display: flex;
-          flex-direction: column;
         }
 
         .sbs-brand-name {
-          color: var(--sbs-text);
           font-size: 14px;
           line-height: 18px;
           font-weight: 750;
-          white-space: nowrap;
-        }
-
-        .sbs-brand-subtitle {
-          margin-top: 1px;
-          color: var(--sbs-text-muted);
-          font-size: 11px;
-          line-height: 16px;
-          font-weight: 500;
-        }
-
-        .sbs-mobile-close {
-          display: none;
-          width: 34px;
-          height: 34px;
-          border: 0;
-          border-radius: 9px;
-          background: transparent;
-          color: var(--sbs-text-soft);
-          cursor: pointer;
-        }
-
-        .sbs-mobile-close:hover {
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text);
-        }
-
-        .sbs-company {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin: 2px 2px 20px;
-          padding: 10px;
-          border: 1px solid var(--sbs-border);
-          border-radius: 11px;
-          background: var(--sbs-surface-soft);
-        }
-
-        .sbs-company-avatar {
-          width: 34px;
-          height: 34px;
-          flex: 0 0 34px;
-          display: grid;
-          place-items: center;
-          border-radius: 9px;
-          background: #e6ebf2;
-          color: var(--sbs-primary);
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .sbs-company-info {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .sbs-company-label {
-          color: var(--sbs-text-muted);
-          font-size: 9px;
-          line-height: 13px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.07em;
-        }
-
-        .sbs-company-name {
-          margin-top: 1px;
-          color: var(--sbs-text);
-          font-size: 12px;
-          line-height: 17px;
-          font-weight: 650;
+          color: #111827;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .sbs-nav {
+        .sbs-brand-subtitle {
+          margin-top: 2px;
+          font-size: 11px;
+          line-height: 15px;
+          color: #9ca3af;
+        }
+
+        .sbs-sidebar-scroll {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          padding: 0 2px;
+          padding: 16px 12px 20px;
+        }
+
+        .sbs-sidebar-scroll::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .sbs-sidebar-scroll::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 99px;
         }
 
         .sbs-nav-section {
           margin-bottom: 20px;
         }
 
-        .sbs-nav-label {
-          display: block;
-          padding: 0 10px 8px;
-          color: var(--sbs-text-muted);
-          font-size: 9px;
-          line-height: 14px;
-          font-weight: 750;
-          text-transform: uppercase;
-          letter-spacing: 0.09em;
+        .sbs-nav-section-label {
+          padding: 0 12px;
+          margin-bottom: 7px;
+          font-size: 10px;
+          line-height: 15px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          color: #9ca3af;
         }
 
         .sbs-nav-list {
           display: flex;
           flex-direction: column;
-          gap: 3px;
+          gap: 2px;
         }
 
-        .sbs-nav-item {
+        .sbs-nav-button {
           width: 100%;
-          height: 42px;
+          min-height: 42px;
+          border: 0;
+          border-radius: 9px;
+          padding: 0 12px;
           display: flex;
           align-items: center;
           gap: 11px;
-          border: 1px solid transparent;
-          border-radius: 10px;
           background: transparent;
-          color: var(--sbs-text-soft);
-          padding: 0 11px;
-          cursor: pointer;
-          text-align: left;
+          color: #4b5563;
           font: inherit;
+          font-size: 13px;
+          font-weight: 550;
+          text-align: left;
+          cursor: pointer;
           transition:
-            background 150ms ease,
-            color 150ms ease,
-            border-color 150ms ease;
+            background 0.15s ease,
+            color 0.15s ease;
         }
 
-        .sbs-nav-item:hover {
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text);
+        .sbs-nav-button:hover {
+          background: #f3f4f6;
+          color: #111827;
         }
 
-        .sbs-nav-item.is-active {
-          background: var(--sbs-primary-soft);
-          border-color: #e1e6ee;
-          color: var(--sbs-primary);
-          font-weight: 650;
+        .sbs-nav-button.active {
+          background: #111827;
+          color: #ffffff;
+        }
+
+        .sbs-nav-button.disabled {
+          color: #b8bdc5;
+          cursor: default;
+        }
+
+        .sbs-nav-button.disabled:hover {
+          background: transparent;
+          color: #b8bdc5;
         }
 
         .sbs-nav-icon {
           width: 20px;
           height: 20px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 20px;
-        }
-
-        .sbs-nav-text {
-          font-size: 13px;
-          line-height: 18px;
-        }
-
-        .sbs-settings-section {
-          padding-top: 16px;
-          border-top: 1px solid var(--sbs-border);
-        }
-
-        .sbs-sidebar-bottom {
-          position: relative;
-          padding-top: 12px;
-          border-top: 1px solid var(--sbs-border);
-        }
-
-        .sbs-user-card {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 8px;
-          border-radius: 11px;
+          justify-content: center;
+          flex-shrink: 0;
         }
 
-        .sbs-user-avatar,
-        .sbs-profile-avatar {
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background: var(--sbs-primary);
-          color: #fff;
-          font-weight: 750;
-          flex: 0 0 auto;
-        }
-
-        .sbs-user-avatar {
-          width: 34px;
-          height: 34px;
-          font-size: 10px;
-        }
-
-        .sbs-user-info {
-          min-width: 0;
+        .sbs-nav-label {
           flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .sbs-user-name {
-          color: var(--sbs-text);
-          font-size: 12px;
-          line-height: 17px;
-          font-weight: 650;
+          min-width: 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .sbs-user-role {
-          color: var(--sbs-text-muted);
-          font-size: 10px;
+        .sbs-coming-soon {
+          font-size: 9px;
           line-height: 15px;
+          font-weight: 700;
+          color: #9ca3af;
+          background: #f3f4f6;
+          padding: 1px 5px;
+          border-radius: 4px;
+          flex-shrink: 0;
         }
 
-        .sbs-user-menu-button {
-          width: 30px;
-          height: 30px;
-          display: grid;
-          place-items: center;
-          border: 0;
-          border-radius: 8px;
-          background: transparent;
-          color: var(--sbs-text-muted);
-          cursor: pointer;
+        .sbs-sidebar-footer {
+          padding: 12px;
+          border-top: 1px solid #f0f1f3;
+          flex-shrink: 0;
         }
 
-        .sbs-user-menu-button:hover {
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text);
-        }
-
-        .sbs-user-menu {
-          position: absolute;
-          left: 8px;
-          right: 8px;
-          bottom: calc(100% + 8px);
-          padding: 6px;
-          background: var(--sbs-surface);
-          border: 1px solid var(--sbs-border);
-          border-radius: 12px;
-          box-shadow: var(--sbs-shadow-md);
-          z-index: 150;
-        }
-
-        .sbs-user-menu-item {
-          width: 100%;
-          height: 38px;
+        .sbs-company-card {
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          padding: 10px;
           display: flex;
           align-items: center;
-          gap: 9px;
-          border: 0;
-          border-radius: 8px;
-          padding: 0 10px;
-          background: transparent;
-          color: var(--sbs-text-soft);
-          cursor: pointer;
-          font: inherit;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .sbs-company-avatar {
+          width: 34px;
+          height: 34px;
+          border-radius: 9px;
+          background: #f3f4f6;
+          color: #374151;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 800;
+          flex-shrink: 0;
+        }
+
+        .sbs-company-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .sbs-company-name {
           font-size: 12px;
-          text-align: left;
+          font-weight: 700;
+          color: #111827;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .sbs-user-menu-item:hover {
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text);
+        .sbs-company-type {
+          margin-top: 2px;
+          font-size: 10px;
+          color: #9ca3af;
+          text-transform: capitalize;
         }
 
-        .sbs-user-menu-danger:hover {
-          color: var(--sbs-danger);
-          background: #fff5f4;
-        }
-
-        .sbs-main {
+        .sbs-main-area {
           min-height: 100vh;
-          margin-left: var(--sbs-sidebar-width);
+          margin-left: 285px;
+          min-width: 0;
         }
 
         .sbs-topbar {
+          height: 76px;
           position: sticky;
           top: 0;
-          z-index: 80;
-          min-height: var(--sbs-topbar-height);
-          display: flex;
-          align-items: center;
-          gap: 20px;
-          padding: 12px 28px;
+          z-index: 50;
           background: rgba(255, 255, 255, 0.94);
-          border-bottom: 1px solid var(--sbs-border);
-          backdrop-filter: blur(12px);
-        }
-
-        .sbs-topbar-left {
-          min-width: 190px;
+          backdrop-filter: blur(14px);
+          border-bottom: 1px solid #e5e7eb;
           display: flex;
           align-items: center;
+          padding: 0 28px;
+          gap: 18px;
         }
 
-        .sbs-page-heading {
-          min-width: 0;
-        }
-
-        .sbs-breadcrumb {
-          display: flex;
+        .sbs-mobile-menu {
+          display: none;
+          width: 38px;
+          height: 38px;
+          border: 1px solid #e5e7eb;
+          background: #ffffff;
+          border-radius: 9px;
           align-items: center;
-          gap: 7px;
-          color: var(--sbs-text-muted);
-          font-size: 10px;
-          line-height: 14px;
-          font-weight: 550;
-        }
-
-        .sbs-breadcrumb-current {
-          color: var(--sbs-text-soft);
-          font-weight: 650;
-        }
-
-        .sbs-breadcrumb-separator {
-          color: #b5bec9;
-        }
-
-        .sbs-topbar-title {
-          margin: 2px 0 0;
-          color: var(--sbs-text);
-          font-size: 15px;
-          line-height: 20px;
-          font-weight: 750;
-        }
-
-        .sbs-topbar-center {
-          flex: 1;
-          display: flex;
           justify-content: center;
-          min-width: 180px;
+          cursor: pointer;
+          color: #374151;
+          flex-shrink: 0;
         }
 
-        .sbs-global-search {
-          width: min(100%, 430px);
-          height: 40px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 0 11px;
-          background: var(--sbs-surface-soft);
-          border: 1px solid var(--sbs-border);
-          border-radius: 10px;
-          color: var(--sbs-text-soft);
-          transition:
-            border-color 150ms ease,
-            box-shadow 150ms ease,
-            background 150ms ease;
+        .sbs-topbar-search {
+          width: min(430px, 100%);
+          position: relative;
         }
 
-        .sbs-global-search:focus-within {
-          background: #fff;
-          border-color: var(--sbs-border-strong);
-          box-shadow: 0 0 0 3px rgba(23, 32, 51, 0.05);
+        .sbs-search-form {
+          position: relative;
         }
 
         .sbs-search-icon {
-          display: grid;
-          place-items: center;
-          color: var(--sbs-text-muted);
+          position: absolute;
+          left: 13px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #9ca3af;
+          pointer-events: none;
         }
 
-        .sbs-global-search input {
+        .sbs-search-input {
           width: 100%;
-          min-width: 0;
-          border: 0;
-          outline: 0;
-          background: transparent;
-          color: var(--sbs-text);
+          height: 40px;
+          border: 1px solid #e5e7eb;
+          background: #f9fafb;
+          border-radius: 9px;
+          outline: none;
+          padding: 0 14px 0 40px;
           font: inherit;
-          font-size: 12px;
+          font-size: 13px;
+          color: #111827;
+          transition:
+            border-color 0.15s ease,
+            background 0.15s ease,
+            box-shadow 0.15s ease;
         }
 
-        .sbs-global-search input::placeholder {
-          color: var(--sbs-text-muted);
+        .sbs-search-input::placeholder {
+          color: #9ca3af;
         }
 
-        .sbs-search-shortcut {
-          flex: 0 0 auto;
-          padding: 3px 6px;
-          border: 1px solid var(--sbs-border);
-          border-radius: 5px;
-          color: var(--sbs-text-muted);
-          background: #fff;
-          font-size: 9px;
-          line-height: 12px;
-          white-space: nowrap;
+        .sbs-search-input:focus {
+          background: #ffffff;
+          border-color: #cbd5e1;
+          box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.05);
         }
 
-        .sbs-topbar-right {
-          min-width: 250px;
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 10px;
+        .sbs-topbar-spacer {
+          flex: 1;
         }
 
-        .sbs-company-topbar {
-          min-width: 0;
-          max-width: 190px;
+        .sbs-topbar-company {
           display: flex;
           align-items: center;
           gap: 8px;
-          border: 0;
-          background: transparent;
-          color: var(--sbs-text);
-          padding: 5px;
-          cursor: pointer;
-          font: inherit;
-        }
-
-        .sbs-company-topbar-avatar {
-          width: 29px;
-          height: 29px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 29px;
-          border-radius: 8px;
-          background: #e6ebf2;
-          color: var(--sbs-primary);
-          font-size: 9px;
-          font-weight: 800;
-        }
-
-        .sbs-company-topbar-name {
           min-width: 0;
+          max-width: 230px;
+        }
+
+        .sbs-topbar-company-name {
+          font-size: 12px;
+          font-weight: 650;
+          color: #4b5563;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
-          font-size: 11px;
-          font-weight: 650;
         }
 
         .sbs-notification-button {
-          position: relative;
-          width: 36px;
-          height: 36px;
-          display: grid;
-          place-items: center;
-          border: 1px solid transparent;
+          width: 38px;
+          height: 38px;
+          border: 1px solid #e5e7eb;
+          background: #ffffff;
+          color: #4b5563;
           border-radius: 9px;
-          background: transparent;
-          color: var(--sbs-text-soft);
+          display: flex;
+          align-items: center;
+          justify-content: center;
           cursor: pointer;
-        }
-
-        .sbs-notification-button:hover {
-          background: var(--sbs-surface-soft);
-          border-color: var(--sbs-border);
-          color: var(--sbs-text);
+          position: relative;
         }
 
         .sbs-notification-dot {
           position: absolute;
-          top: 8px;
-          right: 8px;
-          width: 5px;
-          height: 5px;
+          top: 7px;
+          right: 7px;
+          width: 6px;
+          height: 6px;
           border-radius: 50%;
-          background: #c2410c;
-          border: 1px solid #fff;
+          background: #111827;
+          border: 1px solid #ffffff;
         }
 
-        .sbs-profile-button {
+        .sbs-profile {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 9px;
           min-width: 0;
-          border: 0;
-          background: transparent;
-          padding: 4px 2px;
-          color: var(--sbs-text-soft);
-          cursor: pointer;
-          font: inherit;
-          text-align: left;
         }
 
         .sbs-profile-avatar {
-          width: 34px;
-          height: 34px;
-          font-size: 10px;
-        }
-
-        .sbs-profile-details {
-          min-width: 0;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: #111827;
+          color: #ffffff;
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 800;
+          flex-shrink: 0;
         }
 
         .sbs-profile-name {
-          max-width: 90px;
+          max-width: 130px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #111827;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
-          color: var(--sbs-text);
-          font-size: 11px;
-          line-height: 15px;
-          font-weight: 650;
-        }
-
-        .sbs-profile-role {
-          color: var(--sbs-text-muted);
-          font-size: 9px;
-          line-height: 13px;
-        }
-
-        .sbs-profile-button > :last-child {
-          color: var(--sbs-text-muted);
         }
 
         .sbs-content {
-          width: 100%;
-        }
-
-        .sbs-content-inner {
-          width: min(100%, 1600px);
+          padding: 30px 32px 48px;
+          max-width: 1600px;
           margin: 0 auto;
-          padding: 28px;
         }
 
         .sbs-page-header {
           display: flex;
-          align-items: flex-end;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 24px;
-          margin-bottom: 24px;
+          margin-bottom: 28px;
         }
 
         .sbs-page-header-copy {
@@ -1582,106 +1152,90 @@ export default function AppShell({
 
         .sbs-page-title {
           margin: 0;
-          color: var(--sbs-text);
-          font-size: 25px;
-          line-height: 32px;
-          font-weight: 760;
+          font-size: 28px;
+          line-height: 36px;
+          font-weight: 750;
           letter-spacing: -0.025em;
+          color: #111827;
         }
 
         .sbs-page-description {
-          margin: 5px 0 0;
-          color: var(--sbs-text-soft);
+          margin: 6px 0 0;
           font-size: 13px;
           line-height: 20px;
+          color: #6b7280;
         }
 
         .sbs-page-actions {
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           gap: 8px;
-          flex-wrap: wrap;
         }
 
-        .sbs-mobile-menu {
+        .sbs-mobile-overlay {
           display: none;
-          width: 38px;
-          height: 38px;
+        }
+
+        .sbs-logout-button {
+          width: 100%;
+          margin-top: 10px;
+          min-height: 38px;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #4b5563;
+          display: flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid var(--sbs-border);
-          border-radius: 9px;
-          background: #fff;
-          color: var(--sbs-text);
+          gap: 8px;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 650;
           cursor: pointer;
-          margin-right: 10px;
         }
 
-        .sbs-sidebar-overlay {
-          display: none;
+        .sbs-logout-button:hover {
+          background: #f9fafb;
+          color: #111827;
         }
 
-        @media (max-width: 1200px) {
-          .sbs-company-topbar {
-            max-width: 140px;
-          }
-
-          .sbs-topbar-left {
-            min-width: 160px;
-          }
-
-          .sbs-topbar-right {
-            min-width: 220px;
-          }
+        .sbs-logout-button:disabled {
+          opacity: 0.6;
+          cursor: wait;
         }
 
-        @media (max-width: 1024px) {
-          :root {
-            --sbs-sidebar-width: 232px;
-          }
-
-          .sbs-content-inner {
-            padding: 22px;
-          }
-
-          .sbs-company-topbar-name {
-            display: none;
-          }
-
-          .sbs-topbar-right {
-            min-width: auto;
-          }
-        }
-
-        @media (max-width: 820px) {
+        @media (max-width: 1100px) {
           .sbs-sidebar {
-            transform: translateX(-105%);
-            transition: transform 200ms ease;
+            width: 260px;
+          }
+
+          .sbs-main-area {
+            margin-left: 260px;
+          }
+
+          .sbs-topbar {
+            padding: 0 20px;
+          }
+
+          .sbs-content {
+            padding: 24px 22px 40px;
+          }
+        }
+
+        @media (max-width: 900px) {
+          .sbs-sidebar {
+            width: 285px;
+            transform: translateX(-100%);
             box-shadow: none;
           }
 
-          .sbs-sidebar.is-open {
+          .sbs-sidebar.mobile-open {
             transform: translateX(0);
-            box-shadow: 15px 0 40px rgba(16, 24, 40, 0.12);
+            box-shadow: 18px 0 50px rgba(15, 23, 42, 0.12);
           }
 
-          .sbs-mobile-close {
-            display: grid;
-            place-items: center;
-          }
-
-          .sbs-sidebar-overlay {
-            position: fixed;
-            inset: 0;
-            display: block;
-            z-index: 90;
-            border: 0;
-            background: rgba(15, 23, 42, 0.28);
-            backdrop-filter: blur(2px);
-            cursor: pointer;
-          }
-
-          .sbs-main {
+          .sbs-main-area {
             margin-left: 0;
           }
 
@@ -1689,91 +1243,295 @@ export default function AppShell({
             display: flex;
           }
 
+          .sbs-mobile-overlay {
+            position: fixed;
+            inset: 0;
+            display: block;
+            background: rgba(15, 23, 42, 0.28);
+            z-index: 90;
+          }
+
           .sbs-topbar {
-            padding: 10px 16px;
+            padding: 0 16px;
+            gap: 10px;
           }
 
-          .sbs-topbar-left {
-            min-width: auto;
+          .sbs-topbar-search {
+            flex: 1;
+            width: auto;
           }
 
-          .sbs-topbar-center {
+          .sbs-topbar-company {
             display: none;
           }
 
-          .sbs-company-topbar {
+          .sbs-profile-name {
             display: none;
           }
 
-          .sbs-topbar-right {
-            margin-left: auto;
-          }
-
-          .sbs-profile-details {
-            display: none;
-          }
-
-          .sbs-profile-button > :last-child {
-            display: none;
-          }
-
-          .sbs-page-heading {
-            display: none;
-          }
-
-          .sbs-content-inner {
-            padding: 20px 16px;
-          }
-
-          .sbs-page-header {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 14px;
-          }
-
-          .sbs-page-actions {
-            width: 100%;
+          .sbs-content {
+            padding: 22px 16px 36px;
           }
         }
 
-        @media (max-width: 520px) {
+        @media (max-width: 640px) {
           .sbs-topbar {
-            min-height: 64px;
-            gap: 8px;
+            height: 64px;
+          }
+
+          .sbs-sidebar-header {
+            height: 64px;
           }
 
           .sbs-notification-button {
             display: none;
           }
 
-          .sbs-content-inner {
-            padding: 18px 13px 28px;
+          .sbs-profile-avatar {
+            width: 34px;
+            height: 34px;
+          }
+
+          .sbs-search-input {
+            height: 38px;
+          }
+
+          .sbs-page-header {
+            flex-direction: column;
+            margin-bottom: 22px;
           }
 
           .sbs-page-title {
-            font-size: 22px;
-            line-height: 29px;
+            font-size: 24px;
+            line-height: 31px;
           }
 
-          .sbs-page-description {
-            font-size: 12px;
-            line-height: 18px;
+          .sbs-page-actions {
+            width: 100%;
           }
         }
       `}</style>
+
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          className="sbs-mobile-overlay"
+          aria-label="Close navigation"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`sbs-sidebar ${
+          mobileSidebarOpen ? "mobile-open" : ""
+        }`}
+      >
+        <div className="sbs-sidebar-header">
+          <button
+            type="button"
+            className="sbs-brand"
+            onClick={() => router.push("/")}
+            aria-label="Go to dashboard"
+          >
+            <span className="sbs-brand-mark">SBS</span>
+
+            <span className="sbs-brand-text">
+              <span className="sbs-brand-name">
+                Sharif Business Solutions
+              </span>
+
+              <span className="sbs-brand-subtitle">
+                Business Management Platform
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <div className="sbs-sidebar-scroll">
+          {sections.map((section) => (
+            <div
+              className="sbs-nav-section"
+              key={section.label}
+            >
+              <div className="sbs-nav-section-label">
+                {section.label}
+              </div>
+
+              <div className="sbs-nav-list">
+                {section.items.map((item) => {
+                  const active = isActive(item);
+
+                  return (
+                    <button
+                      key={item.href}
+                      type="button"
+                      className={`sbs-nav-button ${
+                        active ? "active" : ""
+                      } ${!item.available ? "disabled" : ""}`}
+                      onClick={() => handleNavigation(item)}
+                      disabled={!item.available}
+                      title={
+                        item.available
+                          ? item.label
+                          : `${item.label} — Coming soon`
+                      }
+                    >
+                      <span className="sbs-nav-icon">
+                        <Icon name={item.icon} size={18} />
+                      </span>
+
+                      <span className="sbs-nav-label">
+                        {item.label}
+                      </span>
+
+                      {!item.available && (
+                        <span className="sbs-coming-soon">
+                          SOON
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="sbs-sidebar-footer">
+          <div className="sbs-company-card">
+            <div className="sbs-company-avatar">
+              {initials}
+            </div>
+
+            <div className="sbs-company-info">
+              <div className="sbs-company-name">
+                {loadingWorkspace
+                  ? "Loading workspace..."
+                  : company?.name || "My Company"}
+              </div>
+
+              <div className="sbs-company-type">
+                {company?.business_type === "product"
+                  ? "Product Business"
+                  : company?.business_type === "service"
+                    ? "Service Business"
+                    : "Business Workspace"}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="sbs-logout-button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+          >
+            <Icon name="logout" size={16} />
+            {loggingOut ? "Signing out..." : "Sign out"}
+          </button>
+        </div>
+      </aside>
+
+      <div className="sbs-main-area">
+        <header className="sbs-topbar">
+          <button
+            type="button"
+            className="sbs-mobile-menu"
+            onClick={() =>
+              setMobileSidebarOpen((current) => !current)
+            }
+            aria-label={
+              mobileSidebarOpen
+                ? "Close navigation"
+                : "Open navigation"
+            }
+          >
+            <Icon
+              name={mobileSidebarOpen ? "close" : "menu"}
+              size={19}
+            />
+          </button>
+
+          <div className="sbs-topbar-search">
+            <form
+              className="sbs-search-form"
+              onSubmit={handleSearchSubmit}
+            >
+              <span className="sbs-search-icon">
+                <Icon name="search" size={17} />
+              </span>
+
+              <input
+                type="search"
+                value={searchValue}
+                onChange={(event) =>
+                  setSearchValue(event.target.value)
+                }
+                className="sbs-search-input"
+                placeholder="Search pages..."
+                aria-label="Search pages"
+              />
+            </form>
+          </div>
+
+          <div className="sbs-topbar-spacer" />
+
+          <div className="sbs-topbar-company">
+            <span className="sbs-topbar-company-name">
+              {company?.name || ""}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="sbs-notification-button"
+            aria-label="Notifications"
+          >
+            <Icon name="bell" size={18} />
+            <span className="sbs-notification-dot" />
+          </button>
+
+          <div className="sbs-profile">
+            <div className="sbs-profile-avatar">
+              {initials}
+            </div>
+
+            <div className="sbs-profile-name">
+              {profile?.full_name ||
+                company?.name ||
+                "Workspace User"}
+            </div>
+          </div>
+        </header>
+
+        <main className="sbs-content">
+          {(title || description || actions) && (
+            <div className="sbs-page-header">
+              <div className="sbs-page-header-copy">
+                {title && (
+                  <h1 className="sbs-page-title">
+                    {title}
+                  </h1>
+                )}
+
+                {description && (
+                  <p className="sbs-page-description">
+                    {description}
+                  </p>
+                )}
+              </div>
+
+              {actions && (
+                <div className="sbs-page-actions">
+                  {actions}
+                </div>
+              )}
+            </div>
+          )}
+
+          {children}
+        </main>
+      </div>
     </div>
   );
-}
-
-function getPageTitle(pathname: string) {
-  if (pathname === "/") return "Dashboard";
-  if (pathname.startsWith("/leads")) return "Leads";
-  if (pathname.startsWith("/customers")) return "Customers";
-  if (pathname.startsWith("/jobs")) return "Jobs";
-  if (pathname.startsWith("/estimates")) return "Estimates";
-  if (pathname.startsWith("/invoices")) return "Invoices";
-  if (pathname.startsWith("/billing")) return "Billing";
-  if (pathname.startsWith("/settings")) return "Settings";
-
-  return "Dashboard";
 }

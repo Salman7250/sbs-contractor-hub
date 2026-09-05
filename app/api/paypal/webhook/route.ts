@@ -35,6 +35,7 @@ type SubscriptionResource = {
 
     next_billing_time?: string;
     failed_payments_count?: number;
+
     last_payment?: {
       amount?: {
         currency_code?: string;
@@ -42,24 +43,35 @@ type SubscriptionResource = {
       };
       time?: string;
     };
+
+    last_failed_payment?: {
+      amount?: {
+        currency_code?: string;
+        value?: string;
+      };
+      time?: string;
+      reason_code?: string;
+      next_payment_retry_time?: string;
+    };
   };
 };
 
 type PaymentResource = {
   id?: string;
+
   amount?: {
     total?: string;
     value?: string;
     currency?: string;
     currency_code?: string;
   };
+
   state?: string;
   payment_mode?: string;
   create_time?: string;
   update_time?: string;
 
   billing_agreement_id?: string;
-
   parent_payment?: string;
 
   transaction_fee?: {
@@ -89,12 +101,9 @@ const PAYMENT_EVENTS = new Set([
   "PAYMENT.SALE.REVERSED",
 ]);
 
-function getString(
-  value: unknown
-): string | null {
-  return typeof value === "string" &&
-    value.trim()
-    ? value
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
     : null;
 }
 
@@ -103,12 +112,8 @@ function getResourceId(
 ): string | null {
   return (
     getString(resource.id) ??
-    getString(
-      resource.billing_agreement_id
-    ) ??
-    getString(
-      resource.parent_payment
-    )
+    getString(resource.billing_agreement_id) ??
+    getString(resource.parent_payment)
   );
 }
 
@@ -122,7 +127,8 @@ function getSubscriptionStatus(
   | "paused"
   | "canceled"
   | "incomplete"
-  | "incomplete_expired" {
+  | "incomplete_expired"
+  | null {
   switch (eventType) {
     case "BILLING.SUBSCRIPTION.ACTIVATED":
       return "active";
@@ -159,13 +165,20 @@ function getSubscriptionStatus(
         case "APPROVAL_PENDING":
           return "incomplete";
 
+        /*
+         * Unknown PayPal states must NOT
+         * downgrade an existing SBS subscription.
+         *
+         * Returning null tells the caller
+         * to leave the local status unchanged.
+         */
         default:
-          return "incomplete";
+          return null;
       }
     }
 
     default:
-      return "incomplete";
+      return null;
   }
 }
 
@@ -180,13 +193,9 @@ function getPaymentAmount(
     resource.amount?.total ??
     "0";
 
-  const amount =
-    Number(rawAmount);
+  const amount = Number(rawAmount);
 
-  if (
-    !Number.isFinite(amount) ||
-    amount < 0
-  ) {
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new Error(
       "PayPal payment contains an invalid amount."
     );
@@ -197,9 +206,7 @@ function getPaymentAmount(
     resource.amount?.currency ??
     "USD";
 
-  if (
-    !/^[A-Z]{3}$/i.test(currency)
-  ) {
+  if (!/^[A-Z]{3}$/i.test(currency)) {
     throw new Error(
       "PayPal payment contains an invalid currency."
     );
@@ -207,15 +214,52 @@ function getPaymentAmount(
 
   return {
     amount,
-    currency:
-      currency.toUpperCase(),
+    currency: currency.toUpperCase(),
+  };
+}
+
+function getSubscriptionPaymentAmount(
+  resource: SubscriptionResource
+): {
+  amount: number;
+  currency: string;
+} {
+  const rawAmount =
+    resource.billing_info?.last_failed_payment
+      ?.amount?.value ??
+    resource.billing_info?.outstanding_balance
+      ?.value ??
+    "0";
+
+  const amount = Number(rawAmount);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(
+      "PayPal failed-payment event contains an invalid amount."
+    );
+  }
+
+  const currency =
+    resource.billing_info?.last_failed_payment
+      ?.amount?.currency_code ??
+    resource.billing_info?.outstanding_balance
+      ?.currency_code ??
+    "USD";
+
+  if (!/^[A-Z]{3}$/i.test(currency)) {
+    throw new Error(
+      "PayPal failed-payment event contains an invalid currency."
+    );
+  }
+
+  return {
+    amount,
+    currency: currency.toUpperCase(),
   };
 }
 
 async function findSubscriptionByPayPalId(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   paypalSubscriptionId: string
 ) {
   const {
@@ -252,9 +296,7 @@ async function findSubscriptionByPayPalId(
 }
 
 async function updateSubscriptionFromPayPal(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   event: PayPalWebhookEvent
 ) {
   const resource =
@@ -279,9 +321,9 @@ async function updateSubscriptionFromPayPal(
    * A subscription webhook can arrive
    * before our local record exists.
    *
-   * We do not create a local subscription
-   * blindly here because we need a trusted
-   * company + plan mapping.
+   * We deliberately fail here so PayPal
+   * retries the event instead of creating
+   * an untrusted subscription locally.
    */
   if (!existing) {
     throw new Error(
@@ -289,60 +331,56 @@ async function updateSubscriptionFromPayPal(
     );
   }
 
+  /*
+   * PAYMENT.FAILED has its own payment
+   * record handling below, but it also
+   * changes the subscription lifecycle.
+   */
   const newStatus =
     getSubscriptionStatus(
       event.event_type,
       resource
     );
 
-  const update: Record<
-    string,
-    unknown
-  > = {
-    status: newStatus,
+  const update: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
-  if (
-    resource.start_time
-  ) {
+  if (newStatus) {
+    update.status = newStatus;
+  }
+
+  if (resource.start_time) {
     update.started_at =
       resource.start_time;
   }
 
   if (
-    resource.billing_info
-      ?.next_billing_time
+    resource.billing_info?.next_billing_time
   ) {
     update.current_period_end =
       resource.billing_info.next_billing_time;
   }
 
-  if (
-    newStatus ===
-    "canceled"
-  ) {
+  if (newStatus === "canceled") {
     update.canceled_at =
+      resource.update_time ??
       new Date().toISOString();
 
-    update.cancel_at_period_end =
-      false;
+    update.cancel_at_period_end = false;
   }
 
+  /*
+   * For an active subscription, PayPal's
+   * next billing time becomes our current
+   * period end.
+   */
   if (
-    event.event_type ===
-    "BILLING.SUBSCRIPTION.UPDATED"
+    newStatus === "active" &&
+    resource.billing_info?.next_billing_time
   ) {
-    /*
-     * Do not automatically clear
-     * cancel_at_period_end based only
-     * on a generic UPDATED event.
-     *
-     * PayPal's subscription state is
-     * authoritative for cancellation,
-     * while SBS keeps its own billing
-     * lifecycle fields.
-     */
+    update.current_period_end =
+      resource.billing_info.next_billing_time;
   }
 
   const {
@@ -350,10 +388,7 @@ async function updateSubscriptionFromPayPal(
   } = await admin
     .from("subscriptions")
     .update(update)
-    .eq(
-      "id",
-      existing.id
-    );
+    .eq("id", existing.id);
 
   if (error) {
     throw new Error(
@@ -361,25 +396,240 @@ async function updateSubscriptionFromPayPal(
     );
   }
 
-  /*
-   * Entitlements are synchronized by
-   * the existing database trigger on
-   * subscriptions.
-   */
   return {
-    subscriptionId:
-      existing.id,
-    companyId:
-      existing.company_id,
+    subscriptionId: existing.id,
+    companyId: existing.company_id,
     status:
-      newStatus,
+      newStatus ?? existing.status,
+  };
+}
+
+async function processFailedSubscriptionPayment(
+  admin: ReturnType<typeof createAdminClient>,
+  event: PayPalWebhookEvent
+) {
+  const resource =
+    event.resource as SubscriptionResource;
+
+  const paypalSubscriptionId =
+    getString(resource.id);
+
+  if (!paypalSubscriptionId) {
+    throw new Error(
+      "PayPal failed-payment event does not contain a subscription ID."
+    );
+  }
+
+  const subscription =
+    await findSubscriptionByPayPalId(
+      admin,
+      paypalSubscriptionId
+    );
+
+  if (!subscription) {
+    throw new Error(
+      `No SBS subscription could be mapped to PayPal failed payment for subscription ${paypalSubscriptionId}.`
+    );
+  }
+
+  const {
+    amount,
+    currency,
+  } =
+    getSubscriptionPaymentAmount(
+      resource
+    );
+
+  /*
+   * The PayPal event ID is used as the
+   * SBS idempotency key for failed
+   * subscription-payment events.
+   *
+   * This is intentionally NOT the PayPal
+   * subscription ID because one subscription
+   * can have many failed payment attempts.
+   */
+  const providerTransactionId =
+    `failed-${event.id}`;
+
+  const {
+    data: existingPayment,
+    error:
+      existingPaymentError,
+  } = await admin
+    .from("payments")
+    .select(
+      `
+        id,
+        company_id,
+        subscription_id,
+        status
+      `
+    )
+    .eq(
+      "provider_transaction_id",
+      providerTransactionId
+    )
+    .maybeSingle();
+
+  if (existingPaymentError) {
+    throw new Error(
+      `Unable to check existing failed payment: ${existingPaymentError.message}`
+    );
+  }
+
+  if (existingPayment) {
+    return {
+      paymentId: existingPayment.id,
+      companyId:
+        existingPayment.company_id,
+      subscriptionId:
+        existingPayment.subscription_id,
+      alreadyProcessed: true,
+    };
+  }
+
+  const {
+    data: payment,
+    error: paymentError,
+  } = await admin
+    .from("payments")
+    .insert({
+      company_id:
+        subscription.company_id,
+
+      subscription_id:
+        subscription.id,
+
+      provider:
+        "paypal",
+
+      provider_transaction_id:
+        providerTransactionId,
+
+      provider_order_id:
+        paypalSubscriptionId,
+
+      amount,
+
+      currency,
+
+      status:
+        "failed",
+
+      payment_type:
+        "subscription",
+
+      payment_method:
+        "paypal",
+
+      paid_at:
+        null,
+
+      refunded_at:
+        null,
+
+      failure_reason:
+        resource.billing_info
+          ?.last_failed_payment
+          ?.reason_code ??
+        "PayPal subscription payment failed.",
+
+      metadata: {
+        paypal_event_id:
+          event.id,
+
+        paypal_event_type:
+          event.event_type,
+
+        paypal_subscription_id:
+          paypalSubscriptionId,
+
+        failed_payments_count:
+          resource.billing_info
+            ?.failed_payments_count ??
+          null,
+
+        failed_payment_time:
+          resource.billing_info
+            ?.last_failed_payment
+            ?.time ??
+          null,
+
+        next_payment_retry_time:
+          resource.billing_info
+            ?.last_failed_payment
+            ?.next_payment_retry_time ??
+          null,
+
+        failure_reason_code:
+          resource.billing_info
+            ?.last_failed_payment
+            ?.reason_code ??
+          null,
+
+        paypal_resource:
+          event.resource,
+      },
+    })
+    .select(
+      `
+        id,
+        company_id,
+        subscription_id,
+        status
+      `
+    )
+    .single();
+
+  if (paymentError) {
+    const {
+      data: concurrentPayment,
+    } = await admin
+      .from("payments")
+      .select(
+        `
+          id,
+          company_id,
+          subscription_id,
+          status
+        `
+      )
+      .eq(
+        "provider_transaction_id",
+        providerTransactionId
+      )
+      .maybeSingle();
+
+    if (concurrentPayment) {
+      return {
+        paymentId:
+          concurrentPayment.id,
+        companyId:
+          concurrentPayment.company_id,
+        subscriptionId:
+          concurrentPayment.subscription_id,
+        alreadyProcessed: true,
+      };
+    }
+
+    throw new Error(
+      `Unable to create failed SBS payment: ${paymentError.message}`
+    );
+  }
+
+  return {
+    paymentId: payment.id,
+    companyId:
+      payment.company_id,
+    subscriptionId:
+      payment.subscription_id,
+    alreadyProcessed: false,
   };
 }
 
 async function processPaymentEvent(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   event: PayPalWebhookEvent
 ) {
   const resource =
@@ -407,9 +657,7 @@ async function processPaymentEvent(
       >
     | null = null;
 
-  if (
-    paypalSubscriptionId
-  ) {
+  if (paypalSubscriptionId) {
     subscription =
       await findSubscriptionByPayPalId(
         admin,
@@ -418,10 +666,11 @@ async function processPaymentEvent(
   }
 
   /*
-   * If PayPal didn't provide a billing
-   * agreement ID, try the subscription
-   * ID from the event resource when
-   * available.
+   * For some PayPal payment events,
+   * billing_agreement_id may be absent.
+   *
+   * parent_payment can be useful for
+   * finding an existing SBS payment.
    */
   if (
     !subscription &&
@@ -433,7 +682,11 @@ async function processPaymentEvent(
     } = await admin
       .from("payments")
       .select(
-        "id, company_id, subscription_id"
+        `
+          id,
+          company_id,
+          subscription_id
+        `
       )
       .eq(
         "provider_transaction_id",
@@ -449,15 +702,58 @@ async function processPaymentEvent(
 
     if (data) {
       return {
-        paymentId:
-          data.id,
+        paymentId: data.id,
         companyId:
           data.company_id,
         subscriptionId:
           data.subscription_id,
-        alreadyProcessed:
-          true,
+        alreadyProcessed: true,
       };
+    }
+  }
+
+  /*
+   * Refund events can reference the
+   * original sale, so if PayPal does not
+   * provide a billing agreement ID we
+   * attempt to map the refund through the
+   * original transaction.
+   */
+  if (
+    !subscription &&
+    event.event_type ===
+      "PAYMENT.SALE.REFUNDED"
+  ) {
+    const {
+      data,
+      error,
+    } = await admin
+      .from("payments")
+      .select(
+        `
+          id,
+          company_id,
+          subscription_id
+        `
+      )
+      .eq(
+        "provider_transaction_id",
+        paymentId
+      )
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(
+        `Unable to map PayPal refund to original payment: ${error.message}`
+      );
+    }
+
+    if (data) {
+      subscription =
+        await findSubscriptionById(
+          admin,
+          data.subscription_id
+        );
     }
   }
 
@@ -486,6 +782,19 @@ async function processPaymentEvent(
     | "refund"
     | "adjustment";
 
+  /*
+   * IMPORTANT:
+   *
+   * Refunds must NOT reuse the original
+   * provider_transaction_id.
+   *
+   * Otherwise the original successful
+   * payment would make the refund appear
+   * to be a duplicate.
+   */
+  let providerTransactionId =
+    paymentId;
+
   switch (event.event_type) {
     case "PAYMENT.SALE.COMPLETED":
       status = "succeeded";
@@ -497,12 +806,18 @@ async function processPaymentEvent(
       status = "refunded";
       paymentType =
         "refund";
+
+      providerTransactionId =
+        `refund-${event.id}`;
       break;
 
     case "PAYMENT.SALE.REVERSED":
       status = "failed";
       paymentType =
         "adjustment";
+
+      providerTransactionId =
+        `reversed-${event.id}`;
       break;
 
     default:
@@ -512,14 +827,16 @@ async function processPaymentEvent(
   }
 
   /*
-   * Idempotency:
+   * Application-level idempotency.
    *
-   * The provider transaction ID is
-   * unique at the application level.
+   * Successful sale:
+   *   original PayPal transaction ID
    *
-   * We check before inserting so
-   * duplicate PayPal deliveries do not
-   * create duplicate payments.
+   * Refund:
+   *   refund + PayPal event ID
+   *
+   * Reversal:
+   *   reversed + PayPal event ID
    */
   const {
     data: existingPayment,
@@ -537,13 +854,11 @@ async function processPaymentEvent(
     )
     .eq(
       "provider_transaction_id",
-      paymentId
+      providerTransactionId
     )
     .maybeSingle();
 
-  if (
-    existingPaymentError
-  ) {
+  if (existingPaymentError) {
     throw new Error(
       `Unable to check existing payment: ${existingPaymentError.message}`
     );
@@ -557,8 +872,7 @@ async function processPaymentEvent(
         existingPayment.company_id,
       subscriptionId:
         existingPayment.subscription_id,
-      alreadyProcessed:
-        true,
+      alreadyProcessed: true,
     };
   }
 
@@ -578,10 +892,11 @@ async function processPaymentEvent(
         "paypal",
 
       provider_transaction_id:
-        paymentId,
+        providerTransactionId,
 
       provider_order_id:
-        paypalSubscriptionId,
+        paypalSubscriptionId ??
+        paymentId,
 
       amount,
 
@@ -609,12 +924,28 @@ async function processPaymentEvent(
             new Date().toISOString()
           : null,
 
+      failure_reason:
+        event.event_type ===
+        "PAYMENT.SALE.REVERSED"
+          ? "PayPal payment was reversed."
+          : null,
+
       metadata: {
         paypal_event_id:
           event.id,
 
         paypal_event_type:
           event.event_type,
+
+        paypal_original_transaction_id:
+          paymentId,
+
+        paypal_subscription_id:
+          paypalSubscriptionId,
+
+        paypal_parent_payment:
+          resource.parent_payment ??
+          null,
 
         paypal_resource:
           event.resource,
@@ -631,13 +962,6 @@ async function processPaymentEvent(
     .single();
 
   if (paymentError) {
-    /*
-     * A concurrent webhook could have
-     * inserted the same transaction.
-     *
-     * Re-check before treating it as a
-     * fatal error.
-     */
     const {
       data: concurrentPayment,
     } = await admin
@@ -652,7 +976,7 @@ async function processPaymentEvent(
       )
       .eq(
         "provider_transaction_id",
-        paymentId
+        providerTransactionId
       )
       .maybeSingle();
 
@@ -664,14 +988,53 @@ async function processPaymentEvent(
           concurrentPayment.company_id,
         subscriptionId:
           concurrentPayment.subscription_id,
-        alreadyProcessed:
-          true,
+        alreadyProcessed: true,
       };
     }
 
     throw new Error(
       `Unable to create SBS payment: ${paymentError.message}`
     );
+  }
+
+  /*
+   * A successful PayPal sale means the
+   * subscription should be active.
+   *
+   * This is deliberately handled here
+   * instead of relying exclusively on the
+   * subscription webhook because payment
+   * and subscription events can arrive in
+   * different orders.
+   */
+  if (
+    event.event_type ===
+    "PAYMENT.SALE.COMPLETED"
+  ) {
+    const {
+      error:
+        subscriptionUpdateError,
+    } = await admin
+      .from("subscriptions")
+      .update({
+        status: "active",
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq(
+        "id",
+        subscription.id
+      )
+      .in("status", [
+        "incomplete",
+        "past_due",
+      ]);
+
+    if (subscriptionUpdateError) {
+      throw new Error(
+        `Payment succeeded but SBS subscription could not be activated: ${subscriptionUpdateError.message}`
+      );
+    }
   }
 
   return {
@@ -681,15 +1044,49 @@ async function processPaymentEvent(
       payment.company_id,
     subscriptionId:
       payment.subscription_id,
-    alreadyProcessed:
-      false,
+    alreadyProcessed: false,
   };
 }
 
+async function findSubscriptionById(
+  admin: ReturnType<typeof createAdminClient>,
+  subscriptionId: string
+) {
+  const {
+    data,
+    error,
+  } = await admin
+    .from("subscriptions")
+    .select(
+      `
+        id,
+        company_id,
+        plan_id,
+        status,
+        billing_cycle,
+        amount,
+        currency,
+        provider,
+        provider_subscription_id
+      `
+    )
+    .eq(
+      "id",
+      subscriptionId
+    )
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Unable to find SBS subscription: ${error.message}`
+    );
+  }
+
+  return data;
+}
+
 async function storeWebhookEvent(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   event: PayPalWebhookEvent
 ) {
   const resourceId =
@@ -698,11 +1095,11 @@ async function storeWebhookEvent(
     );
 
   /*
-   * provider_event_id has a UNIQUE
-   * constraint.
+   * provider_event_id is protected by
+   * a UNIQUE index.
    *
-   * Using upsert makes webhook receipt
-   * itself idempotent.
+   * This makes receiving the same PayPal
+   * event multiple times safe.
    */
   const {
     data,
@@ -755,9 +1152,7 @@ async function storeWebhookEvent(
 }
 
 async function markWebhookProcessed(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   eventId: string
 ) {
   const {
@@ -787,9 +1182,7 @@ async function markWebhookProcessed(
 }
 
 async function markWebhookFailed(
-  admin: ReturnType<
-    typeof createAdminClient
-  >,
+  admin: ReturnType<typeof createAdminClient>,
   eventId: string,
   errorMessage: string
 ) {
@@ -828,6 +1221,12 @@ export async function POST(
     | null = null;
 
   try {
+    /*
+     * Read the raw body first.
+     *
+     * PayPal signature verification must
+     * receive the exact webhook payload.
+     */
     const rawBody =
       await request.text();
 
@@ -954,8 +1353,7 @@ export async function POST(
     );
 
     /*
-     * Check whether this event was
-     * already successfully processed.
+     * Inspect the stored event.
      */
     const {
       data: existingEvent,
@@ -980,6 +1378,11 @@ export async function POST(
       );
     }
 
+    /*
+     * If this event was successfully
+     * processed previously, return success
+     * without doing anything again.
+     */
     if (
       existingEvent?.status ===
       "processed"
@@ -995,16 +1398,41 @@ export async function POST(
     }
 
     let result:
-      | Record<
-          string,
-          unknown
-        >
+      | Record<string, unknown>
       | null = null;
 
     /*
-     * Subscription lifecycle events.
+     * Failed subscription payments need
+     * special handling because the PayPal
+     * resource is a subscription resource,
+     * not a payment resource.
      */
     if (
+      event.event_type ===
+      "BILLING.SUBSCRIPTION.PAYMENT.FAILED"
+    ) {
+      result =
+        await updateSubscriptionFromPayPal(
+          admin,
+          event
+        );
+
+      const failedPayment =
+        await processFailedSubscriptionPayment(
+          admin,
+          event
+        );
+
+      result = {
+        ...result,
+        failedPayment,
+      };
+    }
+
+    /*
+     * Other subscription lifecycle events.
+     */
+    else if (
       SUBSCRIPTION_EVENTS.has(
         event.event_type
       )
@@ -1032,9 +1460,8 @@ export async function POST(
     }
 
     /*
-     * We deliberately reject unexpected
-     * events rather than silently treating
-     * them as successful.
+     * Unexpected events are rejected
+     * rather than silently marked successful.
      */
     else {
       throw new Error(
@@ -1083,9 +1510,9 @@ export async function POST(
     }
 
     /*
-     * Return 500 so PayPal knows the
-     * event was not successfully
-     * processed and can retry it.
+     * Return 500 so PayPal knows that the
+     * event was not successfully processed
+     * and can retry it.
      */
     return NextResponse.json(
       {

@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { createCompany } from "./actions/create-company";
 
+type BusinessType = "product" | "service";
+
 export default function NewCompanyForm() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
-
   const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
     slug: "",
+    businessType: "service" as BusinessType,
     ownerEmail: "",
     email: "",
     phone: "",
@@ -55,6 +57,7 @@ export default function NewCompanyForm() {
     setForm({
       name: "",
       slug: "",
+      businessType: "service",
       ownerEmail: "",
       email: "",
       phone: "",
@@ -139,8 +142,8 @@ export default function NewCompanyForm() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-400">
-                    Provision a new contractor tenant and
-                    invite its owner.
+                    Provision a new business workspace and invite
+                    its owner.
                   </p>
                 </div>
 
@@ -254,6 +257,99 @@ export default function NewCompanyForm() {
                         Cancelled
                       </option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="text-sm font-medium text-slate-300">
+                    Business type *
+                  </div>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    This determines the primary workspace experience
+                    SBS provides for this company.
+                  </p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          businessType: "product",
+                        }))
+                      }
+                      className={`group rounded-xl border p-4 text-left transition ${
+                        form.businessType === "product"
+                          ? "border-white/30 bg-white/10"
+                          : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${
+                            form.businessType === "product"
+                              ? "bg-white/10"
+                              : "bg-white/5"
+                          }`}
+                        >
+                          🛒
+                        </div>
+
+                        <div>
+                          <div className="font-medium text-white">
+                            Product Business
+                          </div>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-400">
+                            For businesses that sell physical
+                            products, including retail, wholesale,
+                            e-commerce, electronics, clothing,
+                            hardware and more.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          businessType: "service",
+                        }))
+                      }
+                      className={`group rounded-xl border p-4 text-left transition ${
+                        form.businessType === "service"
+                          ? "border-white/30 bg-white/10"
+                          : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${
+                            form.businessType === "service"
+                              ? "bg-white/10"
+                              : "bg-white/5"
+                          }`}
+                        >
+                          🔧
+                        </div>
+
+                        <div>
+                          <div className="font-medium text-white">
+                            Service Business
+                          </div>
+
+                          <p className="mt-1 text-xs leading-5 text-slate-400">
+                            For businesses that provide physical
+                            services such as plumbing, roofing,
+                            HVAC, electrical, cleaning, landscaping
+                            and construction.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </section>
@@ -552,10 +648,10 @@ export default function NewCompanyForm() {
                 </div>
 
                 <p className="mt-1 text-xs leading-5 text-slate-400">
-                  When you create this company, SBS will
-                  create its tenant and send the owner a
-                  secure account invitation. The owner will
-                  choose their own password.
+                  When you create this company, SBS will create
+                  its tenant and send the owner a secure account
+                  invitation. The owner will choose their own
+                  password.
                 </p>
               </div>
 

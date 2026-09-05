@@ -109,8 +109,10 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
-function formatStatus(status: string) {
-  switch (status) {
+function getDisplayStatus(status: string) {
+  const normalizedStatus = String(status);
+
+  switch (normalizedStatus) {
     case "trialing":
       return "Trial";
 
@@ -125,6 +127,9 @@ function formatStatus(status: string) {
 
     case "incomplete":
       return "Awaiting Payment";
+
+    case "incomplete_expired":
+      return "Payment Expired";
 
     case "canceled":
       return "Canceled";
@@ -144,8 +149,20 @@ function formatStatus(status: string) {
     case "pending":
       return "Pending";
 
+    case "subscription":
+      return "Subscription";
+
+    case "one_time":
+      return "One Time";
+
+    case "refund":
+      return "Refund";
+
+    case "adjustment":
+      return "Adjustment";
+
     default:
-      return status
+      return normalizedStatus
         .replace(/_/g, " ")
         .replace(/\b\w/g, (letter) =>
           letter.toUpperCase()
@@ -167,6 +184,7 @@ function getStatusClass(status: string) {
 
     case "failed":
     case "canceled":
+    case "incomplete_expired":
       return "bg-[#fef3f2] text-[#b42318]";
 
     case "refunded":
@@ -227,12 +245,6 @@ export default function BillingPageClient({
     company.currency ||
     "USD";
 
-  /*
-   * IMPORTANT:
-   * Keep this outside of a callback/useMemo so
-   * TypeScript correctly understands that
-   * subscription may be null.
-   */
   const trialDays =
     subscription &&
     subscription.status === "trialing"
@@ -266,20 +278,26 @@ export default function BillingPageClient({
         }
       );
 
-      const data = await response.json();
+      const data = await response
+        .json()
+        .catch(() => null);
 
-      if (
-        !response.ok ||
-        !data?.approvalUrl
-      ) {
+      const approvalUrl =
+        data?.approvalUrl ??
+        data?.subscription?.approvalUrl ??
+        data?.data?.approvalUrl ??
+        data?.paypal?.approvalUrl;
+
+      if (!response.ok || !approvalUrl) {
         throw new Error(
           data?.error ||
+            data?.subscription?.error ||
+            data?.paypal?.error ||
             "Unable to start PayPal checkout."
         );
       }
 
-      window.location.href =
-        data.approvalUrl;
+      window.location.href = approvalUrl;
     } catch (err) {
       console.error(
         "PayPal subscription error:",
@@ -347,7 +365,7 @@ export default function BillingPageClient({
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] font-bold leading-[13px] text-white/85">
                     <span className="h-[5px] w-[5px] rounded-full bg-current" />
 
-                    {formatStatus(
+                    {getDisplayStatus(
                       subscription.status
                     )}
                   </span>
@@ -801,7 +819,7 @@ export default function BillingPageClient({
                     </td>
 
                     <td className="border-b border-[#edf0f4] px-4 py-[13px] align-middle text-[10px] leading-[15px] text-[#596678]">
-                      {formatStatus(
+                      {getDisplayStatus(
                         payment.payment_type
                       )}
                     </td>
@@ -826,7 +844,7 @@ export default function BillingPageClient({
                       >
                         <span className="h-[5px] w-[5px] rounded-full bg-current" />
 
-                        {formatStatus(
+                        {getDisplayStatus(
                           payment.status
                         )}
                       </span>

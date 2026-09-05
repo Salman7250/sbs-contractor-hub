@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -32,6 +39,13 @@ type CustomerForm = {
   notes: string;
 };
 
+type SupabaseError = {
+  message?: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+};
+
 const emptyForm: CustomerForm = {
   name: "",
   email: "",
@@ -44,24 +58,46 @@ const emptyForm: CustomerForm = {
   notes: "",
 };
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-US", {
+function formatDate(value: string) {
+  if (!value) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
+  }).format(new Date(value));
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "C";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function getCustomerLocation(customer: Customer) {
+  return [
+    customer.city,
+    customer.state,
+    customer.postal_code,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export default function CustomersPage() {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const [pageError, setPageError] = useState("");
-  const [modalError, setModalError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [search, setSearch] = useState("");
 
@@ -71,81 +107,115 @@ export default function CustomersPage() {
 
   const [form, setForm] = useState<CustomerForm>(emptyForm);
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  async function getCompanyMembership() {
+  const getCompanyMembership = useCallback(async () => {
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError) throw userError;
-
     if (!user) {
-      window.location.href = "/login";
+      router.push("/login");
       return null;
     }
 
-    const { data: membership, error: membershipError } =
-      await supabase
-        .from("company_members")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from("company_members")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
 
-    if (membershipError) throw membershipError;
-
-    if (!membership?.company_id) {
-      throw new Error("No company membership found.");
+    if (error) {
+      throw error;
     }
 
-    return {
-      user,
-      companyId: membership.company_id,
-    };
-  }
+    if (!data?.company_id) {
+      throw new Error("No company workspace is assigned to this account.");
+    }
 
-  async function loadCustomers() {
-    setLoading(true);
-    setPageError("");
+    return data.company_id as string;
+  }, [router, supabase]);
 
+  const loadCustomers = useCallback(async () => {
     try {
-      const membership = await getCompanyMembership();
+      setLoading(true);
+      setPageError("");
 
-      if (!membership) return;
+      const companyId = await getCompanyMembership();
 
-      const { data, error: customersError } = await supabase
+      if (!companyId) {
+        return;
+      }
+
+      const { data, error } = await supabase
         .from("customers")
-        .select("*")
-        .eq("company_id", membership.companyId)
+        .select(
+          `
+            id,
+            company_id,
+            name,
+            email,
+            phone,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            postal_code,
+            notes,
+            created_at,
+            updated_at
+          `,
+        )
+        .eq("company_id", companyId)
         .order("created_at", { ascending: false });
 
-      if (customersError) throw customersError;
+      if (error) {
+        throw error;
+      }
 
       setCustomers((data ?? []) as Customer[]);
-    } catch (err) {
-      console.error("LOAD CUSTOMERS ERROR:", err);
+    } catch (error) {
+      const supabaseError = error as SupabaseError;
 
       setPageError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load customers."
+        supabaseError.message ||
+          "Unable to load customers. Please try again.",
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [getCompanyMembership, supabase]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadCustomers();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadCustomers]);
+
+  useEffect(() => {
+    if (!successMessage) return;
+
+    const timer = window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [successMessage]);
 
   const filteredCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) return customers;
+    if (!query) {
+      return customers;
+    }
 
     return customers.filter((customer) => {
-      const searchableValues = [
+      const haystack = [
         customer.name,
         customer.email,
         customer.phone,
@@ -154,83 +224,93 @@ export default function CustomersPage() {
         customer.city,
         customer.state,
         customer.postal_code,
-      ];
-
-      return searchableValues
+        customer.notes,
+      ]
         .filter(Boolean)
-        .some((value) =>
-          String(value).toLowerCase().includes(query)
-        );
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
     });
   }, [customers, search]);
 
-  function openAddModal() {
+  const totalCustomers = customers.length;
+
+  const customersWithEmail = useMemo(
+    () => customers.filter((customer) => customer.email).length,
+    [customers],
+  );
+
+  const customersWithPhone = useMemo(
+    () => customers.filter((customer) => customer.phone).length,
+    [customers],
+  );
+
+  const openAddModal = () => {
     setEditingCustomer(null);
     setForm(emptyForm);
-    setModalError("");
+    setPageError("");
     setModalOpen(true);
-  }
+  };
 
-  function openEditModal(customer: Customer) {
+  const openEditModal = (customer: Customer) => {
     setEditingCustomer(customer);
 
     setForm({
-      name: customer.name || "",
-      email: customer.email || "",
-      phone: customer.phone || "",
-      address_line1: customer.address_line1 || "",
-      address_line2: customer.address_line2 || "",
-      city: customer.city || "",
-      state: customer.state || "",
-      postal_code: customer.postal_code || "",
-      notes: customer.notes || "",
+      name: customer.name ?? "",
+      email: customer.email ?? "",
+      phone: customer.phone ?? "",
+      address_line1: customer.address_line1 ?? "",
+      address_line2: customer.address_line2 ?? "",
+      city: customer.city ?? "",
+      state: customer.state ?? "",
+      postal_code: customer.postal_code ?? "",
+      notes: customer.notes ?? "",
     });
 
-    setModalError("");
+    setPageError("");
     setModalOpen(true);
-  }
+  };
 
-  function closeModal() {
+  const closeModal = () => {
     if (saving) return;
 
     setModalOpen(false);
     setEditingCustomer(null);
     setForm(emptyForm);
-    setModalError("");
-  }
+  };
 
-  function updateField(
+  const handleFieldChange = (
     field: keyof CustomerForm,
-    value: string
-  ) {
+    value: string,
+  ) => {
     setForm((current) => ({
       ...current,
       [field]: value,
     }));
-  }
+  };
 
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    setModalError("");
-    setPageError("");
-
     if (!form.name.trim()) {
-      setModalError("Customer name is required.");
+      setPageError("Customer name is required.");
       return;
     }
 
-    setSaving(true);
-
     try {
-      const membership = await getCompanyMembership();
+      setSaving(true);
+      setPageError("");
+      setSuccessMessage("");
 
-      if (!membership) return;
+      const companyId = await getCompanyMembership();
 
-      const customerData = {
-        company_id: membership.companyId,
+      if (!companyId) {
+        return;
+      }
+
+      const payload = {
+        company_id: companyId,
         name: form.name.trim(),
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
@@ -243,193 +323,263 @@ export default function CustomersPage() {
       };
 
       if (editingCustomer) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("customers")
-          .update(customerData)
+          .update(payload)
           .eq("id", editingCustomer.id)
-          .eq("company_id", membership.companyId)
-          .select("*")
-          .single();
+          .eq("company_id", companyId);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
 
-        setCustomers((current) =>
-          current.map((customer) =>
-            customer.id === editingCustomer.id
-              ? (data as Customer)
-              : customer
-          )
-        );
+        setSuccessMessage("Customer updated successfully.");
       } else {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("customers")
-          .insert(customerData)
-          .select("*")
-          .single();
+          .insert(payload);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
 
-        setCustomers((current) => [
-          data as Customer,
-          ...current,
-        ]);
+        setSuccessMessage("Customer added successfully.");
       }
 
-      closeModal();
-    } catch (err) {
-      console.error("SAVE CUSTOMER ERROR:", err);
+      setModalOpen(false);
+      setEditingCustomer(null);
+      setForm(emptyForm);
 
-      const supabaseError = err as {
-        message?: string;
-        details?: string;
-        hint?: string;
-        code?: string;
-      };
+      await loadCustomers();
+    } catch (error) {
+      const supabaseError = error as SupabaseError;
 
-      setModalError(
-        [
-          supabaseError.code
-            ? `Code: ${supabaseError.code}`
-            : "",
-          supabaseError.message
-            ? `Message: ${supabaseError.message}`
-            : "",
-          supabaseError.details
-            ? `Details: ${supabaseError.details}`
-            : "",
-          supabaseError.hint
-            ? `Hint: ${supabaseError.hint}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" | ") || "Failed to save customer."
+      setPageError(
+        supabaseError.message ||
+          "Unable to save the customer. Please try again.",
       );
     } finally {
       setSaving(false);
     }
-  }
+  };
 
-  async function deleteCustomer(customer: Customer) {
+  const handleDelete = async (customer: Customer) => {
     const confirmed = window.confirm(
-      `Delete ${customer.name}? This action cannot be undone.`
+      `Delete ${customer.name}? This action cannot be undone.`,
     );
 
-    if (!confirmed) return;
-
-    setPageError("");
+    if (!confirmed) {
+      return;
+    }
 
     try {
-      const membership = await getCompanyMembership();
+      setDeleting(customer.id);
+      setPageError("");
+      setSuccessMessage("");
 
-      if (!membership) return;
+      const companyId = await getCompanyMembership();
+
+      if (!companyId) {
+        return;
+      }
 
       const { error } = await supabase
         .from("customers")
         .delete()
         .eq("id", customer.id)
-        .eq("company_id", membership.companyId);
+        .eq("company_id", companyId);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setCustomers((current) =>
-        current.filter((item) => item.id !== customer.id)
+        current.filter((item) => item.id !== customer.id),
       );
-    } catch (err) {
-      console.error("DELETE CUSTOMER ERROR:", err);
+
+      setSuccessMessage("Customer deleted successfully.");
+    } catch (error) {
+      const supabaseError = error as SupabaseError;
 
       setPageError(
-        err instanceof Error
-          ? err.message
-          : "Failed to delete customer."
+        supabaseError.message ||
+          "Unable to delete the customer. Please try again.",
       );
+    } finally {
+      setDeleting(null);
     }
-  }
+  };
 
   return (
-    <AppShell
-      title="Customers"
-      description="Manage your contractor customer database."
-      actions={
-        <button
-          className="sbs-primary-button"
-          onClick={openAddModal}
-        >
-          <span className="sbs-button-plus">+</span>
-          Add Customer
-        </button>
-      }
-    >
+    <AppShell>
       <div className="customers-page">
+        <header className="customers-header">
+          <div>
+            <div className="customers-eyebrow">CUSTOMER MANAGEMENT</div>
+
+            <h1>Customers</h1>
+
+            <p>
+              Manage your customer accounts, contacts, and business
+              relationships.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="customers-primary-button"
+            onClick={openAddModal}
+          >
+            <span className="customers-plus">+</span>
+            Add Customer
+          </button>
+        </header>
+
         {pageError && (
-          <div className="sbs-error-banner">
-            {pageError}
+          <div className="customers-alert customers-alert-error">
+            <div className="customers-alert-icon">!</div>
+
+            <div>
+              <strong>Something went wrong</strong>
+              <span>{pageError}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPageError("")}
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
           </div>
         )}
 
-        <section className="sbs-card customers-card">
+        {successMessage && (
+          <div className="customers-alert customers-alert-success">
+            <div className="customers-success-icon">✓</div>
+
+            <div>
+              <strong>Success</strong>
+              <span>{successMessage}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSuccessMessage("")}
+              aria-label="Dismiss success message"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <section className="customers-stats">
+          <div className="customer-stat-card">
+            <div className="customer-stat-top">
+              <span>Total Customers</span>
+              <div className="customer-stat-icon">C</div>
+            </div>
+
+            <strong>{totalCustomers}</strong>
+
+            <small>Customer accounts in your workspace</small>
+          </div>
+
+          <div className="customer-stat-card">
+            <div className="customer-stat-top">
+              <span>Email Contacts</span>
+              <div className="customer-stat-icon">@</div>
+            </div>
+
+            <strong>{customersWithEmail}</strong>
+
+            <small>Customers with an email address</small>
+          </div>
+
+          <div className="customer-stat-card">
+            <div className="customer-stat-top">
+              <span>Phone Contacts</span>
+              <div className="customer-stat-icon">☎</div>
+            </div>
+
+            <strong>{customersWithPhone}</strong>
+
+            <small>Customers with a phone number</small>
+          </div>
+        </section>
+
+        <section className="customers-panel">
           <div className="customers-toolbar">
+            <div>
+              <h2>Customer Accounts</h2>
+              <p>
+                {search
+                  ? `${filteredCustomers.length} matching customer${
+                      filteredCustomers.length === 1 ? "" : "s"
+                    }`
+                  : `${customers.length} customer${
+                      customers.length === 1 ? "" : "s"
+                    }`}
+              </p>
+            </div>
+
             <div className="customers-search">
               <svg
-                width="17"
-                height="17"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
                 aria-hidden="true"
+                className="customers-search-icon"
               >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-4-4" />
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="6.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <path
+                  d="m16 16 4.2 4.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
               </svg>
 
               <input
-                type="text"
-                placeholder="Search customers..."
+                type="search"
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search customers..."
+                aria-label="Search customers"
               />
-            </div>
 
-            <div className="customers-result-count">
-              {filteredCustomers.length} customer
-              {filteredCustomers.length === 1
-                ? ""
-                : "s"}
+              {search && (
+                <button
+                  type="button"
+                  className="customers-search-clear"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
 
           {loading ? (
-            <div className="sbs-empty-state">
-              <div className="sbs-spinner" />
+            <div className="customers-loading">
+              <div className="customers-spinner" />
 
-              <h3>Loading customers...</h3>
+              <strong>Loading customers</strong>
 
-              <p>
-                Getting your customer data from the database.
-              </p>
+              <span>
+                Getting the latest customer accounts from your workspace.
+              </span>
             </div>
           ) : filteredCustomers.length === 0 ? (
-            <div className="sbs-empty-state">
-              <div className="sbs-empty-icon">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M2 21v-2a7 7 0 0 1 14 0v2" />
-                  <path d="M16 11h6" />
-                </svg>
-              </div>
+            <div className="customers-empty">
+              <div className="customers-empty-icon">C</div>
 
               <h3>
                 {search
@@ -439,22 +589,31 @@ export default function CustomersPage() {
 
               <p>
                 {search
-                  ? "Try a different search term."
+                  ? "Try a different search term or clear the search."
                   : "Add your first customer to start building your customer database."}
               </p>
 
-              {!search && (
+              {search ? (
                 <button
-                  className="sbs-primary-button"
+                  type="button"
+                  className="customers-secondary-button"
+                  onClick={() => setSearch("")}
+                >
+                  Clear Search
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="customers-primary-button"
                   onClick={openAddModal}
                 >
-                  <span className="sbs-button-plus">+</span>
+                  <span className="customers-plus">+</span>
                   Add Customer
                 </button>
               )}
             </div>
           ) : (
-            <div className="customers-table-scroll">
+            <div className="customers-table-wrap">
               <table className="customers-table">
                 <thead>
                   <tr>
@@ -462,7 +621,9 @@ export default function CustomersPage() {
                     <th>Contact</th>
                     <th>Location</th>
                     <th>Added</th>
-                    <th>Actions</th>
+                    <th className="customers-actions-heading">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
 
@@ -470,58 +631,84 @@ export default function CustomersPage() {
                   {filteredCustomers.map((customer) => (
                     <tr key={customer.id}>
                       <td>
-                        <div className="customer-name">
-                          {customer.name}
+                        <div className="customer-identity">
+                          <div className="customer-avatar">
+                            {getInitials(customer.name)}
+                          </div>
+
+                          <div className="customer-name-block">
+                            <strong>{customer.name}</strong>
+
+                            {customer.notes ? (
+                              <span className="customer-note-preview">
+                                {customer.notes}
+                              </span>
+                            ) : (
+                              <span className="customer-id">
+                                Customer account
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
                       <td>
                         <div className="customer-contact">
-                          {customer.email ||
-                            customer.phone ||
-                            "—"}
-                        </div>
-
-                        {customer.email &&
-                          customer.phone && (
-                            <div className="customer-phone">
-                              {customer.phone}
-                            </div>
+                          {customer.email ? (
+                            <span>{customer.email}</span>
+                          ) : (
+                            <span className="customer-muted">
+                              No email
+                            </span>
                           )}
+
+                          {customer.phone ? (
+                            <span>{customer.phone}</span>
+                          ) : (
+                            <span className="customer-muted">
+                              No phone
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td>
-                        {[
-                          customer.city,
-                          customer.state,
-                          customer.postal_code,
-                        ]
-                          .filter(Boolean)
-                          .join(", ") || "—"}
+                        <span className="customer-location">
+                          {getCustomerLocation(customer) || "No location"}
+                        </span>
                       </td>
 
                       <td>
-                        {formatDate(customer.created_at)}
+                        <span className="customer-date">
+                          {formatDate(customer.created_at)}
+                        </span>
                       </td>
 
                       <td>
-                        <div className="customer-actions">
+                        <div className="customer-row-actions">
                           <button
-                            className="sbs-action-button"
+                            type="button"
+                            className="customer-action-button"
                             onClick={() =>
                               openEditModal(customer)
                             }
+                            aria-label={`Edit ${customer.name}`}
                           >
                             Edit
                           </button>
 
                           <button
-                            className="sbs-action-button sbs-action-danger"
+                            type="button"
+                            className="customer-action-button customer-delete-button"
                             onClick={() =>
-                              deleteCustomer(customer)
+                              void handleDelete(customer)
                             }
+                            disabled={deleting === customer.id}
+                            aria-label={`Delete ${customer.name}`}
                           >
-                            Delete
+                            {deleting === customer.id
+                              ? "Deleting..."
+                              : "Delete"}
                           </button>
                         </div>
                       </td>
@@ -532,396 +719,605 @@ export default function CustomersPage() {
             </div>
           )}
         </section>
+      </div>
 
-        {modalOpen && (
+      {modalOpen && (
+        <div
+          className="customer-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeModal();
+            }
+          }}
+        >
           <div
-            className="sbs-modal-overlay"
-            onMouseDown={closeModal}
+            className="customer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-modal-title"
           >
-            <div
-              className="sbs-modal customers-modal"
-              onMouseDown={(event) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="sbs-modal-header">
-                <div>
-                  <div className="sbs-eyebrow">
-                    {editingCustomer
-                      ? "CUSTOMER"
-                      : "NEW CUSTOMER"}
-                  </div>
-
-                  <h2>
-                    {editingCustomer
-                      ? "Edit Customer"
-                      : "Add Customer"}
-                  </h2>
+            <div className="customer-modal-header">
+              <div>
+                <div className="customer-modal-eyebrow">
+                  {editingCustomer
+                    ? "CUSTOMER ACCOUNT"
+                    : "NEW CUSTOMER"}
                 </div>
 
-                <button
-                  className="sbs-modal-close"
-                  onClick={closeModal}
-                  disabled={saving}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
+                <h2 id="customer-modal-title">
+                  {editingCustomer
+                    ? "Edit Customer"
+                    : "Add Customer"}
+                </h2>
+
+                <p>
+                  {editingCustomer
+                    ? "Update this customer's account information."
+                    : "Create a new customer account for your workspace."}
+                </p>
               </div>
 
-              <form onSubmit={handleSubmit}>
-                {modalError && (
-                  <div className="sbs-error-banner sbs-modal-error">
-                    {modalError}
-                  </div>
-                )}
+              <button
+                type="button"
+                className="customer-modal-close"
+                onClick={closeModal}
+                disabled={saving}
+                aria-label="Close customer form"
+              >
+                ×
+              </button>
+            </div>
 
-                <div className="customers-form-grid">
-                  <label className="sbs-form-field">
-                    <span>Customer Name *</span>
+            <form
+              className="customer-form"
+              onSubmit={handleSubmit}
+            >
+              <div className="customer-form-section">
+                <div className="customer-form-section-title">
+                  Basic Information
+                </div>
+
+                <div className="customer-form-grid">
+                  <label className="customer-field customer-field-full">
+                    <span>
+                      Customer Name <b>*</b>
+                    </span>
 
                     <input
                       type="text"
                       value={form.name}
                       onChange={(event) =>
-                        updateField(
+                        handleFieldChange(
                           "name",
-                          event.target.value
+                          event.target.value,
                         )
                       }
-                      placeholder="John Smith"
+                      placeholder="e.g. ABC Computers LLC"
+                      autoFocus
                       required
                     />
                   </label>
 
-                  <label className="sbs-form-field">
-                    <span>Email</span>
+                  <label className="customer-field">
+                    <span>Email Address</span>
 
                     <input
                       type="email"
                       value={form.email}
                       onChange={(event) =>
-                        updateField(
+                        handleFieldChange(
                           "email",
-                          event.target.value
+                          event.target.value,
                         )
                       }
-                      placeholder="john@example.com"
+                      placeholder="customer@example.com"
                     />
                   </label>
 
-                  <label className="sbs-form-field">
-                    <span>Phone</span>
+                  <label className="customer-field">
+                    <span>Phone Number</span>
 
                     <input
                       type="tel"
                       value={form.phone}
                       onChange={(event) =>
-                        updateField(
+                        handleFieldChange(
                           "phone",
-                          event.target.value
+                          event.target.value,
                         )
                       }
-                      placeholder="(214) 555-0123"
+                      placeholder="+1 555 000 0000"
                     />
                   </label>
+                </div>
+              </div>
 
-                  <label className="sbs-form-field">
-                    <span>City</span>
+              <div className="customer-form-section">
+                <div className="customer-form-section-title">
+                  Address
+                </div>
 
-                    <input
-                      type="text"
-                      value={form.city}
-                      onChange={(event) =>
-                        updateField(
-                          "city",
-                          event.target.value
-                        )
-                      }
-                      placeholder="Dallas"
-                    />
-                  </label>
-
-                  <label className="sbs-form-field">
-                    <span>State</span>
-
-                    <input
-                      type="text"
-                      value={form.state}
-                      onChange={(event) =>
-                        updateField(
-                          "state",
-                          event.target.value
-                        )
-                      }
-                      placeholder="Texas"
-                    />
-                  </label>
-
-                  <label className="sbs-form-field">
-                    <span>ZIP / Postal Code</span>
-
-                    <input
-                      type="text"
-                      value={form.postal_code}
-                      onChange={(event) =>
-                        updateField(
-                          "postal_code",
-                          event.target.value
-                        )
-                      }
-                      placeholder="75001"
-                    />
-                  </label>
-
-                  <label className="sbs-form-field sbs-form-full">
+                <div className="customer-form-grid">
+                  <label className="customer-field customer-field-full">
                     <span>Address Line 1</span>
 
                     <input
                       type="text"
                       value={form.address_line1}
                       onChange={(event) =>
-                        updateField(
+                        handleFieldChange(
                           "address_line1",
-                          event.target.value
+                          event.target.value,
                         )
                       }
-                      placeholder="123 Main Street"
+                      placeholder="Street address"
                     />
                   </label>
 
-                  <label className="sbs-form-field sbs-form-full">
+                  <label className="customer-field customer-field-full">
                     <span>Address Line 2</span>
 
                     <input
                       type="text"
                       value={form.address_line2}
                       onChange={(event) =>
-                        updateField(
+                        handleFieldChange(
                           "address_line2",
-                          event.target.value
+                          event.target.value,
                         )
                       }
-                      placeholder="Apartment, suite, unit, etc."
+                      placeholder="Suite, unit, building, etc."
                     />
                   </label>
 
-                  <label className="sbs-form-field sbs-form-full">
-                    <span>Notes</span>
+                  <label className="customer-field">
+                    <span>City</span>
 
-                    <textarea
-                      value={form.notes}
+                    <input
+                      type="text"
+                      value={form.city}
                       onChange={(event) =>
-                        updateField(
-                          "notes",
-                          event.target.value
+                        handleFieldChange(
+                          "city",
+                          event.target.value,
                         )
                       }
-                      placeholder="Additional customer information..."
-                      rows={4}
+                      placeholder="City"
+                    />
+                  </label>
+
+                  <label className="customer-field">
+                    <span>State / Region</span>
+
+                    <input
+                      type="text"
+                      value={form.state}
+                      onChange={(event) =>
+                        handleFieldChange(
+                          "state",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="State"
+                    />
+                  </label>
+
+                  <label className="customer-field">
+                    <span>Postal Code</span>
+
+                    <input
+                      type="text"
+                      value={form.postal_code}
+                      onChange={(event) =>
+                        handleFieldChange(
+                          "postal_code",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Postal code"
                     />
                   </label>
                 </div>
+              </div>
 
-                <div className="sbs-modal-actions">
-                  <button
-                    type="button"
-                    className="sbs-secondary-button"
-                    onClick={closeModal}
-                    disabled={saving}
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="sbs-primary-button"
-                    disabled={saving}
-                  >
-                    {saving
-                      ? "Saving..."
-                      : editingCustomer
-                        ? "Save Changes"
-                        : "Add Customer"}
-                  </button>
+              <div className="customer-form-section">
+                <div className="customer-form-section-title">
+                  Internal Notes
                 </div>
-              </form>
-            </div>
+
+                <label className="customer-field">
+                  <span>Notes</span>
+
+                  <textarea
+                    value={form.notes}
+                    onChange={(event) =>
+                      handleFieldChange(
+                        "notes",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Add any internal notes about this customer..."
+                    rows={4}
+                  />
+                </label>
+              </div>
+
+              <div className="customer-modal-footer">
+                <button
+                  type="button"
+                  className="customer-secondary-button"
+                  onClick={closeModal}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="customers-primary-button"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <span className="customer-button-spinner" />
+                      Saving...
+                    </>
+                  ) : editingCustomer ? (
+                    "Save Changes"
+                  ) : (
+                    "Add Customer"
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <style jsx>{`
         .customers-page {
           width: 100%;
+          max-width: 1480px;
+          margin: 0 auto;
+          padding: 28px 30px 40px;
+          color: var(--sbs-text, #111827);
         }
 
-        .sbs-card {
-          background: #fff;
-          border: 1px solid var(--sbs-border);
-          border-radius: var(--sbs-radius);
-          box-shadow: var(--sbs-shadow-sm);
+        .customers-header {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 24px;
         }
 
-        .customers-card {
-          overflow: hidden;
+        .customers-eyebrow,
+        .customer-modal-eyebrow {
+          margin-bottom: 7px;
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
         }
 
-        .customers-toolbar {
-          min-height: 70px;
+        .customers-header h1 {
+          margin: 0;
+          font-size: 28px;
+          line-height: 34px;
+          font-weight: 760;
+          letter-spacing: -0.035em;
+          color: var(--sbs-text, #111827);
+        }
+
+        .customers-header p {
+          max-width: 620px;
+          margin: 7px 0 0;
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 13px;
+          line-height: 20px;
+        }
+
+        .customers-primary-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 42px;
+          padding: 0 16px;
+          border: 1px solid #111827;
+          border-radius: 8px;
+          background: #111827;
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          transition:
+            background 0.16s ease,
+            border-color 0.16s ease,
+            transform 0.16s ease;
+        }
+
+        .customers-primary-button:hover {
+          background: #1f2937;
+          border-color: #1f2937;
+          transform: translateY(-1px);
+        }
+
+        .customers-primary-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .customers-plus {
+          font-size: 19px;
+          line-height: 1;
+          font-weight: 400;
+        }
+
+        .customers-alert {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 14px 16px;
-          border-bottom: 1px solid var(--sbs-border);
+          margin-bottom: 18px;
+          padding: 12px 14px;
+          border: 1px solid;
+          border-radius: 9px;
+        }
+
+        .customers-alert > div:nth-child(2) {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          flex: 1;
+          gap: 2px;
+        }
+
+        .customers-alert strong {
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .customers-alert span {
+          font-size: 11px;
+          line-height: 17px;
+        }
+
+        .customers-alert > button {
+          width: 28px;
+          height: 28px;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font-size: 19px;
+          cursor: pointer;
+          opacity: 0.65;
+        }
+
+        .customers-alert-error {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #991b1b;
+        }
+
+        .customers-alert-success {
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+          color: #166534;
+        }
+
+        .customers-alert-icon,
+        .customers-success-icon {
+          display: grid;
+          place-items: center;
+          flex: 0 0 auto;
+          width: 30px;
+          height: 30px;
+          border-radius: 7px;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .customers-alert-icon {
+          background: #fee2e2;
+        }
+
+        .customers-success-icon {
+          background: #dcfce7;
+        }
+
+        .customers-stats {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .customer-stat-card {
+          min-width: 0;
+          padding: 18px;
+          border: 1px solid var(--sbs-border, #e5e7eb);
+          border-radius: 10px;
+          background: var(--sbs-surface, #ffffff);
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+        }
+
+        .customer-stat-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .customer-stat-top span {
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 11px;
+          font-weight: 650;
+        }
+
+        .customer-stat-icon {
+          display: grid;
+          place-items: center;
+          width: 30px;
+          height: 30px;
+          border: 1px solid var(--sbs-border, #e5e7eb);
+          border-radius: 7px;
+          color: var(--sbs-text, #111827);
+          background: var(--sbs-surface-soft, #f8fafc);
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .customer-stat-card > strong {
+          display: block;
+          color: var(--sbs-text, #111827);
+          font-size: 25px;
+          line-height: 30px;
+          font-weight: 760;
+          letter-spacing: -0.025em;
+        }
+
+        .customer-stat-card > small {
+          display: block;
+          margin-top: 5px;
+          overflow: hidden;
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 10px;
+          line-height: 16px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .customers-panel {
+          overflow: hidden;
+          border: 1px solid var(--sbs-border, #e5e7eb);
+          border-radius: 10px;
+          background: var(--sbs-surface, #ffffff);
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+        }
+
+        .customers-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 17px 18px;
+          border-bottom: 1px solid var(--sbs-border, #e5e7eb);
+        }
+
+        .customers-toolbar h2 {
+          margin: 0;
+          color: var(--sbs-text, #111827);
+          font-size: 14px;
+          line-height: 20px;
+          font-weight: 750;
+          letter-spacing: -0.015em;
+        }
+
+        .customers-toolbar p {
+          margin: 3px 0 0;
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 10px;
+          line-height: 15px;
         }
 
         .customers-search {
-          width: min(100%, 350px);
-          height: 39px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 0 11px;
-          border: 1px solid var(--sbs-border);
-          border-radius: 9px;
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text-muted);
+          position: relative;
+          width: 300px;
+          flex: 0 0 300px;
         }
 
-        .customers-search:focus-within {
-          border-color: var(--sbs-border-strong);
-          background: #fff;
-          box-shadow: 0 0 0 3px rgba(23, 32, 51, 0.045);
+        .customers-search-icon {
+          position: absolute;
+          top: 50%;
+          left: 11px;
+          width: 17px;
+          height: 17px;
+          color: #9ca3af;
+          transform: translateY(-50%);
+          pointer-events: none;
         }
 
         .customers-search input {
           width: 100%;
-          min-width: 0;
-          border: 0;
-          outline: 0;
-          background: transparent;
-          color: var(--sbs-text);
-          font: inherit;
-          font-size: 12px;
+          height: 38px;
+          padding: 0 34px 0 35px;
+          border: 1px solid var(--sbs-border, #e5e7eb);
+          border-radius: 7px;
+          outline: none;
+          background: var(--sbs-surface, #ffffff);
+          color: var(--sbs-text, #111827);
+          font-family: inherit;
+          font-size: 11px;
+          transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
         }
 
         .customers-search input::placeholder {
-          color: var(--sbs-text-muted);
+          color: #9ca3af;
         }
 
-        .customers-result-count {
-          margin-left: auto;
-          color: var(--sbs-text-muted);
-          font-size: 11px;
-          white-space: nowrap;
+        .customers-search input:focus {
+          border-color: #9ca3af;
+          box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.06);
         }
 
-        .sbs-primary-button,
-        .sbs-secondary-button {
-          height: 39px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          border-radius: 9px;
-          padding: 0 14px;
-          font: inherit;
-          font-size: 11px;
-          font-weight: 650;
+        .customers-search-clear {
+          position: absolute;
+          top: 50%;
+          right: 8px;
+          display: grid;
+          place-items: center;
+          width: 23px;
+          height: 23px;
+          padding: 0;
+          border: 0;
+          border-radius: 5px;
+          background: transparent;
+          color: #6b7280;
+          font-size: 17px;
           cursor: pointer;
-          transition:
-            background 150ms ease,
-            border-color 150ms ease,
-            color 150ms ease,
-            transform 100ms ease;
+          transform: translateY(-50%);
         }
 
-        .sbs-primary-button {
-          border: 1px solid var(--sbs-primary);
-          background: var(--sbs-primary);
-          color: #fff;
+        .customers-search-clear:hover {
+          background: #f3f4f6;
+          color: #111827;
         }
 
-        .sbs-primary-button:hover {
-          background: var(--sbs-primary-hover);
-          border-color: var(--sbs-primary-hover);
-        }
-
-        .sbs-primary-button:active {
-          transform: translateY(1px);
-        }
-
-        .sbs-primary-button:disabled,
-        .sbs-secondary-button:disabled,
-        .sbs-action-button:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-
-        .sbs-secondary-button {
-          border: 1px solid var(--sbs-border);
-          background: #fff;
-          color: var(--sbs-text-soft);
-        }
-
-        .sbs-secondary-button:hover {
-          background: var(--sbs-surface-soft);
-          border-color: var(--sbs-border-strong);
-          color: var(--sbs-text);
-        }
-
-        .sbs-button-plus {
-          font-size: 16px;
-          line-height: 1;
-          font-weight: 400;
-          margin-top: -1px;
-        }
-
-        .sbs-error-banner {
-          margin-bottom: 16px;
-          padding: 11px 13px;
-          border: 1px solid #f2c6c2;
-          border-radius: 9px;
-          background: #fff6f5;
-          color: var(--sbs-danger);
-          font-size: 12px;
-          line-height: 18px;
-        }
-
-        .customers-table-scroll {
+        .customers-table-wrap {
           width: 100%;
           overflow-x: auto;
         }
 
         .customers-table {
           width: 100%;
-          min-width: 760px;
+          min-width: 900px;
           border-collapse: collapse;
         }
 
         .customers-table th {
-          height: 45px;
-          padding: 0 15px;
-          border-bottom: 1px solid var(--sbs-border);
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text-muted);
+          padding: 11px 18px;
+          border-bottom: 1px solid var(--sbs-border, #e5e7eb);
+          background: var(--sbs-surface-soft, #fafafa);
+          color: var(--sbs-text-muted, #6b7280);
           font-size: 9px;
           line-height: 14px;
           font-weight: 750;
-          letter-spacing: 0.055em;
+          letter-spacing: 0.07em;
           text-align: left;
           text-transform: uppercase;
           white-space: nowrap;
         }
 
         .customers-table td {
-          height: 68px;
-          padding: 10px 15px;
-          border-bottom: 1px solid var(--sbs-border);
-          color: var(--sbs-text-soft);
-          font-size: 11px;
-          line-height: 17px;
+          padding: 14px 18px;
+          border-bottom: 1px solid var(--sbs-border, #f0f1f3);
           vertical-align: middle;
         }
 
@@ -929,332 +1325,497 @@ export default function CustomersPage() {
           border-bottom: 0;
         }
 
+        .customers-table tbody tr {
+          transition: background 0.12s ease;
+        }
+
         .customers-table tbody tr:hover {
-          background: #fbfcfd;
+          background: #fafafa;
         }
 
-        .customer-name {
-          color: var(--sbs-text);
-          font-size: 12px;
-          line-height: 17px;
-          font-weight: 650;
-          white-space: nowrap;
+        .customer-identity {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          min-width: 220px;
         }
 
-        .customer-contact {
-          max-width: 210px;
+        .customer-avatar {
+          display: grid;
+          place-items: center;
+          flex: 0 0 auto;
+          width: 36px;
+          height: 36px;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          background: #f3f4f6;
+          color: #374151;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .customer-name-block {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          gap: 3px;
+        }
+
+        .customer-name-block strong {
           overflow: hidden;
+          color: var(--sbs-text, #111827);
+          font-size: 11px;
+          line-height: 16px;
+          font-weight: 700;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        .customer-phone {
-          margin-top: 2px;
-          color: var(--sbs-text-muted);
+        .customer-note-preview,
+        .customer-id {
+          display: block;
+          max-width: 220px;
+          overflow: hidden;
+          color: var(--sbs-text-muted, #6b7280);
+          font-size: 9px;
+          line-height: 14px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .customer-contact {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          max-width: 220px;
+        }
+
+        .customer-contact span {
+          overflow: hidden;
+          color: #374151;
           font-size: 10px;
           line-height: 15px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
-        .customer-actions {
+        .customer-muted {
+          color: #9ca3af !important;
+        }
+
+        .customer-location {
+          display: block;
+          max-width: 180px;
+          overflow: hidden;
+          color: #4b5563;
+          font-size: 10px;
+          line-height: 15px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .customer-date {
+          color: #6b7280;
+          font-size: 10px;
+          white-space: nowrap;
+        }
+
+        .customers-actions-heading {
+          text-align: right !important;
+        }
+
+        .customer-row-actions {
           display: flex;
-          align-items: center;
-          gap: 5px;
+          justify-content: flex-end;
+          gap: 6px;
         }
 
-        .sbs-action-button {
-          height: 29px;
-          padding: 0 8px;
-          border: 1px solid var(--sbs-border);
-          border-radius: 7px;
-          background: #fff;
-          color: var(--sbs-text-soft);
-          font: inherit;
+        .customer-action-button {
+          min-height: 29px;
+          padding: 0 9px;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #374151;
+          font-family: inherit;
           font-size: 9px;
           font-weight: 650;
           cursor: pointer;
-          white-space: nowrap;
           transition:
-            background 150ms ease,
-            border-color 150ms ease,
-            color 150ms ease;
+            background 0.12s ease,
+            border-color 0.12s ease,
+            color 0.12s ease;
         }
 
-        .sbs-action-button:hover {
-          background: var(--sbs-surface-soft);
-          border-color: var(--sbs-border-strong);
-          color: var(--sbs-text);
+        .customer-action-button:hover {
+          border-color: #d1d5db;
+          background: #f9fafb;
+          color: #111827;
         }
 
-        .sbs-action-button.sbs-action-danger:hover {
-          background: #fff5f4;
-          border-color: #f2c6c2;
-          color: var(--sbs-danger);
+        .customer-delete-button {
+          color: #991b1b;
         }
 
-        .sbs-empty-state {
-          min-height: 310px;
+        .customer-delete-button:hover {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #b91c1c;
+        }
+
+        .customer-action-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .customers-loading,
+        .customers-empty {
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 40px 20px;
+          flex-direction: column;
+          min-height: 330px;
+          padding: 50px 24px;
           text-align: center;
         }
 
-        .sbs-empty-state h3 {
-          margin: 13px 0 0;
-          color: var(--sbs-text);
-          font-size: 14px;
-          line-height: 20px;
+        .customers-spinner {
+          width: 27px;
+          height: 27px;
+          margin-bottom: 15px;
+          border: 2px solid #e5e7eb;
+          border-top-color: #111827;
+          border-radius: 50%;
+          animation: customer-spin 0.8s linear infinite;
+        }
+
+        .customers-loading strong {
+          color: #111827;
+          font-size: 12px;
           font-weight: 700;
         }
 
-        .sbs-empty-state p {
-          max-width: 390px;
-          margin: 5px 0 18px;
-          color: var(--sbs-text-muted);
+        .customers-loading span {
+          margin-top: 5px;
+          color: #9ca3af;
+          font-size: 10px;
+        }
+
+        .customers-empty-icon {
+          display: grid;
+          place-items: center;
+          width: 48px;
+          height: 48px;
+          margin-bottom: 14px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          background: #f8fafc;
+          color: #374151;
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .customers-empty h3 {
+          margin: 0;
+          color: #111827;
+          font-size: 14px;
+          font-weight: 750;
+        }
+
+        .customers-empty p {
+          max-width: 430px;
+          margin: 6px 0 18px;
+          color: #6b7280;
           font-size: 11px;
           line-height: 17px;
         }
 
-        .sbs-empty-icon {
-          width: 48px;
-          height: 48px;
-          display: grid;
-          place-items: center;
-          border-radius: 13px;
-          background: var(--sbs-primary-soft);
-          color: var(--sbs-primary);
+        .customer-secondary-button {
+          min-height: 39px;
+          padding: 0 14px;
+          border: 1px solid #e5e7eb;
+          border-radius: 7px;
+          background: #ffffff;
+          color: #374151;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 650;
+          cursor: pointer;
         }
 
-        .sbs-spinner {
-          width: 26px;
-          height: 26px;
-          border: 2px solid #e3e8ee;
-          border-top-color: var(--sbs-primary);
-          border-radius: 50%;
-          animation: sbs-customer-spin 0.75s linear infinite;
+        .customer-secondary-button:hover {
+          border-color: #d1d5db;
+          background: #f9fafb;
         }
 
-        @keyframes sbs-customer-spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        .sbs-modal-overlay {
+        .customer-modal-backdrop {
           position: fixed;
+          z-index: 100;
           inset: 0;
-          z-index: 300;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 20px;
-          background: rgba(15, 23, 42, 0.42);
+          padding: 24px;
+          background: rgba(15, 23, 42, 0.46);
           backdrop-filter: blur(3px);
         }
 
-        .sbs-modal {
-          width: min(100%, 720px);
-          max-height: calc(100vh - 40px);
-          overflow-y: auto;
-          background: #fff;
-          border: 1px solid var(--sbs-border);
-          border-radius: 16px;
-          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+        .customer-modal {
+          display: flex;
+          flex-direction: column;
+          width: min(680px, 100%);
+          max-height: calc(100vh - 48px);
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          border-radius: 12px;
+          background: #ffffff;
+          box-shadow:
+            0 24px 70px rgba(15, 23, 42, 0.2),
+            0 4px 16px rgba(15, 23, 42, 0.08);
         }
 
-        .sbs-modal-header {
+        .customer-modal-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 20px;
-          padding: 21px 22px 18px;
-          border-bottom: 1px solid var(--sbs-border);
+          gap: 18px;
+          padding: 22px 24px;
+          border-bottom: 1px solid #e5e7eb;
         }
 
-        .sbs-eyebrow {
-          color: var(--sbs-text-muted);
-          font-size: 9px;
-          line-height: 13px;
-          font-weight: 750;
-          letter-spacing: 0.08em;
-        }
-
-        .sbs-modal-header h2 {
-          margin: 3px 0 0;
-          color: var(--sbs-text);
+        .customer-modal-header h2 {
+          margin: 0;
+          color: #111827;
           font-size: 19px;
           line-height: 25px;
-          font-weight: 750;
+          font-weight: 760;
+          letter-spacing: -0.025em;
         }
 
-        .sbs-modal-close {
-          width: 34px;
-          height: 34px;
+        .customer-modal-header p {
+          margin: 5px 0 0;
+          color: #6b7280;
+          font-size: 10px;
+          line-height: 16px;
+        }
+
+        .customer-modal-close {
           display: grid;
           place-items: center;
-          border: 0;
-          border-radius: 8px;
-          background: transparent;
-          color: var(--sbs-text-muted);
-          font-size: 24px;
+          flex: 0 0 auto;
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          border: 1px solid #e5e7eb;
+          border-radius: 7px;
+          background: #ffffff;
+          color: #6b7280;
+          font-size: 20px;
           line-height: 1;
           cursor: pointer;
         }
 
-        .sbs-modal-close:hover {
-          background: var(--sbs-surface-soft);
-          color: var(--sbs-text);
+        .customer-modal-close:hover {
+          background: #f9fafb;
+          color: #111827;
         }
 
-        .sbs-modal-error {
-          margin: 18px 22px 0;
+        .customer-form {
+          overflow-y: auto;
         }
 
-        .customers-modal form {
-          padding: 22px;
+        .customer-form-section {
+          padding: 19px 24px;
+          border-bottom: 1px solid #f0f1f3;
         }
 
-        .customers-form-grid {
+        .customer-form-section-title {
+          margin-bottom: 13px;
+          color: #374151;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .customer-form-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 16px;
+          gap: 13px;
         }
 
-        .sbs-form-field {
+        .customer-field {
           display: flex;
           flex-direction: column;
           gap: 6px;
           min-width: 0;
         }
 
-        .sbs-form-field > span {
-          color: var(--sbs-text);
-          font-size: 11px;
-          line-height: 16px;
-          font-weight: 650;
-        }
-
-        .sbs-form-field input,
-        .sbs-form-field select,
-        .sbs-form-field textarea {
-          width: 100%;
-          border: 1px solid var(--sbs-border);
-          border-radius: 8px;
-          outline: 0;
-          background: #fff;
-          color: var(--sbs-text);
-          font: inherit;
-          font-size: 12px;
-          transition:
-            border-color 150ms ease,
-            box-shadow 150ms ease;
-        }
-
-        .sbs-form-field input,
-        .sbs-form-field select {
-          height: 40px;
-          padding: 0 11px;
-        }
-
-        .sbs-form-field textarea {
-          min-height: 96px;
-          padding: 10px 11px;
-          resize: vertical;
-          line-height: 18px;
-        }
-
-        .sbs-form-field input:focus,
-        .sbs-form-field select:focus,
-        .sbs-form-field textarea:focus {
-          border-color: var(--sbs-border-strong);
-          box-shadow: 0 0 0 3px rgba(23, 32, 51, 0.045);
-        }
-
-        .sbs-form-field input::placeholder,
-        .sbs-form-field textarea::placeholder {
-          color: #a0a9b4;
-        }
-
-        .sbs-form-full {
+        .customer-field-full {
           grid-column: 1 / -1;
         }
 
-        .sbs-modal-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: 22px;
-          padding-top: 18px;
-          border-top: 1px solid var(--sbs-border);
+        .customer-field > span {
+          color: #4b5563;
+          font-size: 10px;
+          font-weight: 650;
         }
 
-        @media (max-width: 700px) {
+        .customer-field > span b {
+          color: #dc2626;
+          font-weight: 700;
+        }
+
+        .customer-field input,
+        .customer-field textarea {
+          width: 100%;
+          box-sizing: border-box;
+          border: 1px solid #dfe3e8;
+          border-radius: 7px;
+          outline: none;
+          background: #ffffff;
+          color: #111827;
+          font-family: inherit;
+          font-size: 11px;
+          transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+        }
+
+        .customer-field input {
+          height: 39px;
+          padding: 0 11px;
+        }
+
+        .customer-field textarea {
+          min-height: 90px;
+          padding: 10px 11px;
+          resize: vertical;
+          line-height: 17px;
+        }
+
+        .customer-field input::placeholder,
+        .customer-field textarea::placeholder {
+          color: #a1a1aa;
+        }
+
+        .customer-field input:focus,
+        .customer-field textarea:focus {
+          border-color: #9ca3af;
+          box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.055);
+        }
+
+        .customer-modal-footer {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 9px;
+          padding: 15px 24px;
+          background: #fafafa;
+        }
+
+        .customer-modal-footer .customer-secondary-button {
+          min-height: 39px;
+        }
+
+        .customer-button-spinner {
+          width: 13px;
+          height: 13px;
+          border: 2px solid rgba(255, 255, 255, 0.35);
+          border-top-color: #ffffff;
+          border-radius: 50%;
+          animation: customer-spin 0.7s linear infinite;
+        }
+
+        @keyframes customer-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @media (max-width: 1000px) {
+          .customers-page {
+            padding: 24px 22px 34px;
+          }
+
+          .customers-stats {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .customers-search {
+            width: 250px;
+            flex-basis: 250px;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .customers-page {
+            padding: 20px 16px 30px;
+          }
+
+          .customers-header {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 15px;
+          }
+
+          .customers-header h1 {
+            font-size: 24px;
+            line-height: 30px;
+          }
+
+          .customers-header .customers-primary-button {
+            width: 100%;
+          }
+
+          .customers-stats {
+            grid-template-columns: 1fr;
+          }
+
           .customers-toolbar {
             align-items: stretch;
-            flex-wrap: wrap;
+            flex-direction: column;
           }
 
           .customers-search {
             width: 100%;
+            flex-basis: auto;
           }
 
-          .customers-result-count {
-            margin-left: 0;
-            display: flex;
-            align-items: center;
-          }
-
-          .customers-form-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .sbs-form-full {
-            grid-column: auto;
-          }
-
-          .sbs-modal-overlay {
+          .customer-modal-backdrop {
             align-items: flex-end;
             padding: 0;
           }
 
-          .sbs-modal {
+          .customer-modal {
             width: 100%;
             max-height: 94vh;
-            border-radius: 16px 16px 0 0;
-          }
-
-          .sbs-modal-header {
-            padding: 18px;
-          }
-
-          .customers-modal form {
-            padding: 18px;
-          }
-
-          .sbs-modal-actions {
-            position: sticky;
-            bottom: 0;
-            margin-left: -18px;
-            margin-right: -18px;
-            margin-bottom: -18px;
-            padding: 14px 18px;
-            background: #fff;
-          }
-
-          .sbs-modal-actions button {
-            flex: 1;
+            border-radius: 12px 12px 0 0;
           }
         }
 
-        @media (max-width: 430px) {
-          .customers-toolbar {
-            padding: 12px;
+        @media (max-width: 520px) {
+          .customer-form-grid {
+            grid-template-columns: 1fr;
           }
 
-          .sbs-action-button {
-            padding: 0 7px;
+          .customer-field-full {
+            grid-column: auto;
+          }
+
+          .customer-modal-header,
+          .customer-form-section,
+          .customer-modal-footer {
+            padding-left: 17px;
+            padding-right: 17px;
+          }
+
+          .customer-modal-footer {
+            flex-direction: column-reverse;
+          }
+
+          .customer-modal-footer button {
+            width: 100%;
           }
         }
       `}</style>

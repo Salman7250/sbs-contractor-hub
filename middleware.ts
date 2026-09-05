@@ -76,6 +76,7 @@ export const config = {
     "/estimates/:path*",
     "/invoices/:path*",
     "/settings/:path*",
+    "/sales/:path*",
     "/login",
   ],
 };

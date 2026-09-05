@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 type CreateCompanyInput = {
   name: string;
   slug: string;
+  businessType: "product" | "service";
   ownerEmail: string;
   email?: string;
   phone?: string;
@@ -67,6 +68,7 @@ export async function createCompany(input: CreateCompanyInput) {
   const name = input.name.trim();
   const slug = input.slug.trim().toLowerCase();
   const ownerEmail = input.ownerEmail.trim().toLowerCase();
+  const businessType = input.businessType;
 
   if (!name) {
     return {
@@ -87,6 +89,17 @@ export async function createCompany(input: CreateCompanyInput) {
       success: false,
       error:
         "Slug can only contain lowercase letters, numbers, and hyphens.",
+    };
+  }
+
+  if (
+    businessType !== "product" &&
+    businessType !== "service"
+  ) {
+    return {
+      success: false,
+      error:
+        "Please select a valid business type.",
     };
   }
 
@@ -144,6 +157,7 @@ export async function createCompany(input: CreateCompanyInput) {
     .insert({
       name,
       slug,
+      business_type: businessType,
       email: clean(input.email),
       phone: clean(input.phone),
       website: clean(input.website),
@@ -157,7 +171,7 @@ export async function createCompany(input: CreateCompanyInput) {
       currency: clean(input.currency) || "USD",
       status,
     })
-    .select("id, name, slug")
+    .select("id, name, slug, business_type")
     .single();
 
   if (companyError || !company) {
@@ -236,10 +250,17 @@ export async function createCompany(input: CreateCompanyInput) {
    * No password is created or handled by SBS.
    * The owner receives the invitation and sets their own password.
    */
-  const { data: invitation, error: invitationError } =
-    await adminClient.auth.admin.inviteUserByEmail(
-      ownerEmail
-    );
+  const appUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "http://localhost:3000";
+
+const { data: invitation, error: invitationError } =
+  await adminClient.auth.admin.inviteUserByEmail(
+    ownerEmail,
+    {
+      redirectTo: `${appUrl}/auth/confirm?next=/set-password`,
+    }
+  );
 
   if (invitationError || !invitation.user) {
     /*
@@ -312,6 +333,7 @@ export async function createCompany(input: CreateCompanyInput) {
       id: company.id,
       name: company.name,
       slug: company.slug,
+      businessType: company.business_type,
     },
     owner: {
       email: ownerEmail,
