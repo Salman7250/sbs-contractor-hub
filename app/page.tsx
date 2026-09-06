@@ -10,7 +10,6 @@ type Customer = {
   name: string;
   email: string | null;
   phone: string | null;
-  status: string | null;
   created_at: string;
 };
 
@@ -36,7 +35,7 @@ type Order = {
   id: string;
   order_number: string;
   customer_id: string | null;
-  total: number | null;
+  total_amount: number | null;
   status: string | null;
   created_at: string;
 };
@@ -45,7 +44,7 @@ type InvoicePayment = {
   id: string;
   invoice_id: string;
   amount: number | null;
-  payment_date: string | null;
+  paid_at: string | null;
   created_at: string;
 };
 
@@ -60,14 +59,6 @@ type Profile = {
   id: string;
   full_name: string | null;
   email: string | null;
-};
-
-type Module = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  icon: string | null;
 };
 
 type IconName =
@@ -230,7 +221,6 @@ export default function DashboardPage() {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [modules, setModules] = useState<Module[]>([]);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -301,7 +291,6 @@ export default function DashboardPage() {
         invoicesResult,
         ordersResult,
         paymentsResult,
-        modulesResult,
       ] = await Promise.all([
         supabase
           .from("companies")
@@ -311,7 +300,7 @@ export default function DashboardPage() {
 
         supabase
           .from("customers")
-          .select("id, name, email, phone, status, created_at")
+          .select("id, name, email, phone, created_at")
           .eq("company_id", companyId)
           .order("created_at", { ascending: false }),
 
@@ -333,21 +322,17 @@ export default function DashboardPage() {
 
         supabase
           .from("orders")
-          .select("id, order_number, customer_id, total, status, created_at")
+          .select(
+            "id, order_number, customer_id, total_amount, status, created_at",
+          )
           .eq("company_id", companyId)
           .order("created_at", { ascending: false }),
 
         supabase
           .from("invoice_payments")
-          .select("id, invoice_id, amount, payment_date, created_at")
+          .select("id, invoice_id, amount, paid_at, created_at")
           .eq("company_id", companyId)
           .order("created_at", { ascending: false }),
-
-        supabase
-          .from("modules")
-          .select("id, name, slug, description, icon")
-          .eq("is_active", true)
-          .order("name"),
       ]);
 
       if (companyResult.error) {
@@ -374,17 +359,12 @@ export default function DashboardPage() {
         throw paymentsResult.error;
       }
 
-      if (modulesResult.error) {
-        throw modulesResult.error;
-      }
-
       setCompany(companyResult.data);
       setCustomers(customersResult.data ?? []);
       setEstimates(estimatesResult.data ?? []);
       setInvoices(invoicesResult.data ?? []);
       setOrders(ordersResult.data ?? []);
       setPayments(paymentsResult.data ?? []);
-      setModules(modulesResult.data ?? []);
     } catch (err: unknown) {
       setError(
         err instanceof Error
@@ -415,7 +395,7 @@ export default function DashboardPage() {
   );
 
   const totalOrders = orders.reduce(
-    (sum, order) => sum + Number(order.total ?? 0),
+    (sum, order) => sum + Number(order.total_amount ?? 0),
     0,
   );
 
@@ -450,105 +430,36 @@ export default function DashboardPage() {
     return "Good evening";
   }, [currentTime]);
 
-  const enabledModuleSlugs = useMemo(
-    () => new Set(modules.map((module) => module.slug)),
-    [modules],
-  );
-
-  const dashboardModules = useMemo(
-    () =>
-      [
-        {
-          slug: "crm",
-          name: "CRM",
-          description: "Manage relationships and customer activity.",
-          href: "/crm",
-          icon: "crm" as IconName,
-        },
-        {
-          slug: "leads",
-          name: "Leads",
-          description: "Track prospects and convert opportunities.",
-          href: "/leads",
-          icon: "leads" as IconName,
-        },
-        {
-          slug: "customers",
-          name: "Customers",
-          description: "Manage your customers and their information.",
-          href: "/customers",
-          icon: "customers" as IconName,
-        },
-        {
-          slug: "jobs",
-          name: "Jobs",
-          description: "Track jobs, schedules, and service work.",
-          href: "/jobs",
-          icon: "jobs" as IconName,
-        },
-        {
-          slug: "estimates",
-          name: "Estimates",
-          description: "Create and manage estimates for customers.",
-          href: "/estimates",
-          icon: "estimates" as IconName,
-        },
-        {
-          slug: "invoices",
-          name: "Invoices",
-          description: "Create invoices and track receivables.",
-          href: "/invoices",
-          icon: "invoices" as IconName,
-        },
-        {
-          slug: "inventory",
-          name: "Inventory",
-          description: "Manage products, stock, SKUs, and inventory.",
-          href: "/products",
-          icon: "inventory" as IconName,
-        },
-        {
-          slug: "employees",
-          name: "Employees",
-          description: "Manage employees and team information.",
-          href: "/employees",
-          icon: "employees" as IconName,
-        },
-        {
-          slug: "reports",
-          name: "Reports",
-          description: "Review business performance and reporting.",
-          href: "/reports",
-          icon: "reports" as IconName,
-        },
-        {
-          slug: "payments",
-          name: "Payments",
-          description: "Track payments and financial transactions.",
-          href: "/payments",
-          icon: "payments" as IconName,
-        },
-        {
-          slug: "documents",
-          name: "Documents",
-          description: "Store and manage important documents.",
-          href: "/documents",
-          icon: "documents" as IconName,
-        },
-        {
-          slug: "settings",
-          name: "Settings",
-          description: "Configure your company and workspace.",
-          href: "/settings",
-          icon: "settings" as IconName,
-        },
-      ].filter((module) => enabledModuleSlugs.has(module.slug)),
-    [enabledModuleSlugs],
-  );
-
   if (loading) {
     return (
       <AppShell>
+        <style jsx>{`
+          .sbs-dashboard-loading {
+            min-height: 60vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            color: #64748b;
+          }
+
+          .sbs-dashboard-spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #0f172a;
+            border-radius: 50%;
+            animation: sbs-spin 0.8s linear infinite;
+          }
+
+          @keyframes sbs-spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+
         <div className="sbs-dashboard-loading">
           <div className="sbs-dashboard-spinner" />
           <p>Loading dashboard...</p>
@@ -560,6 +471,45 @@ export default function DashboardPage() {
   if (error) {
     return (
       <AppShell>
+        <style jsx>{`
+          .sbs-dashboard-error {
+            min-height: 60vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 32px;
+          }
+
+          .sbs-dashboard-error h1 {
+            margin: 0 0 10px;
+            color: #0f172a;
+            font-size: 28px;
+            font-weight: 700;
+          }
+
+          .sbs-dashboard-error p {
+            margin: 0 0 22px;
+            color: #64748b;
+            max-width: 560px;
+          }
+
+          .sbs-dashboard-error button {
+            border: 0;
+            border-radius: 10px;
+            background: #0f172a;
+            color: #fff;
+            padding: 11px 18px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+
+          .sbs-dashboard-error button:hover {
+            background: #1e293b;
+          }
+        `}</style>
+
         <div className="sbs-dashboard-error">
           <h1>Unable to load dashboard</h1>
           <p>{error}</p>
@@ -573,6 +523,484 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
+      <style jsx>{`
+        .sbs-dashboard {
+          width: 100%;
+          max-width: 1500px;
+          margin: 0 auto;
+          padding: 32px;
+          box-sizing: border-box;
+          color: #0f172a;
+        }
+
+        .sbs-dashboard-header {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 28px;
+        }
+
+        .sbs-dashboard-eyebrow,
+        .sbs-dashboard-panel-eyebrow {
+          margin: 0 0 7px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .sbs-dashboard-header h1 {
+          margin: 0;
+          font-size: clamp(28px, 4vw, 40px);
+          line-height: 1.1;
+          letter-spacing: -0.03em;
+          font-weight: 750;
+        }
+
+        .sbs-dashboard-subtitle {
+          margin: 10px 0 0;
+          color: #64748b;
+          font-size: 15px;
+        }
+
+        .sbs-dashboard-header-actions {
+          flex-shrink: 0;
+        }
+
+        .sbs-dashboard-primary-button {
+          border: 0;
+          border-radius: 10px;
+          padding: 12px 18px;
+          background: #0f172a;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 650;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            transform 0.15s ease;
+        }
+
+        .sbs-dashboard-primary-button:hover {
+          background: #1e293b;
+          transform: translateY(-1px);
+        }
+
+        .sbs-dashboard-stats {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+
+        .sbs-dashboard-stat-card {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+          min-width: 0;
+          padding: 20px;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          background: #fff;
+          color: #0f172a;
+          text-align: left;
+          cursor: pointer;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+          transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease,
+            transform 0.15s ease;
+        }
+
+        .sbs-dashboard-stat-card:hover {
+          border-color: #cbd5e1;
+          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+          transform: translateY(-1px);
+        }
+
+        .sbs-dashboard-stat-card > div:last-child {
+          min-width: 0;
+        }
+
+        .sbs-dashboard-stat-icon,
+        .sbs-dashboard-list-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          width: 44px;
+          height: 44px;
+          border-radius: 11px;
+          background: #f1f5f9;
+          color: #334155;
+        }
+
+        .sbs-dashboard-stat-card span {
+          display: block;
+          margin-bottom: 5px;
+          color: #64748b;
+          font-size: 13px;
+          font-weight: 550;
+        }
+
+        .sbs-dashboard-stat-card strong {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 22px;
+          line-height: 1.1;
+          font-weight: 750;
+        }
+
+        .sbs-dashboard-financial-grid,
+        .sbs-dashboard-content-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 18px;
+          margin-bottom: 18px;
+        }
+
+        .sbs-dashboard-panel {
+          min-width: 0;
+          padding: 22px;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          background: #fff;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+        }
+
+        .sbs-dashboard-panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 20px;
+        }
+
+        .sbs-dashboard-panel-header h2 {
+          margin: 0;
+          font-size: 19px;
+          line-height: 1.25;
+          letter-spacing: -0.015em;
+          font-weight: 700;
+        }
+
+        .sbs-dashboard-link-button {
+          flex-shrink: 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: #475569;
+          font-size: 13px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .sbs-dashboard-link-button:hover {
+          color: #0f172a;
+        }
+
+        .sbs-dashboard-outstanding {
+          display: flex;
+          flex-direction: column;
+          padding: 4px 0 20px;
+        }
+
+        .sbs-dashboard-outstanding strong {
+          font-size: clamp(28px, 4vw, 38px);
+          line-height: 1;
+          letter-spacing: -0.03em;
+          font-weight: 750;
+        }
+
+        .sbs-dashboard-outstanding span {
+          margin-top: 9px;
+          color: #64748b;
+          font-size: 13px;
+        }
+
+        .sbs-dashboard-mini-stats {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          padding-top: 18px;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .sbs-dashboard-mini-stats > div {
+          min-width: 0;
+        }
+
+        .sbs-dashboard-mini-stats span {
+          display: block;
+          margin-bottom: 6px;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 550;
+        }
+
+        .sbs-dashboard-mini-stats strong {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 17px;
+          font-weight: 700;
+        }
+
+        .sbs-dashboard-quick-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .sbs-dashboard-quick-actions button {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 0;
+          padding: 14px;
+          border: 1px solid #e2e8f0;
+          border-radius: 11px;
+          background: #fff;
+          color: #0f172a;
+          text-align: left;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            border-color 0.15s ease;
+        }
+
+        .sbs-dashboard-quick-actions button:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+        }
+
+        .sbs-dashboard-quick-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          width: 36px;
+          height: 36px;
+          border-radius: 9px;
+          background: #f1f5f9;
+          color: #334155;
+        }
+
+        .sbs-dashboard-quick-actions button > span:last-child {
+          min-width: 0;
+        }
+
+        .sbs-dashboard-quick-actions strong {
+          display: block;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .sbs-dashboard-quick-actions small {
+          display: block;
+          margin-top: 3px;
+          overflow: hidden;
+          color: #64748b;
+          font-size: 11px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .sbs-dashboard-list {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .sbs-dashboard-list-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          padding: 13px 0;
+          border: 0;
+          border-top: 1px solid #e2e8f0;
+          background: transparent;
+          color: #0f172a;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .sbs-dashboard-list-item:first-child {
+          border-top: 0;
+          padding-top: 0;
+        }
+
+        .sbs-dashboard-list-item:last-child {
+          padding-bottom: 0;
+        }
+
+        .sbs-dashboard-list-item:hover .sbs-dashboard-list-main strong {
+          color: #475569;
+        }
+
+        .sbs-dashboard-avatar {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          width: 38px;
+          height: 38px;
+          border-radius: 50%;
+          background: #f1f5f9;
+          color: #334155;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .sbs-dashboard-list-main {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .sbs-dashboard-list-main strong {
+          display: block;
+          overflow: hidden;
+          font-size: 13px;
+          font-weight: 700;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .sbs-dashboard-list-main span {
+          display: block;
+          margin-top: 3px;
+          overflow: hidden;
+          color: #64748b;
+          font-size: 12px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .sbs-dashboard-list-date {
+          flex-shrink: 0;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .sbs-dashboard-list-amount {
+          flex-shrink: 0;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .sbs-dashboard-empty {
+          display: flex;
+          min-height: 180px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+          color: #94a3b8;
+          text-align: center;
+        }
+
+        .sbs-dashboard-empty p {
+          margin: 0;
+          color: #64748b;
+          font-size: 13px;
+        }
+
+        .sbs-dashboard-empty button {
+          margin-top: 3px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: #334155;
+          font-size: 13px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .sbs-dashboard-empty button:hover {
+          text-decoration: underline;
+        }
+
+        @media (max-width: 1100px) {
+          .sbs-dashboard-stats {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .sbs-dashboard-financial-grid,
+          .sbs-dashboard-content-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 700px) {
+          .sbs-dashboard {
+            padding: 20px 16px 28px;
+          }
+
+          .sbs-dashboard-header {
+            align-items: flex-start;
+            flex-direction: column;
+            margin-bottom: 22px;
+          }
+
+          .sbs-dashboard-header-actions,
+          .sbs-dashboard-primary-button {
+            width: 100%;
+          }
+
+          .sbs-dashboard-primary-button {
+            padding: 13px 16px;
+          }
+
+          .sbs-dashboard-stats {
+            grid-template-columns: 1fr;
+          }
+
+          .sbs-dashboard-panel {
+            padding: 18px;
+          }
+
+          .sbs-dashboard-panel-header {
+            gap: 10px;
+          }
+
+          .sbs-dashboard-panel-header h2 {
+            font-size: 17px;
+          }
+
+          .sbs-dashboard-quick-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .sbs-dashboard-list-date {
+            display: none;
+          }
+
+          .sbs-dashboard-list-amount {
+            font-size: 12px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .sbs-dashboard-mini-stats {
+            grid-template-columns: 1fr;
+          }
+
+          .sbs-dashboard-stat-card {
+            padding: 17px;
+          }
+
+          .sbs-dashboard-stat-icon {
+            width: 40px;
+            height: 40px;
+          }
+        }
+      `}</style>
+
       <main className="sbs-dashboard">
         <section className="sbs-dashboard-header">
           <div>
@@ -910,37 +1338,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-          </div>
-        </section>
-
-        <section className="sbs-dashboard-modules-section">
-          <div className="sbs-dashboard-section-header">
-            <div>
-              <p className="sbs-dashboard-panel-eyebrow">Workspace</p>
-              <h2>Your modules</h2>
-            </div>
-          </div>
-
-          <div className="sbs-dashboard-module-grid">
-            {dashboardModules.map((module) => (
-              <button
-                type="button"
-                key={module.slug}
-                className="sbs-dashboard-module-card"
-                onClick={() => router.push(module.href)}
-              >
-                <div className="sbs-dashboard-module-icon">
-                  <Icon name={module.icon} size={23} />
-                </div>
-
-                <div>
-                  <strong>{module.name}</strong>
-                  <p>{module.description}</p>
-                </div>
-
-                <span className="sbs-dashboard-module-arrow">→</span>
-              </button>
-            ))}
           </div>
         </section>
       </main>
