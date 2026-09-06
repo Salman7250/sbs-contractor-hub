@@ -54,7 +54,6 @@ const PAYMENT_METHODS = [
   "Credit Card",
   "Debit Card",
   "Cheque",
-  "PayPal",
   "Stripe",
   "Other",
 ];

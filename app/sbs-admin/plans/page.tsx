@@ -1,8 +1,6 @@
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { createClient } from "@/lib/supabase/server";
 
-import PayPalSyncButton from "./paypal-sync-button";
-
 type Plan = {
   id: string;
   name: string;
@@ -17,18 +15,6 @@ type Plan = {
     | null;
 
   is_active: boolean;
-
-  paypal_product_id:
-    | string
-    | null;
-
-  paypal_monthly_plan_id:
-    | string
-    | null;
-
-  paypal_yearly_plan_id:
-    | string
-    | null;
 };
 
 const descriptions: Record<
@@ -80,10 +66,7 @@ export default async function AdminPlansPage() {
         slug,
         monthly_price,
         yearly_price,
-        is_active,
-        paypal_product_id,
-        paypal_monthly_plan_id,
-        paypal_yearly_plan_id
+        is_active
       `
     )
     .order(
@@ -295,7 +278,7 @@ export default async function AdminPlansPage() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
-              Pricing, subscription and PayPal
+              Pricing and subscription
               configuration for each tier.
             </p>
           </div>
@@ -307,7 +290,7 @@ export default async function AdminPlansPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1250px] text-left">
+          <table className="w-full min-w-[1000px] text-left">
             <thead className="border-b border-white/10 bg-white/[0.02]">
               <tr>
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -328,10 +311,6 @@ export default async function AdminPlansPage() {
 
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Companies
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  PayPal
                 </th>
 
                 <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -428,12 +407,6 @@ export default async function AdminPlansPage() {
                     </td>
 
                     <td className="px-6 py-5">
-                      <PayPalStatus
-                        plan={plan}
-                      />
-                    </td>
-
-                    <td className="px-6 py-5">
                       <StatusBadge
                         status={
                           plan.is_active
@@ -445,12 +418,6 @@ export default async function AdminPlansPage() {
 
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
-                        <PayPalSyncButton
-                          planId={
-                            plan.id
-                          }
-                        />
-
                         <button
                           type="button"
                           disabled
@@ -469,47 +436,18 @@ export default async function AdminPlansPage() {
       </section>
 
       {/* Pricing Architecture */}
-      <section className="grid gap-5 lg:grid-cols-3">
+      <section className="grid gap-5 lg:grid-cols-2">
         <ArchitectureCard
           icon="$"
-          title="Pricing"
-          description="SBS plan pricing is stored centrally and synchronized with the PayPal subscription catalog."
+          title="Centralized Pricing"
+          description="SBS plan pricing is stored centrally so subscription pricing remains consistent across the platform."
         />
 
         <ArchitectureCard
           icon="◈"
-          title="Modules"
+          title="Module Entitlements"
           description="Each plan grants access to a defined set of SBS modules through the entitlement system."
         />
-
-        <ArchitectureCard
-          icon="✓"
-          title="PayPal Reconciliation"
-          description="SBS verifies existing PayPal Products and Billing Plans before creating new billing objects."
-        />
-      </section>
-
-      {/* PayPal Architecture Notice */}
-      <section className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] p-5">
-        <div className="flex gap-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-sm text-blue-400">
-            $
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-blue-300">
-              PayPal billing catalog connected
-            </h3>
-
-            <p className="mt-1 text-xs leading-5 text-blue-400/60">
-              Each SBS plan can now be synchronized
-              with its PayPal Product and monthly
-              or yearly Billing Plans. Existing
-              PayPal configurations are reused when
-              they match the SBS configuration.
-            </p>
-          </div>
-        </div>
       </section>
     </div>
   );
@@ -624,15 +562,6 @@ function PlanCard({
         />
 
         <FeatureRow
-          label="PayPal"
-          value={
-            plan.paypal_product_id
-              ? "Connected"
-              : "Not connected"
-          }
-        />
-
-        <FeatureRow
           label="Status"
           value={
             plan.is_active
@@ -640,40 +569,6 @@ function PlanCard({
               : "inactive"
           }
         />
-      </div>
-
-      <div className="mt-6">
-        <PayPalSyncButton
-          planId={plan.id}
-        />
-      </div>
-    </div>
-  );
-}
-
-function PayPalStatus({
-  plan,
-}: {
-  plan: Plan;
-}) {
-  if (
-    !plan.paypal_product_id
-  ) {
-    return (
-      <span className="inline-flex rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">
-        Not connected
-      </span>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <span className="inline-flex rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
-        Connected
-      </span>
-
-      <div className="font-mono text-[9px] text-slate-700">
-        {plan.paypal_product_id}
       </div>
     </div>
   );

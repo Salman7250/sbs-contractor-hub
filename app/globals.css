@@ -4635,25 +4635,6 @@ jobs
   text-overflow: ellipsis;
 }
 
-/* PAYPAL */
-
-.billing-paypal-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 10px 12px;
-  border: 1px solid #e5e9ef;
-  border-radius: 9px;
-  background: #f8fafc;
-  color: #7a8593;
-  font-size: 9px;
-}
-
-.billing-paypal-note strong {
-  color: #596579;
-}
-
 /* EMPTY / ERROR */
 
 .billing-empty {

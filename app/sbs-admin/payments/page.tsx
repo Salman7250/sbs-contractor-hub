@@ -40,10 +40,7 @@ export default async function AdminPaymentsPage() {
 
   const supabase = await createClient();
 
-  const {
-    data,
-    error,
-  } = await supabase
+  const { data, error } = await supabase
     .from("payments")
     .select(
       `
@@ -213,15 +210,16 @@ export default async function AdminPaymentsPage() {
       <section className="grid gap-5 lg:grid-cols-3">
         <ProviderCard
           name="Payment Provider"
-          value="PayPal"
-          description="PayPal is the planned payment provider for SBS subscriptions."
+          value="Not Connected"
+          description="No online billing provider is currently connected to SBS."
           icon="$"
+          warning
         />
 
         <ProviderCard
           name="Webhooks"
           value="Not Configured"
-          description="Secure PayPal webhook processing will be connected during the billing integration phase."
+          description="Secure payment webhook processing will be connected during the billing integration phase."
           icon="↻"
           warning
         />
@@ -229,7 +227,7 @@ export default async function AdminPaymentsPage() {
         <ProviderCard
           name="Transaction Sync"
           value="Not Active"
-          description="Transactions will synchronize automatically after PayPal billing is connected."
+          description="Transactions will synchronize automatically after a billing provider is connected."
           icon="⇄"
           warning
         />
@@ -253,12 +251,11 @@ export default async function AdminPaymentsPage() {
         />
 
         <OverviewCard
-          label="PayPal Transactions"
+          label="Subscription Transactions"
           value={
             payments.filter(
               (payment) =>
-                payment.provider.toLowerCase() ===
-                "paypal"
+                payment.payment_type === "subscription"
             ).length
           }
         />
@@ -315,10 +312,6 @@ export default async function AdminPaymentsPage() {
           >
             <option value="all">
               All payment methods
-            </option>
-
-            <option value="paypal">
-              PayPal
             </option>
 
             <option value="card">
@@ -447,8 +440,7 @@ export default async function AdminPaymentsPage() {
 
                     <td className="px-6 py-5">
                       <div className="text-sm font-medium capitalize text-slate-300">
-                        {payment.provider ||
-                          "—"}
+                        {payment.provider || "—"}
                       </div>
 
                       <div className="mt-1 text-xs text-slate-600">
@@ -505,19 +497,19 @@ export default async function AdminPaymentsPage() {
           <FlowStep
             number="01"
             title="Checkout"
-            description="Customer selects a subscription and starts PayPal checkout."
+            description="Customer selects a subscription and starts the secure billing checkout."
           />
 
           <FlowStep
             number="02"
-            title="PayPal"
-            description="PayPal processes and confirms the customer payment."
+            title="Provider"
+            description="The configured payment provider processes and confirms the customer payment."
           />
 
           <FlowStep
             number="03"
             title="Webhook"
-            description="SBS securely receives the PayPal payment event."
+            description="SBS securely receives and verifies the payment event."
           />
 
           <FlowStep
@@ -543,15 +535,15 @@ export default async function AdminPaymentsPage() {
 
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-amber-300">
-              PayPal billing is not connected yet
+              Online billing is not connected yet
             </h3>
 
             <p className="mt-1 break-words text-xs leading-5 text-amber-400/60">
-              The Payments interface is now connected to
-              the SBS payment database. No real payment
-              processing occurs until the PayPal checkout,
-              API integration, webhook verification, and
-              subscription billing flow are implemented.
+              The Payments interface is connected to the SBS
+              payment database. No real online payment
+              processing occurs until a billing provider,
+              checkout integration, webhook verification,
+              and subscription billing flow are implemented.
             </p>
           </div>
         </div>
@@ -606,9 +598,7 @@ function shortId(id: string) {
   return `${id.slice(0, 8)}...`;
 }
 
-function formatPaymentType(
-  type: string
-) {
+function formatPaymentType(type: string) {
   switch (type) {
     case "subscription":
       return "Subscription";
@@ -800,7 +790,7 @@ function EmptyPayments() {
 
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
         Real payment transactions will appear here after
-        PayPal billing is connected and customers complete
+        online billing is connected and customers complete
         payments.
       </p>
     </div>

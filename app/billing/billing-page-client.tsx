@@ -230,9 +230,6 @@ export default function BillingPageClient({
         : "monthly"
     );
 
-  const [loadingPlan, setLoadingPlan] =
-    useState<string | null>(null);
-
   const [error, setError] = useState<string | null>(
     initialError
   );
@@ -256,62 +253,10 @@ export default function BillingPageClient({
   const hasSubscription =
     subscription !== null;
 
-  async function handleSubscribe(
-    planId: string
-  ) {
-    setError(null);
-    setLoadingPlan(planId);
-
-    try {
-      const response = await fetch(
-        "/api/paypal/create-subscription",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            companyId: company.id,
-            planId,
-            billingCycle,
-          }),
-        }
-      );
-
-      const data = await response
-        .json()
-        .catch(() => null);
-
-      const approvalUrl =
-        data?.approvalUrl ??
-        data?.subscription?.approvalUrl ??
-        data?.data?.approvalUrl ??
-        data?.paypal?.approvalUrl;
-
-      if (!response.ok || !approvalUrl) {
-        throw new Error(
-          data?.error ||
-            data?.subscription?.error ||
-            data?.paypal?.error ||
-            "Unable to start PayPal checkout."
-        );
-      }
-
-      window.location.href = approvalUrl;
-    } catch (err) {
-      console.error(
-        "PayPal subscription error:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to start PayPal checkout."
-      );
-
-      setLoadingPlan(null);
-    }
+  function handleSubscribe() {
+    setError(
+      "Online subscription checkout is not currently available. Billing provider integration will be connected before customer subscriptions are activated."
+    );
   }
 
   return (
@@ -493,7 +438,10 @@ export default function BillingPageClient({
 
                 <BillingDetail
                   label="Payment provider"
-                  value={subscription.provider}
+                  value={
+                    subscription.provider ||
+                    "Not connected"
+                  }
                   capitalize
                 />
               </div>
@@ -506,32 +454,35 @@ export default function BillingPageClient({
                 </h2>
 
                 <p className="m-0 mt-0.5 text-[11px] leading-[17px] text-[#7a8695]">
-                  Your subscription is processed
-                  securely by PayPal.
+                  Payment provider information for
+                  your subscription.
                 </p>
               </div>
 
               <div className="mx-5 mb-3 mt-[18px] flex items-center gap-[11px] rounded-[11px] border border-[#e1e7ee] bg-[#f8fafc] p-[13px]">
                 <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg bg-[#172033] text-[14px] font-extrabold text-white">
-                  P
+                  $
                 </div>
 
                 <div>
                   <strong className="block text-[11px] leading-4 text-[#17202b]">
-                    PayPal
+                    {subscription.provider ||
+                      "No provider connected"}
                   </strong>
 
                   <span className="mt-px block text-[10px] leading-[15px] text-[#7a8695]">
-                    Secure subscription payments
+                    {subscription.provider
+                      ? "Subscription payment provider"
+                      : "Payment provider not configured"}
                   </span>
                 </div>
               </div>
 
               <div className="px-5 pb-[18px] text-[10px] leading-4 text-[#8a95a3]">
-                Payment details are managed
-                securely by PayPal. SBS does not
-                store your PayPal password or
-                payment card information.
+                Payment provider details will be
+                managed securely by the billing
+                integration once a provider is
+                connected.
               </div>
             </section>
           </div>
@@ -629,15 +580,7 @@ export default function BillingPageClient({
             isCurrent={
               activePlan?.slug === "starter"
             }
-            loading={
-              loadingPlan ===
-              "b4f299fd-14ac-4ac7-82a6-0206d2205af0"
-            }
-            onSelect={() =>
-              handleSubscribe(
-                "b4f299fd-14ac-4ac7-82a6-0206d2205af0"
-              )
-            }
+            onSelect={handleSubscribe}
           />
 
           <PlanCard
@@ -661,15 +604,7 @@ export default function BillingPageClient({
               activePlan?.slug ===
               "professional"
             }
-            loading={
-              loadingPlan ===
-              "a05a7849-677c-4853-bb55-dc7a2df7aa1d"
-            }
-            onSelect={() =>
-              handleSubscribe(
-                "a05a7849-677c-4853-bb55-dc7a2df7aa1d"
-              )
-            }
+            onSelect={handleSubscribe}
           />
 
           <PlanCard
@@ -692,15 +627,7 @@ export default function BillingPageClient({
             isCurrent={
               activePlan?.slug === "business"
             }
-            loading={
-              loadingPlan ===
-              "27542a3a-dcbd-452c-bb30-bc1d9e793d89"
-            }
-            onSelect={() =>
-              handleSubscribe(
-                "27542a3a-dcbd-452c-bb30-bc1d9e793d89"
-              )
-            }
+            onSelect={handleSubscribe}
           />
 
           <PlanCard
@@ -723,15 +650,7 @@ export default function BillingPageClient({
               activePlan?.slug ===
               "enterprise"
             }
-            loading={
-              loadingPlan ===
-              "8fbd627f-f067-4815-9c17-9d3cb3ce5490"
-            }
-            onSelect={() =>
-              handleSubscribe(
-                "8fbd627f-f067-4815-9c17-9d3cb3ce5490"
-              )
-            }
+            onSelect={handleSubscribe}
           />
         </div>
       </section>
@@ -825,7 +744,8 @@ export default function BillingPageClient({
                     </td>
 
                     <td className="border-b border-[#edf0f4] px-4 py-[13px] align-middle text-[10px] capitalize leading-[15px] text-[#596678]">
-                      {payment.provider}
+                      {payment.provider ||
+                        "Not connected"}
                     </td>
 
                     <td className="border-b border-[#edf0f4] px-4 py-[13px] align-middle text-[10px] leading-[15px] text-[#596678]">
@@ -901,7 +821,6 @@ function PlanCard({
   features,
   popular,
   isCurrent,
-  loading,
   onSelect,
 }: {
   name: string;
@@ -911,7 +830,6 @@ function PlanCard({
   features: string[];
   popular?: boolean;
   isCurrent: boolean;
-  loading: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -968,16 +886,14 @@ function PlanCard({
         className={`h-[37px] w-full rounded-[9px] border text-[10px] font-bold transition-colors ${
           isCurrent
             ? "cursor-not-allowed border-[#e1e7ee] bg-[#f2f4f7] text-[#7a8695]"
-            : "border-[#172033] bg-[#172033] text-white hover:bg-[#273249] disabled:cursor-not-allowed disabled:opacity-55"
+            : "border-[#172033] bg-[#172033] text-white hover:bg-[#273249]"
         }`}
-        disabled={isCurrent || loading}
+        disabled={isCurrent}
         onClick={onSelect}
       >
-        {loading
-          ? "Opening PayPal..."
-          : isCurrent
-            ? "Current Plan"
-            : "Subscribe with PayPal"}
+        {isCurrent
+          ? "Current Plan"
+          : "Billing Unavailable"}
       </button>
     </div>
   );
