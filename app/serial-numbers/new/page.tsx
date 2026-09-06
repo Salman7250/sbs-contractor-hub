@@ -24,6 +24,22 @@ type Variant = {
   is_active: boolean;
 };
 
+type Warehouse = {
+  id: string;
+  name: string;
+  code: string;
+  is_active: boolean;
+};
+
+type WarehouseLocation = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  code: string;
+  location_type: string;
+  is_active: boolean;
+};
+
 type SerialStatus =
   | "available"
   | "reserved"
@@ -69,16 +85,19 @@ export default function NewSerialNumberPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [companyId, setCompanyId] = useState<string | null>(
-    null
-  );
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [currency, setCurrency] = useState("USD");
 
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
 
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
+
+  const [warehouseId, setWarehouseId] = useState("");
+  const [locationId, setLocationId] = useState("");
 
   const [serialNumber, setSerialNumber] = useState("");
   const [barcode, setBarcode] = useState("");
@@ -93,7 +112,7 @@ export default function NewSerialNumberPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   // ----------------------------------------------------------
-  // Load company + serial-tracked products
+  // Load company + serial-tracked products + warehouses
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -133,12 +152,14 @@ export default function NewSerialNumberPage() {
           return;
         }
 
-        const currentCompanyId =
-          membership.company_id;
+        const currentCompanyId = membership.company_id;
 
         setCompanyId(currentCompanyId);
 
+        // ------------------------------------------------------
         // Company currency
+        // ------------------------------------------------------
+
         const {
           data: company,
           error: companyError,
@@ -154,7 +175,10 @@ export default function NewSerialNumberPage() {
 
         setCurrency(company?.currency || "USD");
 
-        // Only serial-tracked products
+        // ------------------------------------------------------
+        // Serial-tracked products
+        // ------------------------------------------------------
+
         const {
           data: productData,
           error: productError,
@@ -182,6 +206,97 @@ export default function NewSerialNumberPage() {
         setProducts(
           (productData || []) as Product[]
         );
+
+        // ------------------------------------------------------
+        // Active warehouses
+        // ------------------------------------------------------
+
+        const {
+          data: warehouseData,
+          error: warehouseError,
+        } = await supabase
+          .from("warehouses")
+          .select(
+            `
+              id,
+              name,
+              code,
+              is_active
+            `
+          )
+          .eq("company_id", currentCompanyId)
+          .eq("is_active", true)
+          .order("is_default", {
+            ascending: false,
+          })
+          .order("name", {
+            ascending: true,
+          });
+
+        if (warehouseError) {
+          throw warehouseError;
+        }
+
+        const loadedWarehouses =
+          (warehouseData || []) as Warehouse[];
+
+        setWarehouses(loadedWarehouses);
+
+        // ------------------------------------------------------
+        // Active warehouse locations
+        // ------------------------------------------------------
+
+        const {
+          data: locationData,
+          error: locationError,
+        } = await supabase
+          .from("warehouse_locations")
+          .select(
+            `
+              id,
+              warehouse_id,
+              name,
+              code,
+              location_type,
+              is_active
+            `
+          )
+          .eq("company_id", currentCompanyId)
+          .eq("is_active", true)
+          .order("name", {
+            ascending: true,
+          });
+
+        if (locationError) {
+          throw locationError;
+        }
+
+        const loadedLocations =
+          (locationData || []) as WarehouseLocation[];
+
+        setLocations(loadedLocations);
+
+        // ------------------------------------------------------
+        // Default warehouse + first location
+        // ------------------------------------------------------
+
+        const defaultWarehouse =
+          loadedWarehouses[0];
+
+        if (defaultWarehouse) {
+          setWarehouseId(defaultWarehouse.id);
+
+          const defaultLocation =
+            loadedLocations.find(
+              (location) =>
+                location.warehouse_id ===
+                defaultWarehouse.id
+            );
+
+          setLocationId(
+            defaultLocation?.id || ""
+          );
+        }
       } catch (error) {
         console.error(
           "New serial number load error:",
@@ -198,6 +313,22 @@ export default function NewSerialNumberPage() {
 
     loadInitialData();
   }, [router, supabase]);
+
+  // ----------------------------------------------------------
+  // Locations available for selected warehouse
+  // ----------------------------------------------------------
+
+  const availableLocations = useMemo(() => {
+    if (!warehouseId) {
+      return [];
+    }
+
+    return locations.filter(
+      (location) =>
+        location.warehouse_id === warehouseId &&
+        location.is_active
+    );
+  }, [locations, warehouseId]);
 
   // ----------------------------------------------------------
   // Load variants when product changes
@@ -267,7 +398,9 @@ export default function NewSerialNumberPage() {
             return currentCostPrice;
           }
 
-          return String(defaultVariant.cost_price || 0);
+          return String(
+            defaultVariant.cost_price || 0
+          );
         });
       } else {
         setVariantId("");
@@ -296,7 +429,9 @@ export default function NewSerialNumberPage() {
       // This effect intentionally synchronizes the selected variant's cost price.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCostPrice(
-        String(selectedVariant.cost_price || 0)
+        String(
+          selectedVariant.cost_price || 0
+        )
       );
     }
   }, [variantId, variants]);
@@ -311,6 +446,14 @@ export default function NewSerialNumberPage() {
 
   const selectedVariant = variants.find(
     (variant) => variant.id === variantId
+  );
+
+  const selectedWarehouse = warehouses.find(
+    (warehouse) => warehouse.id === warehouseId
+  );
+
+  const selectedLocation = locations.find(
+    (location) => location.id === locationId
   );
 
   // ----------------------------------------------------------
@@ -334,7 +477,10 @@ export default function NewSerialNumberPage() {
 
     const parsedCost = Number(costPrice);
 
+    // ------------------------------------------------------
     // Basic validation
+    // ------------------------------------------------------
+
     if (!productId) {
       setErrorMessage(
         "Please select a product."
@@ -355,6 +501,20 @@ export default function NewSerialNumberPage() {
     ) {
       setErrorMessage(
         "Please enter a valid cost price."
+      );
+      return;
+    }
+
+    if (!warehouseId) {
+      setErrorMessage(
+        "Please select a warehouse."
+      );
+      return;
+    }
+
+    if (!locationId) {
+      setErrorMessage(
+        "Please select a location."
       );
       return;
     }
@@ -476,6 +636,74 @@ export default function NewSerialNumberPage() {
       }
 
       // ------------------------------------------------------
+      // Verify warehouse
+      // ------------------------------------------------------
+
+      const {
+        data: verifiedWarehouse,
+        error: verifiedWarehouseError,
+      } = await supabase
+        .from("warehouses")
+        .select(
+          `
+            id,
+            name,
+            code,
+            is_active
+          `
+        )
+        .eq("id", warehouseId)
+        .eq("company_id", currentCompanyId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (verifiedWarehouseError) {
+        throw verifiedWarehouseError;
+      }
+
+      if (!verifiedWarehouse) {
+        setErrorMessage(
+          "The selected warehouse is invalid or inactive."
+        );
+        return;
+      }
+
+      // ------------------------------------------------------
+      // Verify location belongs to warehouse/company
+      // ------------------------------------------------------
+
+      const {
+        data: verifiedLocation,
+        error: verifiedLocationError,
+      } = await supabase
+        .from("warehouse_locations")
+        .select(
+          `
+            id,
+            warehouse_id,
+            name,
+            code,
+            is_active
+          `
+        )
+        .eq("id", locationId)
+        .eq("warehouse_id", warehouseId)
+        .eq("company_id", currentCompanyId)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (verifiedLocationError) {
+        throw verifiedLocationError;
+      }
+
+      if (!verifiedLocation) {
+        setErrorMessage(
+          "The selected location is invalid, inactive, or does not belong to the selected warehouse."
+        );
+        return;
+      }
+
+      // ------------------------------------------------------
       // Duplicate serial check
       // ------------------------------------------------------
 
@@ -536,26 +764,30 @@ export default function NewSerialNumberPage() {
 
       const now = new Date().toISOString();
 
-      const { data: createdUnit, error: insertError } =
-        await supabase
-          .from("serialized_units")
-          .insert({
-            company_id: currentCompanyId,
-            product_id: productId,
-            variant_id: variantId || null,
-            serial_number: cleanSerialNumber,
-            barcode: cleanBarcode || null,
-            status,
-            cost_price: parsedCost,
-            warranty_start:
-              warrantyStart || null,
-            warranty_end:
-              warrantyEnd || null,
-            received_at: now,
-            notes: notes.trim() || null,
-          })
-          .select("id")
-          .single();
+      const {
+        data: createdUnit,
+        error: insertError,
+      } = await supabase
+        .from("serialized_units")
+        .insert({
+          company_id: currentCompanyId,
+          product_id: productId,
+          variant_id: variantId || null,
+          serial_number: cleanSerialNumber,
+          barcode: cleanBarcode || null,
+          status,
+          warehouse_id: warehouseId,
+          location_id: locationId,
+          cost_price: parsedCost,
+          warranty_start:
+            warrantyStart || null,
+          warranty_end:
+            warrantyEnd || null,
+          received_at: now,
+          notes: notes.trim() || null,
+        })
+        .select("id")
+        .single();
 
       if (insertError) {
         console.error(
@@ -563,9 +795,6 @@ export default function NewSerialNumberPage() {
           insertError
         );
 
-        // Handle database-level unique constraint
-        // gracefully in case another request created
-        // the same serial simultaneously.
         if (
           insertError.code === "23505"
         ) {
@@ -600,11 +829,10 @@ export default function NewSerialNumberPage() {
           from_status: null,
           to_status: status,
           from_warehouse_id: null,
-          to_warehouse_id: null,
+          to_warehouse_id: warehouseId,
           reference_type: "serialized_unit",
           reference_id: createdUnit.id,
-          notes:
-            "Serialized unit created.",
+          notes: `Serialized unit created in ${verifiedWarehouse.name} / ${verifiedLocation.name}.`,
           created_by: user.id,
         });
 
@@ -830,6 +1058,181 @@ export default function NewSerialNumberPage() {
                 )}
               </div>
             </div>
+          </section>
+
+          {/* ------------------------------------------------ */}
+          {/* Warehouse & Location */}
+          {/* ------------------------------------------------ */}
+
+          <section
+            className="rounded-xl bg-white p-6"
+            style={{
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <div className="mb-5">
+              <h2 className="text-base font-semibold text-slate-950">
+                Inventory Location
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Assign this physical unit to the warehouse
+                and specific location where it is currently
+                stored.
+              </p>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              {/* Warehouse */}
+              <div>
+                <label
+                  htmlFor="warehouse"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Warehouse{" "}
+                  <span className="text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <select
+                  id="warehouse"
+                  value={warehouseId}
+                  onChange={(event) => {
+                    const nextWarehouseId =
+                      event.target.value;
+
+                    setWarehouseId(
+                      nextWarehouseId
+                    );
+
+                    const firstLocation =
+                      locations.find(
+                        (location) =>
+                          location.warehouse_id ===
+                            nextWarehouseId &&
+                          location.is_active
+                      );
+
+                    setLocationId(
+                      firstLocation?.id || ""
+                    );
+                  }}
+                  disabled={
+                    loading ||
+                    saving ||
+                    warehouses.length === 0
+                  }
+                  className="h-11 w-full rounded-lg bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-black focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50"
+                  style={selectStyle}
+                >
+                  <option value="">
+                    Select warehouse
+                  </option>
+
+                  {warehouses.map(
+                    (warehouse) => (
+                      <option
+                        key={warehouse.id}
+                        value={warehouse.id}
+                      >
+                        {warehouse.name} (
+                        {warehouse.code})
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {warehouses.length === 0 &&
+                  !loading && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      No active warehouses are available.
+                      Create a warehouse before registering
+                      inventory.
+                    </p>
+                  )}
+              </div>
+
+              {/* Location */}
+              <div>
+                <label
+                  htmlFor="location"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Location / Bin{" "}
+                  <span className="text-red-500">
+                    *
+                  </span>
+                </label>
+
+                <select
+                  id="location"
+                  value={locationId}
+                  onChange={(event) =>
+                    setLocationId(
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    !warehouseId ||
+                    availableLocations.length === 0 ||
+                    saving
+                  }
+                  className="h-11 w-full rounded-lg bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-black focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50"
+                  style={selectStyle}
+                >
+                  <option value="">
+                    {!warehouseId
+                      ? "Select warehouse first"
+                      : availableLocations.length > 0
+                        ? "Select location"
+                        : "No locations found"}
+                  </option>
+
+                  {availableLocations.map(
+                    (location) => (
+                      <option
+                        key={location.id}
+                        value={location.id}
+                      >
+                        {location.name} (
+                        {location.code})
+                      </option>
+                    )
+                  )}
+                </select>
+
+                {warehouseId &&
+                  availableLocations.length === 0 && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      This warehouse has no active
+                      locations yet.
+                    </p>
+                  )}
+              </div>
+            </div>
+
+            {selectedWarehouse &&
+              selectedLocation && (
+                <div className="mt-5 rounded-lg bg-slate-50 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Current Inventory Location
+                  </div>
+
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {selectedWarehouse.name}{" "}
+                    <span className="font-normal text-slate-400">
+                      /
+                    </span>{" "}
+                    {selectedLocation.name}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    {selectedWarehouse.code} •{" "}
+                    {selectedLocation.code}
+                  </div>
+                </div>
+              )}
           </section>
 
           {/* ------------------------------------------------ */}
@@ -1117,7 +1520,9 @@ export default function NewSerialNumberPage() {
                 saving ||
                 loading ||
                 !productId ||
-                !serialNumber.trim()
+                !serialNumber.trim() ||
+                !warehouseId ||
+                !locationId
               }
               className="inline-flex h-11 items-center justify-center rounded-lg bg-black px-5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >

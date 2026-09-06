@@ -1,965 +1,1126 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
-type SerialStatus =
-  | "available"
-  | "reserved"
-  | "sold"
-  | "returned"
-  | "repair"
-  | "rma"
-  | "damaged"
-  | "lost"
-  | "disposed";
-
-type SerializedUnit = {
-  id: string;
-  company_id: string;
-  product_id: string;
-  variant_id: string | null;
-  serial_number: string;
-  barcode: string | null;
-  status: SerialStatus;
-  warehouse_id: string | null;
-  customer_id: string | null;
-  order_id: string | null;
-  invoice_id: string | null;
-  cost_price: number;
-  warranty_start: string | null;
-  warranty_end: string | null;
-  received_at: string | null;
-  sold_at: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-  product?: {
-    id: string;
-    name: string;
-    brand: string | null;
-  } | null;
-  variant?: {
-    id: string;
-    name: string;
-    sku: string | null;
-  } | null;
-  customer?: {
-    id: string;
-    name: string;
-  } | null;
-};
-
 type Product = {
   id: string;
   name: string;
-  brand: string | null;
+  tracking_mode: string;
 };
 
-type SerializedUnitRow = {
+type Variant = {
   id: string;
-  company_id: string;
+  product_id: string;
+  name: string | null;
+  sku: string | null;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+  code: string;
+};
+
+type WarehouseLocation = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  code: string;
+};
+
+type Customer = {
+  id: string;
+  name: string;
+};
+
+type SerializedUnit = {
+  id: string;
   product_id: string;
   variant_id: string | null;
   serial_number: string;
   barcode: string | null;
-  status: SerialStatus;
+  status: string;
   warehouse_id: string | null;
+  location_id: string | null;
   customer_id: string | null;
-  order_id: string | null;
-  invoice_id: string | null;
-  cost_price: number | string | null;
+  cost_price: number | null;
   warranty_start: string | null;
   warranty_end: string | null;
   received_at: string | null;
   sold_at: string | null;
   notes: string | null;
   created_at: string;
-  updated_at: string;
-  products:
-    | {
-        id: string;
-        name: string;
-        brand: string | null;
-      }
-    | {
-        id: string;
-        name: string;
-        brand: string | null;
-      }[]
-    | null;
-  product_variants:
-    | {
-        id: string;
-        name: string;
-        sku: string | null;
-      }
-    | {
-        id: string;
-        name: string;
-        sku: string | null;
-      }[]
-    | null;
-  customers:
-    | {
-        id: string;
-        name: string;
-      }
-    | {
-        id: string;
-        name: string;
-      }[]
-    | null;
 };
 
-const STATUS_OPTIONS: {
-  value: "all" | SerialStatus;
-  label: string;
-}[] = [
-  { value: "all", label: "All Statuses" },
-  { value: "available", label: "Available" },
-  { value: "reserved", label: "Reserved" },
-  { value: "sold", label: "Sold" },
-  { value: "returned", label: "Returned" },
-  { value: "repair", label: "Repair" },
-  { value: "rma", label: "RMA" },
-  { value: "damaged", label: "Damaged" },
-  { value: "lost", label: "Lost" },
-  { value: "disposed", label: "Disposed" },
+const STATUS_OPTIONS = [
+  "available",
+  "reserved",
+  "sold",
+  "returned",
+  "repair",
+  "rma",
+  "damaged",
+  "lost",
+  "disposed",
 ];
-
-function statusLabel(status: SerialStatus) {
-  switch (status) {
-    case "available":
-      return "Available";
-    case "reserved":
-      return "Reserved";
-    case "sold":
-      return "Sold";
-    case "returned":
-      return "Returned";
-    case "repair":
-      return "Repair";
-    case "rma":
-      return "RMA";
-    case "damaged":
-      return "Damaged";
-    case "lost":
-      return "Lost";
-    case "disposed":
-      return "Disposed";
-    default:
-      return status;
-  }
-}
-
-function statusClasses(status: SerialStatus) {
-  switch (status) {
-    case "available":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "reserved":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "sold":
-      return "bg-blue-50 text-blue-700 ring-blue-200";
-    case "returned":
-      return "bg-violet-50 text-violet-700 ring-violet-200";
-    case "repair":
-      return "bg-orange-50 text-orange-700 ring-orange-200";
-    case "rma":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
-    case "damaged":
-      return "bg-red-50 text-red-700 ring-red-200";
-    case "lost":
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-    case "disposed":
-      return "bg-slate-100 text-slate-500 ring-slate-200";
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
 
 function formatDate(value: string | null) {
   if (!value) return "—";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(undefined, {
+  return new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
 }
 
-function formatMoney(value: number) {
+function formatCurrency(value: number | null, currency: string) {
+  if (value === null || Number.isNaN(value)) return "—";
+
   return new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
+    style: "currency",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
 }
 
-function StatCard({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value: number;
-  description: string;
-}) {
-  return (
-    <div
-      className="rounded-xl bg-white p-5"
-      style={{
-        border: "1px solid #e2e8f0",
-      }}
-    >
-      <div className="text-sm font-medium text-slate-500">
-        {label}
-      </div>
+function getStatusClass(status: string) {
+  switch (status) {
+    case "available":
+      return "status available";
+    case "reserved":
+      return "status reserved";
+    case "sold":
+      return "status sold";
+    case "returned":
+      return "status returned";
+    case "repair":
+      return "status repair";
+    case "rma":
+      return "status rma";
+    case "damaged":
+      return "status damaged";
+    case "lost":
+      return "status lost";
+    case "disposed":
+      return "status disposed";
+    default:
+      return "status";
+  }
+}
 
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-        {value.toLocaleString()}
-      </div>
-
-      <div className="mt-1 text-xs text-slate-400">
-        {description}
-      </div>
-    </div>
-  );
+function getStatusLabel(status: string) {
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export default function SerialNumbersPage() {
+  const supabase = createClient();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
   const [currency, setCurrency] = useState("USD");
 
-  const [serialUnits, setSerialUnits] = useState<
-    SerializedUnit[]
-  >([]);
-
+  const [serialUnits, setSerialUnits] = useState<SerializedUnit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | SerialStatus
-  >("all");
-  const [productFilter, setProductFilter] =
-    useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setErrorMessage("");
+  const loadData = useCallback(
+    async (showRefresh = false) => {
+      try {
+        setError("");
 
-      // ------------------------------------------------------
-      // 1. Authenticate
-      // ------------------------------------------------------
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+        if (showRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
 
-      if (authError || !user) {
-        router.push("/login");
-        return;
-      }
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      // ------------------------------------------------------
-      // 2. Get company membership
-      // ------------------------------------------------------
-      const { data: membership, error: membershipError } =
-        await supabase
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        const { data: membership, error: membershipError } = await supabase
           .from("company_members")
           .select("company_id")
           .eq("user_id", user.id)
           .limit(1)
           .maybeSingle();
 
-      if (membershipError) {
-        throw membershipError;
-      }
+        if (membershipError) {
+          throw membershipError;
+        }
 
-      if (!membership?.company_id) {
-        setErrorMessage(
-          "No company membership was found for this account."
-        );
-        return;
-      }
+        if (!membership?.company_id) {
+          throw new Error("No company is associated with your account.");
+        }
 
-      const currentCompanyId = membership.company_id;
+        const currentCompanyId = membership.company_id;
 
-      // ------------------------------------------------------
-      // 3. Get company currency
-      // ------------------------------------------------------
-      const { data: company, error: companyError } =
-        await supabase
-          .from("companies")
-          .select("id, currency")
-          .eq("id", currentCompanyId)
-          .maybeSingle();
+        const [
+          companyResult,
+          serialResult,
+          productResult,
+          variantResult,
+          warehouseResult,
+          locationResult,
+        ] = await Promise.all([
+          supabase
+            .from("companies")
+            .select("currency")
+            .eq("id", currentCompanyId)
+            .maybeSingle(),
 
-      if (companyError) {
-        throw companyError;
-      }
-
-      setCurrency(company?.currency || "USD");
-
-      // ------------------------------------------------------
-      // 4. Load serialized units
-      // ------------------------------------------------------
-      const {
-        data: serializedData,
-        error: serializedError,
-      } = await supabase
-        .from("serialized_units")
-        .select(
-          `
-            id,
-            company_id,
-            product_id,
-            variant_id,
-            serial_number,
-            barcode,
-            status,
-            warehouse_id,
-            customer_id,
-            order_id,
-            invoice_id,
-            cost_price,
-            warranty_start,
-            warranty_end,
-            received_at,
-            sold_at,
-            notes,
-            created_at,
-            updated_at,
-            products (
-              id,
-              name,
-              brand
-            ),
-            product_variants (
-              id,
-              name,
-              sku
-            ),
-            customers (
-              id,
-              name
+          supabase
+            .from("serialized_units")
+            .select(
+              `
+                id,
+                product_id,
+                variant_id,
+                serial_number,
+                barcode,
+                status,
+                warehouse_id,
+                location_id,
+                customer_id,
+                cost_price,
+                warranty_start,
+                warranty_end,
+                received_at,
+                sold_at,
+                notes,
+                created_at
+              `,
             )
-          `
-        )
-        .eq("company_id", currentCompanyId)
-        .order("created_at", {
-          ascending: false,
-        });
+            .eq("company_id", currentCompanyId)
+            .order("created_at", { ascending: false }),
 
-      if (serializedError) {
-        throw serializedError;
+          supabase
+            .from("products")
+            .select("id, name, tracking_mode")
+            .eq("company_id", currentCompanyId)
+            .eq("tracking_mode", "serial")
+            .order("name"),
+
+          supabase
+            .from("product_variants")
+            .select("id, product_id, name, sku")
+            .eq("company_id", currentCompanyId)
+            .order("name"),
+
+          supabase
+            .from("warehouses")
+            .select("id, name, code")
+            .eq("company_id", currentCompanyId)
+            .order("name"),
+
+          supabase
+            .from("warehouse_locations")
+            .select("id, warehouse_id, name, code")
+            .eq("company_id", currentCompanyId)
+            .order("name"),
+        ]);
+
+        if (companyResult.error) throw companyResult.error;
+        if (serialResult.error) throw serialResult.error;
+        if (productResult.error) throw productResult.error;
+        if (variantResult.error) throw variantResult.error;
+        if (warehouseResult.error) throw warehouseResult.error;
+        if (locationResult.error) throw locationResult.error;
+
+        setCurrency(companyResult.data?.currency || "USD");
+        setSerialUnits((serialResult.data || []) as SerializedUnit[]);
+        setProducts((productResult.data || []) as Product[]);
+        setVariants((variantResult.data || []) as Variant[]);
+        setWarehouses((warehouseResult.data || []) as Warehouse[]);
+        setLocations((locationResult.data || []) as WarehouseLocation[]);
+
+        const customerIds = Array.from(
+          new Set(
+            ((serialResult.data || []) as SerializedUnit[])
+              .map((unit) => unit.customer_id)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        );
+
+        if (customerIds.length > 0) {
+          const { data: customerData, error: customerError } = await supabase
+            .from("customers")
+            .select("id, name")
+            .eq("company_id", currentCompanyId)
+            .in("id", customerIds);
+
+          if (customerError) {
+            throw customerError;
+          }
+
+          setCustomers((customerData || []) as Customer[]);
+        } else {
+          setCustomers([]);
+        }
+      } catch (loadError) {
+        console.error("Failed to load serial numbers:", loadError);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Failed to load serial numbers.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const normalizedUnits: SerializedUnit[] =
-        (serializedData || []).map((rawItem) => {
-          const item =
-            rawItem as unknown as SerializedUnitRow;
-
-          return {
-            id: item.id,
-            company_id: item.company_id,
-            product_id: item.product_id,
-            variant_id: item.variant_id,
-            serial_number: item.serial_number,
-            barcode: item.barcode,
-            status: item.status,
-            warehouse_id: item.warehouse_id,
-            customer_id: item.customer_id,
-            order_id: item.order_id,
-            invoice_id: item.invoice_id,
-            cost_price: Number(item.cost_price || 0),
-            warranty_start: item.warranty_start,
-            warranty_end: item.warranty_end,
-            received_at: item.received_at,
-            sold_at: item.sold_at,
-            notes: item.notes,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-            product: Array.isArray(item.products)
-              ? item.products[0] || null
-              : item.products || null,
-            variant: Array.isArray(item.product_variants)
-              ? item.product_variants[0] || null
-              : item.product_variants || null,
-            customer: Array.isArray(item.customers)
-              ? item.customers[0] || null
-              : item.customers || null,
-          };
-        });
-
-      setSerialUnits(normalizedUnits);
-
-      // ------------------------------------------------------
-      // 5. Load serial-tracked products for filter
-      // ------------------------------------------------------
-      const { data: productData, error: productError } =
-        await supabase
-          .from("products")
-          .select("id, name, brand")
-          .eq("company_id", currentCompanyId)
-          .eq("tracking_mode", "serial")
-          .order("name", {
-            ascending: true,
-          });
-
-      if (productError) {
-        throw productError;
-      }
-
-      setProducts(productData || []);
-    } catch (error) {
-      console.error(
-        "Serial numbers load error:",
-        error
-      );
-
-      setErrorMessage(
-        "Unable to load serial numbers. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [router, supabase]);
+    },
+    [router, supabase],
+  );
 
   useEffect(() => {
-    // This effect intentionally starts the asynchronous serial-number synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadData]);
+
+  const productMap = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products],
+  );
+
+  const variantMap = useMemo(
+    () => new Map(variants.map((variant) => [variant.id, variant])),
+    [variants],
+  );
+
+  const warehouseMap = useMemo(
+    () => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse])),
+    [warehouses],
+  );
+
+  const locationMap = useMemo(
+    () => new Map(locations.map((location) => [location.id, location])),
+    [locations],
+  );
+
+  const customerMap = useMemo(
+    () => new Map(customers.map((customer) => [customer.id, customer])),
+    [customers],
+  );
+
+  const filteredUnits = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return serialUnits.filter((unit) => {
+      const product = productMap.get(unit.product_id);
+      const variant = unit.variant_id
+        ? variantMap.get(unit.variant_id)
+        : undefined;
+      const warehouse = unit.warehouse_id
+        ? warehouseMap.get(unit.warehouse_id)
+        : undefined;
+      const location = unit.location_id
+        ? locationMap.get(unit.location_id)
+        : undefined;
+      const customer = unit.customer_id
+        ? customerMap.get(unit.customer_id)
+        : undefined;
+
+      const matchesSearch =
+        !query ||
+        unit.serial_number.toLowerCase().includes(query) ||
+        Boolean(unit.barcode?.toLowerCase().includes(query)) ||
+        Boolean(product?.name.toLowerCase().includes(query)) ||
+        Boolean(variant?.name?.toLowerCase().includes(query)) ||
+        Boolean(variant?.sku?.toLowerCase().includes(query)) ||
+        Boolean(warehouse?.name.toLowerCase().includes(query)) ||
+        Boolean(location?.name.toLowerCase().includes(query)) ||
+        Boolean(customer?.name.toLowerCase().includes(query));
+
+      const matchesStatus =
+        statusFilter === "all" || unit.status === statusFilter;
+
+      const matchesWarehouse =
+        warehouseFilter === "all" ||
+        unit.warehouse_id === warehouseFilter;
+
+      return matchesSearch && matchesStatus && matchesWarehouse;
+    });
+  }, [
+    serialUnits,
+    productMap,
+    variantMap,
+    warehouseMap,
+    locationMap,
+    customerMap,
+    search,
+    statusFilter,
+    warehouseFilter,
+  ]);
 
   const stats = useMemo(() => {
     const total = serialUnits.length;
 
     const available = serialUnits.filter(
-      (item) => item.status === "available"
+      (unit) => unit.status === "available",
     ).length;
 
     const reserved = serialUnits.filter(
-      (item) => item.status === "reserved"
+      (unit) => unit.status === "reserved",
     ).length;
 
-    const sold = serialUnits.filter(
-      (item) => item.status === "sold"
+    const sold = serialUnits.filter((unit) => unit.status === "sold").length;
+
+    const service = serialUnits.filter((unit) =>
+      ["repair", "rma"].includes(unit.status),
     ).length;
 
-    const repairRma = serialUnits.filter(
-      (item) =>
-        item.status === "repair" ||
-        item.status === "rma"
-    ).length;
+    const totalCost = serialUnits.reduce(
+      (sum, unit) => sum + Number(unit.cost_price || 0),
+      0,
+    );
 
     return {
       total,
       available,
       reserved,
       sold,
-      repairRma,
+      service,
+      totalCost,
     };
   }, [serialUnits]);
 
-  const filteredUnits = useMemo(() => {
-    const normalizedSearch =
-      search.trim().toLowerCase();
-
-    return serialUnits.filter((item) => {
-      const matchesSearch =
-        normalizedSearch === "" ||
-        item.serial_number
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (item.barcode || "")
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (item.product?.name || "")
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (item.variant?.sku || "")
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (item.customer?.name || "")
-          .toLowerCase()
-          .includes(normalizedSearch);
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        item.status === statusFilter;
-
-      const matchesProduct =
-        productFilter === "all" ||
-        item.product_id === productFilter;
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesProduct
-      );
-    });
-  }, [
-    serialUnits,
-    search,
-    statusFilter,
-    productFilter,
-  ]);
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setWarehouseFilter("all");
+  };
 
   return (
-    <AppShell
-      title="Serial Numbers"
-      description="Track individual physical units, ownership, warranty, and lifecycle history."
-      actions={
-        <Link
-          href="/serial-numbers/new"
-          className="inline-flex h-10 items-center justify-center rounded-lg bg-black px-4 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          <span className="mr-2 text-base leading-none">
-            +
-          </span>
-          Add Serial Number
-        </Link>
-      }
-    >
-      <div className="space-y-6">
-        {/* -------------------------------------------------- */}
-        {/* Stats */}
-        {/* -------------------------------------------------- */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatCard
-            label="Total Units"
-            value={stats.total}
-            description="All serialized units"
-          />
+    <AppShell>
+      <div className="serial-page">
+        <style jsx global>{`
+          .serial-page {
+            min-height: 100%;
+            padding: 28px;
+            background: #f7f8fa;
+          }
 
-          <StatCard
-            label="Available"
-            value={stats.available}
-            description="Ready for sale or use"
-          />
+          .serial-page *,
+          .serial-page *::before,
+          .serial-page *::after {
+            box-sizing: border-box;
+          }
 
-          <StatCard
-            label="Reserved"
-            value={stats.reserved}
-            description="Reserved for an order"
-          />
+          .serial-page button {
+            font-family: inherit;
+          }
 
-          <StatCard
-            label="Sold"
-            value={stats.sold}
-            description="Currently sold"
-          />
+          .serial-page .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 24px;
+          }
 
-          <StatCard
-            label="Repair / RMA"
-            value={stats.repairRma}
-            description="Units requiring attention"
-          />
+          .serial-page .eyebrow {
+            margin: 0 0 6px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6b7280;
+          }
+
+          .serial-page h1 {
+            margin: 0;
+            font-size: 30px;
+            line-height: 1.15;
+            color: #111827;
+          }
+
+          .serial-page .subtitle {
+            margin: 8px 0 0;
+            color: #6b7280;
+            font-size: 14px;
+          }
+
+          .serial-page .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+          }
+
+          .serial-page .button {
+            min-height: 42px !important;
+            height: 42px;
+            border: 1px solid #d1d5db !important;
+            border-radius: 10px !important;
+            padding: 0 15px !important;
+            background: #ffffff !important;
+            color: #111827 !important;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            appearance: none;
+            -webkit-appearance: none;
+          }
+
+          .serial-page .button:hover {
+            background: #f9fafb !important;
+            border-color: #9ca3af !important;
+            color: #111827 !important;
+          }
+
+          .serial-page .button.primary {
+            border: 1px solid #111827 !important;
+            background: #111827 !important;
+            color: #ffffff !important;
+          }
+
+          .serial-page .button.primary:hover {
+            border-color: #1f2937 !important;
+            background: #1f2937 !important;
+            color: #ffffff !important;
+          }
+
+          .serial-page .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .serial-page .stats {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+          }
+
+          .serial-page .stat {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 16px;
+            min-width: 0;
+          }
+
+          .serial-page .stat-label {
+            color: #6b7280;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+          }
+
+          .serial-page .stat-value {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 750;
+            line-height: 1;
+          }
+
+          .serial-page .filters {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 16px;
+            margin-bottom: 16px;
+          }
+
+          .serial-page .filter-grid {
+            display: grid;
+            grid-template-columns: minmax(240px, 1fr) 180px 200px auto;
+            gap: 10px;
+            align-items: end;
+          }
+
+          .serial-page .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .serial-page .field label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #4b5563;
+          }
+
+          .serial-page .input,
+          .serial-page .select {
+            width: 100% !important;
+            min-height: 42px !important;
+            height: 42px;
+            border: 1px solid #d1d5db !important;
+            border-radius: 9px !important;
+            padding: 0 12px !important;
+            background: #ffffff !important;
+            color: #111827 !important;
+            outline: none;
+            font-size: 14px;
+            box-shadow: none !important;
+          }
+
+          .serial-page .input:focus,
+          .serial-page .select:focus {
+            border-color: #111827 !important;
+            box-shadow: 0 0 0 1px #111827 !important;
+          }
+
+          .serial-page .table-card {
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #ffffff;
+          }
+
+          .serial-page .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 18px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+
+          .serial-page .table-title {
+            font-size: 15px;
+            font-weight: 750;
+            color: #111827;
+          }
+
+          .serial-page .table-count {
+            color: #6b7280;
+            font-size: 13px;
+          }
+
+          .serial-page .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+          }
+
+          .serial-page table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1180px;
+          }
+
+          .serial-page th {
+            padding: 12px 16px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            color: #6b7280;
+            font-size: 11px;
+            font-weight: 750;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          .serial-page td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f0f1f3;
+            color: #374151;
+            font-size: 13px;
+            vertical-align: middle;
+          }
+
+          .serial-page tbody tr:hover {
+            background: #fafafa;
+          }
+
+          .serial-page tbody tr:last-child td {
+            border-bottom: 0;
+          }
+
+          .serial-page .serial-link {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 4px;
+            color: #111827 !important;
+            text-decoration: none !important;
+            font-weight: 700;
+          }
+
+          .serial-page .serial-link:hover {
+            text-decoration: underline !important;
+          }
+
+          .serial-page .barcode {
+            color: #9ca3af;
+            font-size: 11px;
+            font-weight: 500;
+          }
+
+          .serial-page .product-name {
+            color: #111827;
+            font-weight: 650;
+          }
+
+          .serial-page .secondary {
+            margin-top: 3px;
+            color: #9ca3af;
+            font-size: 11px;
+          }
+
+          .serial-page .location {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+          }
+
+          .serial-page .location-main {
+            color: #111827;
+            font-weight: 600;
+          }
+
+          .serial-page .location-sub {
+            color: #6b7280;
+            font-size: 11px;
+          }
+
+          .serial-page .status {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            border-radius: 999px;
+            padding: 5px 9px;
+            background: #f3f4f6;
+            color: #4b5563;
+            font-size: 11px;
+            font-weight: 750;
+          }
+
+          .serial-page .status.available {
+            background: #ecfdf5;
+            color: #047857;
+          }
+
+          .serial-page .status.reserved {
+            background: #fffbeb;
+            color: #b45309;
+          }
+
+          .serial-page .status.sold {
+            background: #eff6ff;
+            color: #1d4ed8;
+          }
+
+          .serial-page .status.returned {
+            background: #f5f3ff;
+            color: #6d28d9;
+          }
+
+          .serial-page .status.repair,
+          .serial-page .status.rma {
+            background: #fff7ed;
+            color: #c2410c;
+          }
+
+          .serial-page .status.damaged,
+          .serial-page .status.lost,
+          .serial-page .status.disposed {
+            background: #fef2f2;
+            color: #b91c1c;
+          }
+
+          .serial-page .empty {
+            padding: 60px 20px;
+            text-align: center;
+          }
+
+          .serial-page .empty-title {
+            margin: 0 0 8px;
+            color: #111827;
+            font-size: 16px;
+            font-weight: 750;
+          }
+
+          .serial-page .empty-text {
+            margin: 0;
+            color: #6b7280;
+            font-size: 13px;
+          }
+
+          .serial-page .error {
+            margin-bottom: 16px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            background: #fef2f2;
+            color: #b91c1c;
+            padding: 12px 14px;
+            font-size: 13px;
+          }
+
+          .serial-page .loading {
+            padding: 60px 20px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+          }
+
+          @media (max-width: 1200px) {
+            .serial-page .stats {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .serial-page .filter-grid {
+              grid-template-columns: 1fr 1fr;
+            }
+          }
+
+          @media (max-width: 760px) {
+            .serial-page {
+              padding: 18px;
+            }
+
+            .serial-page .header {
+              flex-direction: column;
+            }
+
+            .serial-page h1 {
+              font-size: 26px;
+            }
+
+            .serial-page .header-actions {
+              width: 100%;
+            }
+
+            .serial-page .header-actions .button {
+              flex: 1;
+            }
+
+            .serial-page .stats {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .serial-page .filter-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .serial-page .table-header {
+              align-items: flex-start;
+              flex-direction: column;
+            }
+          }
+        `}</style>
+
+        <div className="header">
+          <div>
+            <p className="eyebrow">Inventory</p>
+            <h1>Serial Numbers</h1>
+            <p className="subtitle">
+              Track every serialized asset across your inventory, warehouses,
+              customers, and lifecycle statuses.
+            </p>
+          </div>
+
+          <div className="header-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
+
+            <Link href="/inventory" className="button">
+              Inventory
+            </Link>
+
+            <Link href="/serial-numbers/new" className="button primary">
+              Add Serial Number
+            </Link>
+          </div>
         </div>
 
-        {/* -------------------------------------------------- */}
-        {/* Error */}
-        {/* -------------------------------------------------- */}
-        {errorMessage && (
-          <div
-            className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-            style={{
-              border: "1px solid #fecaca",
-            }}
-          >
-            {errorMessage}
+        {error ? <div className="error">{error}</div> : null}
+
+        <div className="stats">
+          <div className="stat">
+            <div className="stat-label">Total Serialized Units</div>
+            <div className="stat-value">{stats.total}</div>
           </div>
-        )}
 
-        {/* -------------------------------------------------- */}
-        {/* Main card */}
-        {/* -------------------------------------------------- */}
-        <div
-          className="overflow-hidden rounded-xl bg-white"
-          style={{
-            border: "1px solid #e2e8f0",
-          }}
-        >
-          {/* Filters */}
-          <div
-            className="border-b border-slate-200 p-4"
-            style={{
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <div className="flex flex-col gap-3 lg:flex-row">
-              {/* Search */}
-              <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  ⌕
-                </span>
+          <div className="stat">
+            <div className="stat-label">Available</div>
+            <div className="stat-value">{stats.available}</div>
+          </div>
 
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(e.target.value)
-                  }
-                  placeholder="Search serial number, barcode, product, SKU or customer..."
-                  className="h-11 w-full rounded-lg bg-white pl-9 pr-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-black focus:ring-2 focus:ring-slate-200"
-                  style={{
-                    border: "1px solid #cbd5e1",
-                  }}
-                />
-              </div>
+          <div className="stat">
+            <div className="stat-label">Reserved</div>
+            <div className="stat-value">{stats.reserved}</div>
+          </div>
 
-              {/* Status */}
+          <div className="stat">
+            <div className="stat-label">Sold</div>
+            <div className="stat-value">{stats.sold}</div>
+          </div>
+
+          <div className="stat">
+            <div className="stat-label">Repair / RMA</div>
+            <div className="stat-value">{stats.service}</div>
+          </div>
+
+          <div className="stat">
+            <div className="stat-label">Inventory Cost</div>
+            <div className="stat-value">
+              {formatCurrency(stats.totalCost, currency)}
+            </div>
+          </div>
+        </div>
+
+        <div className="filters">
+          <div className="filter-grid">
+            <div className="field">
+              <label htmlFor="serial-search">Search</label>
+              <input
+                id="serial-search"
+                className="input"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Serial, barcode, product, SKU, warehouse..."
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="serial-status">Status</label>
               <select
+                id="serial-status"
+                className="select"
                 value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(
-                    e.target.value as
-                      | "all"
-                      | SerialStatus
-                  )
-                }
-                className="h-11 rounded-lg bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-black focus:ring-2 focus:ring-slate-200 lg:w-48"
-                style={{
-                  border: "1px solid #cbd5e1",
-                }}
+                onChange={(event) => setStatusFilter(event.target.value)}
               >
-                {STATUS_OPTIONS.map((option) => (
-                  <option
-                    key={option.value}
-                    value={option.value}
-                  >
-                    {option.label}
+                <option value="all">All statuses</option>
+
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {getStatusLabel(status)}
                   </option>
                 ))}
               </select>
+            </div>
 
-              {/* Product */}
+            <div className="field">
+              <label htmlFor="serial-warehouse">Warehouse</label>
               <select
-                value={productFilter}
-                onChange={(e) =>
-                  setProductFilter(e.target.value)
-                }
-                className="h-11 rounded-lg bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-black focus:ring-2 focus:ring-slate-200 lg:w-64"
-                style={{
-                  border: "1px solid #cbd5e1",
-                }}
+                id="serial-warehouse"
+                className="select"
+                value={warehouseFilter}
+                onChange={(event) => setWarehouseFilter(event.target.value)}
               >
-                <option value="all">
-                  All Products
-                </option>
+                <option value="all">All warehouses</option>
 
-                {products.map((product) => (
-                  <option
-                    key={product.id}
-                    value={product.id}
-                  >
-                    {product.name}
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name} ({warehouse.code})
                   </option>
                 ))}
               </select>
             </div>
+
+            <button
+              type="button"
+              className="button"
+              onClick={clearFilters}
+            >
+              Clear
+            </button>
           </div>
+        </div>
 
-          {/* Results header */}
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-950">
-                Serialized Units
-              </h2>
+        <div className="table-card">
+          <div className="table-header">
+            <div className="table-title">Serialized Inventory</div>
 
-              <p className="mt-0.5 text-xs text-slate-500">
-                {loading
-                  ? "Loading..."
-                  : `${filteredUnits.length.toLocaleString()} unit${
-                      filteredUnits.length === 1
-                        ? ""
-                        : "s"
-                    }`}
-              </p>
+            <div className="table-count">
+              Showing {filteredUnits.length} of {serialUnits.length}
             </div>
-
-            {(search ||
-              statusFilter !== "all" ||
-              productFilter !== "all") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("all");
-                  setProductFilter("all");
-                }}
-                className="text-sm font-medium text-slate-600 hover:text-black"
-              >
-                Clear filters
-              </button>
-            )}
           </div>
 
-          {/* ------------------------------------------------ */}
-          {/* Loading */}
-          {/* ------------------------------------------------ */}
           {loading ? (
-            <div className="px-5 pb-6">
-              <div
-                className="rounded-lg bg-slate-50 p-10 text-center text-sm text-slate-500"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              >
-                Loading serial numbers...
-              </div>
-            </div>
+            <div className="loading">Loading serial numbers...</div>
           ) : filteredUnits.length === 0 ? (
-            /* ------------------------------------------------ */
-            /* Empty state */
-            /* ------------------------------------------------ */
-            <div className="px-5 pb-6">
-              <div
-                className="rounded-lg bg-slate-50 p-12 text-center"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              >
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl text-slate-500">
-                  #
-                </div>
+            <div className="empty">
+              <p className="empty-title">
+                {serialUnits.length === 0
+                  ? "No serial numbers yet"
+                  : "No matching serial numbers"}
+              </p>
 
-                <h3 className="mt-4 text-sm font-semibold text-slate-950">
-                  {serialUnits.length === 0
-                    ? "No serial numbers yet"
-                    : "No matching serial numbers"}
-                </h3>
+              <p className="empty-text">
+                {serialUnits.length === 0
+                  ? "Create your first serialized inventory unit to start tracking assets."
+                  : "Try changing your search or filters."}
+              </p>
 
-                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-                  {serialUnits.length === 0
-                    ? "Add your first serialized unit to start tracking individual products."
-                    : "Try changing your search or filters."}
-                </p>
-
-                {serialUnits.length === 0 && (
+              {serialUnits.length === 0 ? (
+                <div style={{ marginTop: 16 }}>
                   <Link
                     href="/serial-numbers/new"
-                    className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-black px-4 text-sm font-medium text-white hover:bg-slate-800"
+                    className="button primary"
                   >
-                    + Add Serial Number
+                    Add Serial Number
                   </Link>
-                )}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : (
-            /* ------------------------------------------------ */
-            /* Desktop table */
-            /* ------------------------------------------------ */
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px]">
+            <div className="table-wrap">
+              <table>
                 <thead>
-                  <tr
-                    className="bg-slate-50 text-left text-xs font-medium text-slate-500"
-                    style={{
-                      borderTop:
-                        "1px solid #e2e8f0",
-                      borderBottom:
-                        "1px solid #e2e8f0",
-                    }}
-                  >
-                    <th className="px-5 py-3">
-                      Serial Number
-                    </th>
-
-                    <th className="px-5 py-3">
-                      Product
-                    </th>
-
-                    <th className="px-5 py-3">
-                      SKU
-                    </th>
-
-                    <th className="px-5 py-3">
-                      Status
-                    </th>
-
-                    <th className="px-5 py-3">
-                      Customer
-                    </th>
-
-                    <th className="px-5 py-3">
-                      Cost
-                    </th>
-
-                    <th className="px-5 py-3">
-                      Warranty
-                    </th>
-
-                    <th className="px-5 py-3 text-right">
-                      Action
-                    </th>
+                  <tr>
+                    <th>Serial Number</th>
+                    <th>Product</th>
+                    <th>Status</th>
+                    <th>Warehouse / Location</th>
+                    <th>Customer</th>
+                    <th>Cost</th>
+                    <th>Warranty</th>
+                    <th>Received</th>
+                    <th>Sold</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredUnits.map((unit) => (
-                    <tr
-                      key={unit.id}
-                      className="transition hover:bg-slate-50"
-                      style={{
-                        borderBottom:
-                          "1px solid #f1f5f9",
-                      }}
-                    >
-                      {/* Serial */}
-                      <td className="px-5 py-4">
-                        <Link
-                          href={`/serial-numbers/${unit.id}`}
-                          className="font-medium text-slate-950 hover:underline"
-                        >
-                          {unit.serial_number}
-                        </Link>
+                  {filteredUnits.map((unit) => {
+                    const product = productMap.get(unit.product_id);
+                    const variant = unit.variant_id
+                      ? variantMap.get(unit.variant_id)
+                      : undefined;
+                    const warehouse = unit.warehouse_id
+                      ? warehouseMap.get(unit.warehouse_id)
+                      : undefined;
+                    const location = unit.location_id
+                      ? locationMap.get(unit.location_id)
+                      : undefined;
+                    const customer = unit.customer_id
+                      ? customerMap.get(unit.customer_id)
+                      : undefined;
 
-                        {unit.barcode && (
-                          <div className="mt-1 text-xs text-slate-400">
-                            Barcode: {unit.barcode}
+                    return (
+                      <tr key={unit.id}>
+                        <td>
+                          <Link
+                            href={`/serial-numbers/${unit.id}`}
+                            className="serial-link"
+                          >
+                            <span>{unit.serial_number}</span>
+
+                            {unit.barcode ? (
+                              <span className="barcode">
+                                Barcode: {unit.barcode}
+                              </span>
+                            ) : null}
+                          </Link>
+                        </td>
+
+                        <td>
+                          <div className="product-name">
+                            {product?.name || "Unknown product"}
                           </div>
-                        )}
-                      </td>
 
-                      {/* Product */}
-                      <td className="px-5 py-4">
-                        <div className="font-medium text-slate-900">
-                          {unit.product?.name ||
-                            "Unknown Product"}
-                        </div>
-
-                        {unit.product?.brand && (
-                          <div className="mt-1 text-xs text-slate-400">
-                            {unit.product.brand}
-                          </div>
-                        )}
-
-                        {unit.variant?.name &&
-                          unit.variant.name !==
-                            "Default" && (
-                            <div className="mt-1 text-xs text-slate-400">
-                              {unit.variant.name}
+                          {variant?.name || variant?.sku ? (
+                            <div className="secondary">
+                              {variant?.name || ""}
+                              {variant?.name && variant?.sku ? " · " : ""}
+                              {variant?.sku || ""}
                             </div>
+                          ) : null}
+                        </td>
+
+                        <td>
+                          <span className={getStatusClass(unit.status)}>
+                            {getStatusLabel(unit.status)}
+                          </span>
+                        </td>
+
+                        <td>
+                          {warehouse || location ? (
+                            <div className="location">
+                              <span className="location-main">
+                                {warehouse?.name || "No warehouse"}
+                              </span>
+
+                              <span className="location-sub">
+                                {location
+                                  ? `${location.name}${
+                                      location.code
+                                        ? ` (${location.code})`
+                                        : ""
+                                    }`
+                                  : "No location"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="secondary">Unassigned</span>
                           )}
-                      </td>
+                        </td>
 
-                      {/* SKU */}
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {unit.variant?.sku || "—"}
-                      </td>
+                        <td>
+                          {customer?.name || (
+                            <span className="secondary">
+                              Not assigned
+                            </span>
+                          )}
+                        </td>
 
-                      {/* Status */}
-                      <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${statusClasses(
-                            unit.status
-                          )}`}
-                        >
-                          {statusLabel(unit.status)}
-                        </span>
-                      </td>
+                        <td>
+                          {formatCurrency(unit.cost_price, currency)}
+                        </td>
 
-                      {/* Customer */}
-                      <td className="px-5 py-4">
-                        {unit.customer ? (
-                          <div className="text-sm font-medium text-slate-900">
-                            {unit.customer.name}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-slate-400">
-                            —
-                          </span>
-                        )}
-                      </td>
+                        <td>
+                          {unit.warranty_start || unit.warranty_end ? (
+                            <div className="location">
+                              <span className="location-main">
+                                {formatDate(unit.warranty_end)}
+                              </span>
 
-                      {/* Cost */}
-                      <td className="px-5 py-4 text-sm text-slate-700">
-                        {currency}{" "}
-                        {formatMoney(
-                          unit.cost_price
-                        )}
-                      </td>
-
-                      {/* Warranty */}
-                      <td className="px-5 py-4">
-                        {unit.warranty_end ? (
-                          <div>
-                            <div className="text-sm text-slate-700">
-                              Until{" "}
-                              {formatDate(
-                                unit.warranty_end
-                              )}
+                              <span className="location-sub">
+                                Started {formatDate(unit.warranty_start)}
+                              </span>
                             </div>
+                          ) : (
+                            <span className="secondary">No warranty</span>
+                          )}
+                        </td>
 
-                            <div className="mt-1 text-xs text-slate-400">
-                              Started{" "}
-                              {formatDate(
-                                unit.warranty_start
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-slate-400">
-                            —
-                          </span>
-                        )}
-                      </td>
+                        <td>{formatDate(unit.received_at)}</td>
 
-                      {/* Action */}
-                      <td className="px-5 py-4 text-right">
-                        <Link
-                          href={`/serial-numbers/${unit.id}`}
-                          className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-black"
-                        >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                        <td>{formatDate(unit.sold_at)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-
-          {/* Footer */}
-          {!loading &&
-            filteredUnits.length > 0 && (
-              <div
-                className="border-t px-5 py-3 text-xs text-slate-400"
-                style={{
-                  borderTop:
-                    "1px solid #e2e8f0",
-                }}
-              >
-                Showing{" "}
-                {filteredUnits.length.toLocaleString()} of{" "}
-                {serialUnits.length.toLocaleString()}{" "}
-                serialized units
-              </div>
-            )}
         </div>
       </div>
     </AppShell>
