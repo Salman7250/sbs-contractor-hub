@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -28,6 +33,15 @@ type TeamMember = {
   } | null;
 };
 
+type UserPreferences = {
+  language: string;
+  dateFormat: string;
+  timeFormat: string;
+  firstDayOfWeek: string;
+  numberFormat: string;
+  taxDisplay: string;
+};
+
 const ROLE_ORDER: Record<string, number> = {
   owner: 1,
   admin: 2,
@@ -35,27 +49,226 @@ const ROLE_ORDER: Record<string, number> = {
 };
 
 const CURRENCIES = [
-  "USD",
-  "CAD",
-  "GBP",
-  "EUR",
-  "AED",
-  "AUD",
+  { code: "AED", name: "United Arab Emirates Dirham" },
+  { code: "AFN", name: "Afghan Afghani" },
+  { code: "ALL", name: "Albanian Lek" },
+  { code: "AMD", name: "Armenian Dram" },
+  { code: "ANG", name: "Netherlands Antillean Guilder" },
+  { code: "AOA", name: "Angolan Kwanza" },
+  { code: "ARS", name: "Argentine Peso" },
+  { code: "AUD", name: "Australian Dollar" },
+  { code: "AWG", name: "Aruban Florin" },
+  { code: "AZN", name: "Azerbaijani Manat" },
+  { code: "BAM", name: "Bosnia and Herzegovina Convertible Mark" },
+  { code: "BBD", name: "Barbadian Dollar" },
+  { code: "BDT", name: "Bangladeshi Taka" },
+  { code: "BGN", name: "Bulgarian Lev" },
+  { code: "BHD", name: "Bahraini Dinar" },
+  { code: "BIF", name: "Burundian Franc" },
+  { code: "BMD", name: "Bermudian Dollar" },
+  { code: "BND", name: "Brunei Dollar" },
+  { code: "BOB", name: "Bolivian Boliviano" },
+  { code: "BRL", name: "Brazilian Real" },
+  { code: "BSD", name: "Bahamian Dollar" },
+  { code: "BTN", name: "Bhutanese Ngultrum" },
+  { code: "BWP", name: "Botswana Pula" },
+  { code: "BYN", name: "Belarusian Ruble" },
+  { code: "BZD", name: "Belize Dollar" },
+  { code: "CAD", name: "Canadian Dollar" },
+  { code: "CDF", name: "Congolese Franc" },
+  { code: "CHF", name: "Swiss Franc" },
+  { code: "CLP", name: "Chilean Peso" },
+  { code: "CNY", name: "Chinese Yuan" },
+  { code: "COP", name: "Colombian Peso" },
+  { code: "CRC", name: "Costa Rican Colón" },
+  { code: "CUP", name: "Cuban Peso" },
+  { code: "CVE", name: "Cape Verdean Escudo" },
+  { code: "CZK", name: "Czech Koruna" },
+  { code: "DJF", name: "Djiboutian Franc" },
+  { code: "DKK", name: "Danish Krone" },
+  { code: "DOP", name: "Dominican Peso" },
+  { code: "DZD", name: "Algerian Dinar" },
+  { code: "EGP", name: "Egyptian Pound" },
+  { code: "ERN", name: "Eritrean Nakfa" },
+  { code: "ETB", name: "Ethiopian Birr" },
+  { code: "EUR", name: "Euro" },
+  { code: "FJD", name: "Fijian Dollar" },
+  { code: "FKP", name: "Falkland Islands Pound" },
+  { code: "GBP", name: "British Pound Sterling" },
+  { code: "GEL", name: "Georgian Lari" },
+  { code: "GHS", name: "Ghanaian Cedi" },
+  { code: "GIP", name: "Gibraltar Pound" },
+  { code: "GMD", name: "Gambian Dalasi" },
+  { code: "GNF", name: "Guinean Franc" },
+  { code: "GTQ", name: "Guatemalan Quetzal" },
+  { code: "GYD", name: "Guyanaese Dollar" },
+  { code: "HKD", name: "Hong Kong Dollar" },
+  { code: "HNL", name: "Honduran Lempira" },
+  { code: "HRK", name: "Croatian Kuna" },
+  { code: "HTG", name: "Haitian Gourde" },
+  { code: "HUF", name: "Hungarian Forint" },
+  { code: "IDR", name: "Indonesian Rupiah" },
+  { code: "ILS", name: "Israeli New Shekel" },
+  { code: "INR", name: "Indian Rupee" },
+  { code: "IQD", name: "Iraqi Dinar" },
+  { code: "IRR", name: "Iranian Rial" },
+  { code: "ISK", name: "Icelandic Króna" },
+  { code: "JMD", name: "Jamaican Dollar" },
+  { code: "JOD", name: "Jordanian Dinar" },
+  { code: "JPY", name: "Japanese Yen" },
+  { code: "KES", name: "Kenyan Shilling" },
+  { code: "KGS", name: "Kyrgyzstani Som" },
+  { code: "KHR", name: "Cambodian Riel" },
+  { code: "KMF", name: "Comorian Franc" },
+  { code: "KPW", name: "North Korean Won" },
+  { code: "KRW", name: "South Korean Won" },
+  { code: "KWD", name: "Kuwaiti Dinar" },
+  { code: "KYD", name: "Cayman Islands Dollar" },
+  { code: "KZT", name: "Kazakhstani Tenge" },
+  { code: "LAK", name: "Lao Kip" },
+  { code: "LBP", name: "Lebanese Pound" },
+  { code: "LKR", name: "Sri Lankan Rupee" },
+  { code: "LRD", name: "Liberian Dollar" },
+  { code: "LSL", name: "Lesotho Loti" },
+  { code: "LYD", name: "Libyan Dinar" },
+  { code: "MAD", name: "Moroccan Dirham" },
+  { code: "MDL", name: "Moldovan Leu" },
+  { code: "MGA", name: "Malagasy Ariary" },
+  { code: "MKD", name: "Macedonian Denar" },
+  { code: "MMK", name: "Myanmar Kyat" },
+  { code: "MNT", name: "Mongolian Tögrög" },
+  { code: "MOP", name: "Macanese Pataca" },
+  { code: "MRU", name: "Mauritanian Ouguiya" },
+  { code: "MUR", name: "Mauritian Rupee" },
+  { code: "MVR", name: "Maldivian Rufiyaa" },
+  { code: "MWK", name: "Malawian Kwacha" },
+  { code: "MXN", name: "Mexican Peso" },
+  { code: "MYR", name: "Malaysian Ringgit" },
+  { code: "MZN", name: "Mozambican Metical" },
+  { code: "NAD", name: "Namibian Dollar" },
+  { code: "NGN", name: "Nigerian Naira" },
+  { code: "NIO", name: "Nicaraguan Córdoba" },
+  { code: "NOK", name: "Norwegian Krone" },
+  { code: "NPR", name: "Nepalese Rupee" },
+  { code: "NZD", name: "New Zealand Dollar" },
+  { code: "OMR", name: "Omani Rial" },
+  { code: "PAB", name: "Panamanian Balboa" },
+  { code: "PEN", name: "Peruvian Sol" },
+  { code: "PGK", name: "Papua New Guinean Kina" },
+  { code: "PHP", name: "Philippine Peso" },
+  { code: "PKR", name: "Pakistani Rupee" },
+  { code: "PLN", name: "Polish Złoty" },
+  { code: "PYG", name: "Paraguayan Guaraní" },
+  { code: "QAR", name: "Qatari Riyal" },
+  { code: "RON", name: "Romanian Leu" },
+  { code: "RSD", name: "Serbian Dinar" },
+  { code: "RUB", name: "Russian Ruble" },
+  { code: "RWF", name: "Rwandan Franc" },
+  { code: "SAR", name: "Saudi Riyal" },
+  { code: "SBD", name: "Solomon Islands Dollar" },
+  { code: "SCR", name: "Seychellois Rupee" },
+  { code: "SDG", name: "Sudanese Pound" },
+  { code: "SEK", name: "Swedish Krona" },
+  { code: "SGD", name: "Singapore Dollar" },
+  { code: "SHP", name: "Saint Helena Pound" },
+  { code: "SLE", name: "Sierra Leonean Leone" },
+  { code: "SOS", name: "Somali Shilling" },
+  { code: "SRD", name: "Surinamese Dollar" },
+  { code: "SSP", name: "South Sudanese Pound" },
+  { code: "STN", name: "São Tomé and Príncipe Dobra" },
+  { code: "SYP", name: "Syrian Pound" },
+  { code: "SZL", name: "Eswatini Lilangeni" },
+  { code: "THB", name: "Thai Baht" },
+  { code: "TJS", name: "Tajikistani Somoni" },
+  { code: "TMT", name: "Turkmenistani Manat" },
+  { code: "TND", name: "Tunisian Dinar" },
+  { code: "TOP", name: "Tongan Paʻanga" },
+  { code: "TRY", name: "Turkish Lira" },
+  { code: "TTD", name: "Trinidad and Tobago Dollar" },
+  { code: "TWD", name: "New Taiwan Dollar" },
+  { code: "TZS", name: "Tanzanian Shilling" },
+  { code: "UAH", name: "Ukrainian Hryvnia" },
+  { code: "UGX", name: "Ugandan Shilling" },
+  { code: "USD", name: "United States Dollar" },
+  { code: "UYU", name: "Uruguayan Peso" },
+  { code: "UZS", name: "Uzbekistani Som" },
+  { code: "VES", name: "Venezuelan Bolívar" },
+  { code: "VND", name: "Vietnamese Đồng" },
+  { code: "VUV", name: "Vanuatu Vatu" },
+  { code: "WST", name: "Samoan Tala" },
+  { code: "XAF", name: "Central African CFA Franc" },
+  { code: "XCD", name: "East Caribbean Dollar" },
+  { code: "XOF", name: "West African CFA Franc" },
+  { code: "XPF", name: "CFP Franc" },
+  { code: "YER", name: "Yemeni Rial" },
+  { code: "ZAR", name: "South African Rand" },
+  { code: "ZMW", name: "Zambian Kwacha" },
+  { code: "ZWL", name: "Zimbabwean Dollar" },
 ];
 
-const TIMEZONES = [
-  "America/Chicago",
-  "America/New_York",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Phoenix",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Dubai",
-  "Asia/Karachi",
-  "Asia/Kolkata",
-  "Australia/Sydney",
+const LANGUAGES = [
+  { code: "en-US", name: "English (United States)" },
+  { code: "en-GB", name: "English (United Kingdom)" },
+  { code: "ar", name: "Arabic" },
+  { code: "ur", name: "Urdu" },
+  { code: "de", name: "German" },
+  { code: "fr", name: "French" },
+  { code: "es", name: "Spanish" },
+  { code: "it", name: "Italian" },
+  { code: "pt", name: "Portuguese" },
+  { code: "nl", name: "Dutch" },
+  { code: "pl", name: "Polish" },
+  { code: "tr", name: "Turkish" },
+  { code: "ru", name: "Russian" },
+  { code: "zh-CN", name: "Chinese (Simplified)" },
+  { code: "ja", name: "Japanese" },
+  { code: "ko", name: "Korean" },
+  { code: "hi", name: "Hindi" },
+  { code: "bn", name: "Bengali" },
+  { code: "id", name: "Indonesian" },
+  { code: "ms", name: "Malay" },
+  { code: "sv", name: "Swedish" },
+  { code: "da", name: "Danish" },
+  { code: "no", name: "Norwegian" },
+  { code: "fi", name: "Finnish" },
+  { code: "cs", name: "Czech" },
+  { code: "ro", name: "Romanian" },
+  { code: "uk", name: "Ukrainian" },
 ];
+
+const COUNTRY_CODES = [
+  "AF","AL","DZ","AD","AO","AG","AR","AM","AU","AT","AZ","BS","BH","BD",
+  "BB","BY","BE","BZ","BJ","BT","BO","BA","BW","BR","BN","BG","BF","BI",
+  "CV","KH","CM","CA","CF","TD","CL","CN","CO","KM","CG","CD","CR","CI",
+  "HR","CU","CY","CZ","DK","DJ","DM","DO","EC","EG","SV","GQ","ER","EE",
+  "SZ","ET","FJ","FI","FR","GA","GM","GE","DE","GH","GR","GD","GT","GN",
+  "GW","GY","HT","HN","HU","IS","IN","ID","IR","IQ","IE","IL","IT","JM",
+  "JP","JO","KZ","KE","KI","KP","KR","KW","KG","LA","LV","LB","LS","LR",
+  "LY","LI","LT","LU","MG","MW","MY","MV","ML","MT","MH","MR","MU","MX",
+  "FM","MD","MC","MN","ME","MA","MZ","MM","NA","NR","NP","NL","NZ","NI",
+  "NE","NG","MK","NO","OM","PK","PW","PA","PG","PY","PE","PH","PL","PT",
+  "QA","RO","RU","RW","KN","LC","VC","WS","SM","ST","SA","SN","RS","SC",
+  "SL","SG","SK","SI","SB","SO","ZA","SS","ES","LK","SD","SR","SE","CH",
+  "SY","TW","TJ","TZ","TH","TL","TG","TO","TT","TN","TR","TM","TV","UG",
+  "UA","AE","GB","US","UY","UZ","VU","VA","VE","VN","YE","ZM","ZW",
+];
+
+const DATE_FORMATS = [
+  { value: "MM/DD/YYYY", label: "MM/DD/YYYY — 09/06/2026" },
+  { value: "DD/MM/YYYY", label: "DD/MM/YYYY — 06/09/2026" },
+  { value: "YYYY-MM-DD", label: "YYYY-MM-DD — 2026-09-06" },
+  { value: "DD MMM YYYY", label: "DD MMM YYYY — 06 Sep 2026" },
+  { value: "MMM DD, YYYY", label: "MMM DD, YYYY — Sep 06, 2026" },
+];
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  language: "en-US",
+  dateFormat: "MM/DD/YYYY",
+  timeFormat: "12h",
+  firstDayOfWeek: "Sunday",
+  numberFormat: "1,234.56",
+  taxDisplay: "exclusive",
+};
 
 function getInitials(name: string) {
   const clean = name.trim();
@@ -75,6 +288,70 @@ function formatRole(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+function getCountryName(code: string) {
+  try {
+    const displayNames = new Intl.DisplayNames(
+      ["en"],
+      { type: "region" }
+    );
+
+    return displayNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+function getTimezoneList() {
+  try {
+    if (
+      typeof Intl !== "undefined" &&
+      typeof Intl.supportedValuesOf === "function"
+    ) {
+      return Intl.supportedValuesOf("timeZone");
+    }
+  } catch {
+    // Fall through to the compatibility list.
+  }
+
+  return [
+    "Africa/Cairo",
+    "Africa/Johannesburg",
+    "Africa/Lagos",
+    "Africa/Nairobi",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/New_York",
+    "America/Phoenix",
+    "America/Toronto",
+    "America/Vancouver",
+    "Asia/Dhaka",
+    "Asia/Dubai",
+    "Asia/Hong_Kong",
+    "Asia/Jakarta",
+    "Asia/Karachi",
+    "Asia/Kolkata",
+    "Asia/Riyadh",
+    "Asia/Seoul",
+    "Asia/Shanghai",
+    "Asia/Singapore",
+    "Asia/Tokyo",
+    "Australia/Melbourne",
+    "Australia/Sydney",
+    "Europe/Amsterdam",
+    "Europe/Berlin",
+    "Europe/London",
+    "Europe/Madrid",
+    "Europe/Paris",
+    "Europe/Rome",
+    "Europe/Stockholm",
+    "Pacific/Auckland",
+    "Pacific/Honolulu",
+    "Pacific/Fiji",
+    "UTC",
+  ];
+}
+
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -82,6 +359,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [savingCompany, setSavingCompany] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const [userEmail, setUserEmail] = useState("");
   const [company, setCompany] = useState<Company | null>(null);
@@ -95,15 +373,24 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("America/Chicago");
 
   const [fullName, setFullName] = useState("");
+  const [preferences, setPreferences] =
+    useState<UserPreferences>(DEFAULT_PREFERENCES);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    void loadSettings();
-  }, []);
+  const timezones = useMemo(() => getTimezoneList(), []);
 
-  async function loadSettings() {
+  const countries = useMemo(
+    () =>
+      COUNTRY_CODES.map((code) => ({
+        code,
+        name: getCountryName(code),
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+    []
+  );
+
+  const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -170,7 +457,9 @@ export default function SettingsPage() {
       setCountry(companyData.country || "");
       setState(companyData.state || "");
       setCurrency(companyData.currency || "USD");
-      setTimezone(companyData.timezone || "America/Chicago");
+      setTimezone(
+        companyData.timezone || "America/Chicago"
+      );
 
       const {
         data: profileData,
@@ -188,6 +477,26 @@ export default function SettingsPage() {
       if (profileData) {
         setProfile(profileData);
         setFullName(profileData.full_name || "");
+      }
+
+      const storedPreferences =
+        window.localStorage.getItem(
+          "sbs-user-preferences"
+        );
+
+      if (storedPreferences) {
+        try {
+          const parsedPreferences = JSON.parse(
+            storedPreferences
+          ) as Partial<UserPreferences>;
+
+          setPreferences({
+            ...DEFAULT_PREFERENCES,
+            ...parsedPreferences,
+          });
+        } catch {
+          setPreferences(DEFAULT_PREFERENCES);
+        }
       }
 
       const {
@@ -249,16 +558,24 @@ export default function SettingsPage() {
       } else {
         setTeam([]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Settings load error:", err);
 
       setError(
-        err?.message || "Could not load your settings."
+        err instanceof Error
+          ? err.message
+          : "Could not load your settings."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, supabase]);
+
+  useEffect(() => {
+    // This effect intentionally starts the asynchronous settings synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadSettings();
+  }, [loadSettings]);
 
   async function saveCompanySettings(
     event: React.FormEvent<HTMLFormElement>
@@ -333,57 +650,60 @@ export default function SettingsPage() {
       };
 
       const {
-  data: savedCompany,
-  error: updateError,
-} = await supabase
-  .from("companies")
-  .update(updatedCompany)
-  .eq("id", company.id)
-  .select("id, name, country, state, currency, timezone")
-  .maybeSingle();
+        data: savedCompany,
+        error: updateError,
+      } = await supabase
+        .from("companies")
+        .update(updatedCompany)
+        .eq("id", company.id)
+        .select(
+          "id, name, country, state, currency, timezone"
+        )
+        .maybeSingle();
 
-if (updateError) {
-  throw updateError;
-}
+      if (updateError) {
+        throw updateError;
+      }
 
-if (!savedCompany) {
-  throw new Error(
-    "The company could not be updated. Please check your company permissions and try again."
-  );
-}
+      if (!savedCompany) {
+        throw new Error(
+          "The company could not be updated. Please check your company permissions and try again."
+        );
+      }
 
-setCompany(savedCompany);
+      setCompany(savedCompany);
+      setCompanyName(savedCompany.name || "");
+      setCountry(savedCompany.country || "");
+      setState(savedCompany.state || "");
+      setCurrency(savedCompany.currency || "USD");
+      setTimezone(
+        savedCompany.timezone || "America/Chicago"
+      );
 
-setCompanyName(savedCompany.name || "");
-setCountry(savedCompany.country || "");
-setState(savedCompany.state || "");
-setCurrency(savedCompany.currency || "USD");
-setTimezone(
-  savedCompany.timezone || "America/Chicago"
-);
+      window.dispatchEvent(
+        new CustomEvent("sbs-company-updated", {
+          detail: {
+            id: savedCompany.id,
+            name: savedCompany.name,
+            currency: savedCompany.currency,
+            timezone: savedCompany.timezone,
+          },
+        })
+      );
 
-window.dispatchEvent(
-  new CustomEvent("sbs-company-updated", {
-    detail: {
-      id: savedCompany.id,
-      name: savedCompany.name,
-      currency: savedCompany.currency,
-      timezone: savedCompany.timezone,
-    },
-  })
-);
       setMessage(
         "Company settings saved successfully."
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Company settings update error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not save company settings."
+        err instanceof Error
+          ? err.message
+          : "Could not save company settings."
       );
     } finally {
       setSavingCompany(false);
@@ -447,18 +767,69 @@ window.dispatchEvent(
       setMessage(
         "Profile updated successfully."
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Profile update error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not update your profile."
+        err instanceof Error
+          ? err.message
+          : "Could not update your profile."
       );
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  function updatePreference<K extends keyof UserPreferences>(
+    key: K,
+    value: UserPreferences[K]
+  ) {
+    setPreferences((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function savePreferences(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    try {
+      setSavingPreferences(true);
+      setMessage("");
+      setError("");
+
+      window.localStorage.setItem(
+        "sbs-user-preferences",
+        JSON.stringify(preferences)
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("sbs-preferences-updated", {
+          detail: preferences,
+        })
+      );
+
+      setMessage(
+        "Application preferences saved successfully."
+      );
+    } catch (err: unknown) {
+      console.error(
+        "Preferences save error:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not save application preferences."
+      );
+    } finally {
+      setSavingPreferences(false);
     }
   }
 
@@ -483,11 +854,19 @@ window.dispatchEvent(
     [fullName]
   );
 
+  const selectedCurrency = useMemo(
+    () =>
+      CURRENCIES.find(
+        (item) => item.code === currency
+      ),
+    [currency]
+  );
+
   if (loading) {
     return (
       <AppShell
         title="Settings"
-        description="Manage your workspace, profile, team, and account."
+        description="Manage your workspace, profile, regional preferences, team, security, and account."
       >
         <div className="settings-loading">
           <div className="settings-loading-card">
@@ -553,7 +932,7 @@ window.dispatchEvent(
   return (
     <AppShell
       title="Settings"
-      description="Manage your workspace, profile, team, and account."
+      description="Manage your workspace, profile, regional preferences, team, security, and account."
     >
       <div className="settings-page">
         {message && (
@@ -589,7 +968,8 @@ window.dispatchEvent(
 
               <p>
                 Configure your company, regional preferences,
-                profile, team access, and account information.
+                application behavior, profile, team access,
+                and account information.
               </p>
             </div>
           </div>
@@ -617,8 +997,8 @@ window.dispatchEvent(
                 <h3>Company Profile</h3>
 
                 <p>
-                  Keep the legal and operational identity of
-                  your company up to date.
+                  Manage your company identity and primary
+                  regional configuration.
                 </p>
               </div>
 
@@ -645,22 +1025,34 @@ window.dispatchEvent(
                   />
 
                   <small>
-                    This name appears throughout your
-                    Contractor Hub workspace.
+                    This name appears throughout your SBS
+                    workspace.
                   </small>
                 </label>
 
                 <label className="settings-field">
                   <span>Country</span>
 
-                  <input
+                  <select
                     value={country}
                     onChange={(event) =>
                       setCountry(event.target.value)
                     }
                     disabled={!isAdmin || savingCompany}
-                    placeholder="United States"
-                  />
+                  >
+                    <option value="">
+                      Select country
+                    </option>
+
+                    {countries.map((item) => (
+                      <option
+                        key={item.code}
+                        value={item.code}
+                      >
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="settings-field">
@@ -672,7 +1064,7 @@ window.dispatchEvent(
                       setState(event.target.value)
                     }
                     disabled={!isAdmin || savingCompany}
-                    placeholder="Texas"
+                    placeholder="State, province, or region"
                   />
                 </label>
 
@@ -687,11 +1079,21 @@ window.dispatchEvent(
                     disabled={!isAdmin || savingCompany}
                   >
                     {CURRENCIES.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
+                      <option
+                        key={item.code}
+                        value={item.code}
+                      >
+                        {item.code} — {item.name}
                       </option>
                     ))}
                   </select>
+
+                  {selectedCurrency && (
+                    <small>
+                      {selectedCurrency.name} will be used
+                      as the workspace currency.
+                    </small>
+                  )}
                 </label>
 
                 <label className="settings-field">
@@ -704,7 +1106,7 @@ window.dispatchEvent(
                     }
                     disabled={!isAdmin || savingCompany}
                   >
-                    {TIMEZONES.map((item) => (
+                    {timezones.map((item) => (
                       <option key={item} value={item}>
                         {item}
                       </option>
@@ -716,8 +1118,9 @@ window.dispatchEvent(
               {isAdmin && (
                 <div className="settings-form-actions">
                   <span>
-                    Changes are protected by your company
-                    permissions.
+                    Company changes affect invoices, reports,
+                    dates, currency formatting, and other
+                    workspace features.
                   </span>
 
                   <button
@@ -734,23 +1137,233 @@ window.dispatchEvent(
             </form>
           </section>
 
-          <section className="settings-card">
+          <section className="settings-card settings-card-wide">
             <div className="settings-card-header">
               <div>
                 <span className="settings-section-label">
                   Localization
                 </span>
 
-                <h3>Regional Preferences</h3>
+                <h3>Language & Regional Preferences</h3>
 
                 <p>
-                  These preferences control how business
-                  information is displayed.
+                  Control how SBS displays language, dates,
+                  times, numbers, and other regional information
+                  for your account.
+                </p>
+              </div>
+
+              <div className="settings-card-badge">
+                User preference
+              </div>
+            </div>
+
+            <form
+              className="settings-form"
+              onSubmit={savePreferences}
+            >
+              <div className="settings-form-grid">
+                <label className="settings-field">
+                  <span>Application language</span>
+
+                  <select
+                    value={preferences.language}
+                    onChange={(event) =>
+                      updatePreference(
+                        "language",
+                        event.target.value
+                      )
+                    }
+                  >
+                    {LANGUAGES.map((item) => (
+                      <option
+                        key={item.code}
+                        value={item.code}
+                      >
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <small>
+                    Full multilingual UI support can be
+                    connected to this preference as additional
+                    translations are added.
+                  </small>
+                </label>
+
+                <label className="settings-field">
+                  <span>Date format</span>
+
+                  <select
+                    value={preferences.dateFormat}
+                    onChange={(event) =>
+                      updatePreference(
+                        "dateFormat",
+                        event.target.value
+                      )
+                    }
+                  >
+                    {DATE_FORMATS.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="settings-field">
+                  <span>Time format</span>
+
+                  <select
+                    value={preferences.timeFormat}
+                    onChange={(event) =>
+                      updatePreference(
+                        "timeFormat",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="12h">
+                      12-hour — 2:30 PM
+                    </option>
+                    <option value="24h">
+                      24-hour — 14:30
+                    </option>
+                  </select>
+                </label>
+
+                <label className="settings-field">
+                  <span>First day of week</span>
+
+                  <select
+                    value={preferences.firstDayOfWeek}
+                    onChange={(event) =>
+                      updatePreference(
+                        "firstDayOfWeek",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="Sunday">
+                      Sunday
+                    </option>
+                    <option value="Monday">
+                      Monday
+                    </option>
+                    <option value="Saturday">
+                      Saturday
+                    </option>
+                  </select>
+                </label>
+
+                <label className="settings-field">
+                  <span>Number format</span>
+
+                  <select
+                    value={preferences.numberFormat}
+                    onChange={(event) =>
+                      updatePreference(
+                        "numberFormat",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="1,234.56">
+                      1,234.56
+                    </option>
+                    <option value="1.234,56">
+                      1.234,56
+                    </option>
+                    <option value="1 234,56">
+                      1 234,56
+                    </option>
+                    <option value="1234.56">
+                      1234.56
+                    </option>
+                  </select>
+                </label>
+
+                <label className="settings-field">
+                  <span>Tax display</span>
+
+                  <select
+                    value={preferences.taxDisplay}
+                    onChange={(event) =>
+                      updatePreference(
+                        "taxDisplay",
+                        event.target.value
+                      )
+                    }
+                  >
+                    <option value="exclusive">
+                      Prices exclude tax
+                    </option>
+                    <option value="inclusive">
+                      Prices include tax
+                    </option>
+                    <option value="both">
+                      Show tax separately
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="settings-form-actions">
+                <span>
+                  These preferences are currently stored for
+                  your account on this device.
+                </span>
+
+                <button
+                  type="submit"
+                  className="secondary-button settings-save-button"
+                  disabled={savingPreferences}
+                >
+                  {savingPreferences
+                    ? "Saving..."
+                    : "Save Preferences"}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <div>
+                <span className="settings-section-label">
+                  Regional Configuration
+                </span>
+
+                <h3>Workspace Region</h3>
+
+                <p>
+                  Current regional configuration used by the
+                  company workspace.
                 </p>
               </div>
             </div>
 
             <div className="settings-info-list">
+              <div className="settings-info-row">
+                <span>Country</span>
+                <strong>
+                  {country
+                    ? getCountryName(country)
+                    : "Not configured"}
+                </strong>
+              </div>
+
+              <div className="settings-info-row">
+                <span>State / Region</span>
+                <strong>
+                  {state || "Not configured"}
+                </strong>
+              </div>
+
               <div className="settings-info-row">
                 <span>Currency</span>
                 <strong>
@@ -762,15 +1375,6 @@ window.dispatchEvent(
                 <span>Timezone</span>
                 <strong>
                   {timezone || "Not configured"}
-                </strong>
-              </div>
-
-              <div className="settings-info-row">
-                <span>Location</span>
-                <strong>
-                  {[state, country]
-                    .filter(Boolean)
-                    .join(", ") || "Not configured"}
                 </strong>
               </div>
             </div>
@@ -931,7 +1535,7 @@ window.dispatchEvent(
 
                 <p>
                   Account-level information and security
-                  controls.
+                  status.
                 </p>
               </div>
             </div>
@@ -1001,7 +1605,8 @@ window.dispatchEvent(
                 <h3>System Information</h3>
 
                 <p>
-                  Internal identifiers for this workspace.
+                  Internal identifiers and account
+                  information for this workspace.
                 </p>
               </div>
             </div>
@@ -1028,6 +1633,91 @@ window.dispatchEvent(
 
                 <strong>
                   {userEmail || "Unavailable"}
+                </strong>
+              </div>
+
+              <div>
+                <span>Application language</span>
+
+                <strong>
+                  {LANGUAGES.find(
+                    (item) =>
+                      item.code ===
+                      preferences.language
+                  )?.name ||
+                    preferences.language}
+                </strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="settings-card settings-card-wide">
+            <div className="settings-card-header">
+              <div>
+                <span className="settings-section-label">
+                  Platform Preferences
+                </span>
+
+                <h3>Current Configuration</h3>
+
+                <p>
+                  A quick overview of the preferences
+                  currently active in this workspace.
+                </p>
+              </div>
+            </div>
+
+            <div className="settings-preference-grid">
+              <div className="settings-preference-item">
+                <span>Language</span>
+                <strong>
+                  {LANGUAGES.find(
+                    (item) =>
+                      item.code ===
+                      preferences.language
+                  )?.name ||
+                    preferences.language}
+                </strong>
+              </div>
+
+              <div className="settings-preference-item">
+                <span>Date format</span>
+                <strong>
+                  {preferences.dateFormat}
+                </strong>
+              </div>
+
+              <div className="settings-preference-item">
+                <span>Time format</span>
+                <strong>
+                  {preferences.timeFormat}
+                </strong>
+              </div>
+
+              <div className="settings-preference-item">
+                <span>Week starts</span>
+                <strong>
+                  {preferences.firstDayOfWeek}
+                </strong>
+              </div>
+
+              <div className="settings-preference-item">
+                <span>Number format</span>
+                <strong>
+                  {preferences.numberFormat}
+                </strong>
+              </div>
+
+              <div className="settings-preference-item">
+                <span>Tax display</span>
+                <strong>
+                  {preferences.taxDisplay ===
+                  "inclusive"
+                    ? "Tax inclusive"
+                    : preferences.taxDisplay ===
+                        "both"
+                      ? "Tax shown separately"
+                      : "Tax exclusive"}
                 </strong>
               </div>
             </div>
@@ -1231,7 +1921,7 @@ window.dispatchEvent(
         }
 
         .settings-card-header p {
-          max-width: 650px;
+          max-width: 700px;
           margin: 6px 0 0;
           color: #718096;
           font-size: 12px;
@@ -1362,7 +2052,7 @@ window.dispatchEvent(
         }
 
         .settings-info-row strong {
-          max-width: 55%;
+          max-width: 60%;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1603,6 +2293,41 @@ window.dispatchEvent(
             monospace;
         }
 
+        .settings-preference-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            3,
+            minmax(0, 1fr)
+          );
+          gap: 12px;
+        }
+
+        .settings-preference-item {
+          min-width: 0;
+          padding: 15px;
+          border: 1px solid #edf0f4;
+          border-radius: 12px;
+          background: #fafbfd;
+        }
+
+        .settings-preference-item span,
+        .settings-preference-item strong {
+          display: block;
+        }
+
+        .settings-preference-item span {
+          margin-bottom: 5px;
+          color: #8a94a6;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .settings-preference-item strong {
+          color: #334155;
+          font-size: 12px;
+          overflow-wrap: anywhere;
+        }
+
         @media (max-width: 1050px) {
           .settings-hero {
             align-items: flex-start;
@@ -1620,6 +2345,13 @@ window.dispatchEvent(
 
           .settings-card-wide {
             grid-column: span 1;
+          }
+
+          .settings-preference-grid {
+            grid-template-columns: repeat(
+              2,
+              minmax(0, 1fr)
+            );
           }
         }
 
@@ -1672,6 +2404,10 @@ window.dispatchEvent(
 
           .settings-role {
             margin-top: 4px;
+          }
+
+          .settings-preference-grid {
+            grid-template-columns: 1fr;
           }
         }
 

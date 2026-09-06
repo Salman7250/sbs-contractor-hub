@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -72,11 +77,7 @@ export default function InvoicesPage() {
   const [success, setSuccess] =
     useState("");
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -179,20 +180,28 @@ export default function InvoicesPage() {
       setCustomers(
         customersResult.data || []
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Invoice page load error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not load invoices."
+        err instanceof Error
+          ? err.message
+          : "Could not load invoices."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, supabase]);
+
+  useEffect(() => {
+    // This effect intentionally starts the asynchronous Supabase
+    // synchronization for the invoice list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   const filteredInvoices =
     useMemo(() => {
@@ -389,15 +398,16 @@ export default function InvoicesPage() {
       setTimeout(() => {
         setSuccess("");
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Invoice delete error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not delete invoice."
+        err instanceof Error
+          ? err.message
+          : "Could not delete invoice."
       );
     }
   }

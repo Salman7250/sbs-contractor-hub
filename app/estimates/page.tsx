@@ -519,6 +519,9 @@ export default function EstimatesPage() {
   }, [getCompanyMembership, supabase]);
 
   useEffect(() => {
+    // This effect synchronizes the page with asynchronously loaded
+    // Supabase data. The state updates occur inside the async operation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPage();
   }, [loadPage]);
 
@@ -867,7 +870,7 @@ export default function EstimatesPage() {
   const leadMap = useMemo(
     () =>
       new Map(
-        leads.map((lead) => [lead.id, lead]),
+        leads.map((lead) => [lead.id, lead])
       ),
     [leads]
   );
@@ -984,7 +987,9 @@ export default function EstimatesPage() {
 
   const viewingLead =
     viewingEstimate?.lead_id
-      ? leadMap.get(viewingEstimate.lead_id)
+      ? leadMap.get(
+          viewingEstimate.lead_id
+        )
       : undefined;
 
   return (
@@ -1661,7 +1666,7 @@ export default function EstimatesPage() {
                       />
 
                       <small>
-                        Use your company's
+                        Use your company&apos;s
                         preferred numbering format.
                       </small>
                     </div>
@@ -3450,7 +3455,7 @@ export default function EstimatesPage() {
             display: flex;
           }
 
-          .view-footer .secondary-button,
+          .view-footer .secondary-button,xa
           .view-footer .primary-button {
             width: 100%;
           }

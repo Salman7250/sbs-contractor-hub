@@ -250,6 +250,8 @@ export default function NewSalePage() {
   );
 
   useEffect(() => {
+    // This effect intentionally starts the asynchronous sales data synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
   }, [loadData]);
 

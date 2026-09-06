@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
@@ -93,70 +99,73 @@ export default function EditSerialNumberPage() {
 
   const [notes, setNotes] = useState("");
 
-  async function loadVariants(
-    selectedProductId: string,
-    selectedVariantId?: string
-  ) {
-    const {
-      data,
-      error: variantError,
-    } = await supabase
-      .from("product_variants")
-      .select(
-        `
+  const loadVariants = useCallback(
+    async (
+      selectedProductId: string,
+      selectedVariantId?: string
+    ) => {
+      const {
+        data,
+        error: variantError,
+      } = await supabase
+        .from("product_variants")
+        .select(
+          `
           id,
           name,
           sku,
           cost_price,
           is_default
         `
-      )
-      .eq("product_id", selectedProductId)
-      .eq("is_active", true)
-      .order("is_default", {
-        ascending: false,
-      })
-      .order("name", {
-        ascending: true,
-      });
+        )
+        .eq("product_id", selectedProductId)
+        .eq("is_active", true)
+        .order("is_default", {
+          ascending: false,
+        })
+        .order("name", {
+          ascending: true,
+        });
 
-    if (variantError) {
-      throw variantError;
-    }
-
-    const loadedVariants = (data || []) as Variant[];
-
-    setVariants(loadedVariants);
-
-    if (selectedVariantId) {
-      const existing = loadedVariants.find(
-        (item) => item.id === selectedVariantId
-      );
-
-      if (existing) {
-        setVariantId(existing.id);
-        setCostPrice(
-          String(existing.cost_price ?? 0)
-        );
-        return;
+      if (variantError) {
+        throw variantError;
       }
-    }
 
-    const defaultVariant = loadedVariants.find(
-      (item) => item.is_default
-    );
+      const loadedVariants = (data || []) as Variant[];
 
-    if (defaultVariant) {
-      setVariantId(defaultVariant.id);
-      setCostPrice(
-        String(defaultVariant.cost_price ?? 0)
+      setVariants(loadedVariants);
+
+      if (selectedVariantId) {
+        const existing = loadedVariants.find(
+          (item) => item.id === selectedVariantId
+        );
+
+        if (existing) {
+          setVariantId(existing.id);
+          setCostPrice(
+            String(existing.cost_price ?? 0)
+          );
+          return;
+        }
+      }
+
+      const defaultVariant = loadedVariants.find(
+        (item) => item.is_default
       );
-    } else {
-      setVariantId("");
-    }
-  }
 
-  async function loadData() {
+      if (defaultVariant) {
+        setVariantId(defaultVariant.id);
+        setCostPrice(
+          String(defaultVariant.cost_price ?? 0)
+        );
+      } else {
+        setVariantId("");
+      }
+    },
+    [supabase]
+  );
+
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -315,11 +324,13 @@ export default function EditSerialNumberPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [loadVariants, router, serialId, supabase]);
 
   useEffect(() => {
-    loadData();
-  }, [serialId]);
+    // This effect intentionally starts the asynchronous serial-number synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   async function handleProductChange(
     newProductId: string

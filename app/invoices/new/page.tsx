@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -124,7 +130,7 @@ export default function NewInvoicePage() {
     useState("");
 
   const [invoiceNumber, setInvoiceNumber] =
-    useState(`INV-${Date.now()}`);
+    useState(() => `INV-${Date.now()}`);
 
   const [status, setStatus] =
     useState("draft");
@@ -143,36 +149,7 @@ export default function NewInvoicePage() {
       createLine("service"),
     ]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (
-        customerDropdownRef.current &&
-        !customerDropdownRef.current.contains(
-          event.target as Node
-        )
-      ) {
-        setCustomerDropdownOpen(false);
-      }
-    }
-
-    document.addEventListener(
-      "mousedown",
-      handleOutsideClick
-    );
-
-    return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleOutsideClick
-      );
-    };
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -478,20 +455,53 @@ export default function NewInvoicePage() {
           createLine("product"),
         ]);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "New invoice load error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not load invoice builder."
+        err instanceof Error
+          ? err.message
+          : "Could not load invoice builder."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, supabase]);
+
+  useEffect(() => {
+    // This effect intentionally starts the asynchronous Supabase
+    // synchronization for the invoice builder.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (
+        customerDropdownRef.current &&
+        !customerDropdownRef.current.contains(
+          event.target as Node
+        )
+      ) {
+        setCustomerDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+    };
+  }, []);
 
   const selectedCustomer = useMemo(() => {
     return (
@@ -1227,15 +1237,16 @@ export default function NewInvoicePage() {
       router.push(
         `/invoices/${invoice.id}`
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Invoice creation error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not create invoice."
+        err instanceof Error
+          ? err.message
+          : "Could not create invoice."
       );
     } finally {
       setSaving(false);

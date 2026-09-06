@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -186,13 +191,7 @@ export default function InvoiceDetailsPage() {
       ].join("-");
     });
 
-  useEffect(() => {
-    if (!invoiceId) return;
-
-    loadInvoice();
-  }, [invoiceId]);
-
-  async function loadInvoice() {
+  const loadInvoice = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -440,20 +439,30 @@ export default function InvoiceDetailsPage() {
       setVariants(
         variantsResult.data || []
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Invoice details load error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not load invoice."
+        err instanceof Error
+          ? err.message
+          : "Could not load invoice."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [invoiceId, router, supabase]);
+
+  useEffect(() => {
+    if (!invoiceId) return;
+
+    // This effect intentionally starts the asynchronous Supabase
+    // synchronization for the invoice identified by the route.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadInvoice();
+  }, [invoiceId, loadInvoice]);
 
   const currency =
     company?.currency || "USD";
@@ -953,15 +962,16 @@ export default function InvoiceDetailsPage() {
        */
 
       await loadInvoice();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Record payment error:",
         err
       );
 
       setPaymentError(
-        err?.message ||
-          "Could not record the payment."
+        err instanceof Error
+          ? err.message
+          : "Could not record the payment."
       );
     } finally {
       setPaymentLoading(false);
@@ -1381,7 +1391,6 @@ export default function InvoiceDetailsPage() {
             )}
           </section>
 
-          {/* PAYMENT HISTORY */}
           <section className="payments-section">
             <div className="section-heading payment-heading">
               <div>
@@ -1697,7 +1706,6 @@ export default function InvoiceDetailsPage() {
         </div>
       </div>
 
-      {/* RECORD PAYMENT MODAL */}
       {showPaymentModal && (
         <div
           className="modal-overlay"
@@ -2273,8 +2281,6 @@ export default function InvoiceDetailsPage() {
           text-align: center;
         }
 
-        /* PAYMENTS */
-
         .payments-section {
           margin-top: 32px;
           padding-top: 28px;
@@ -2654,8 +2660,6 @@ export default function InvoiceDetailsPage() {
         .payment-button:hover {
           background: #047857;
         }
-
-        /* MODAL */
 
         .modal-overlay {
           position: fixed;

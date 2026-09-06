@@ -262,11 +262,13 @@ export default function NewSerialNumberPage() {
       if (defaultVariant) {
         setVariantId(defaultVariant.id);
 
-        if (!costPrice) {
-          setCostPrice(
-            String(defaultVariant.cost_price || 0)
-          );
-        }
+        setCostPrice((currentCostPrice) => {
+          if (currentCostPrice) {
+            return currentCostPrice;
+          }
+
+          return String(defaultVariant.cost_price || 0);
+        });
       } else {
         setVariantId("");
       }
@@ -291,6 +293,8 @@ export default function NewSerialNumberPage() {
     );
 
     if (selectedVariant) {
+      // This effect intentionally synchronizes the selected variant's cost price.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCostPrice(
         String(selectedVariant.cost_price || 0)
       );
@@ -636,15 +640,16 @@ export default function NewSerialNumberPage() {
         `/serial-numbers/${createdUnit.id}`
       );
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         "Create serial number error:",
         error
       );
 
       setErrorMessage(
-        error?.message ||
-          "Unable to create the serial number. Please try again."
+        error instanceof Error
+          ? error.message
+          : "Unable to create the serial number. Please try again."
       );
     } finally {
       setSaving(false);

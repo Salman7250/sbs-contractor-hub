@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -91,11 +91,7 @@ export default function PaymentsPage() {
   );
   const [notes, setNotes] = useState("");
 
-  useEffect(() => {
-    loadPayments();
-  }, []);
-
-  async function getCompanyId(): Promise<string> {
+  const getCompanyId = useCallback(async (): Promise<string> => {
     const {
       data: { user },
       error: authError,
@@ -126,9 +122,9 @@ export default function PaymentsPage() {
     }
 
     return membership.company_id;
-  }
+  }, [router, supabase]);
 
-  async function loadPayments() {
+  const loadPayments = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -260,17 +256,24 @@ export default function PaymentsPage() {
       setCompany(companyResult.data as Company);
       setPayments(rows);
       setInvoices(invoiceList);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
 
       setError(
-        err?.message ||
-          "Unable to load payments."
+        err instanceof Error
+          ? err.message
+          : "Unable to load payments."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [getCompanyId, supabase]);
+
+  useEffect(() => {
+    // This effect intentionally starts asynchronous Supabase synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPayments();
+  }, [loadPayments]);
 
   const currency = company?.currency || "USD";
 
@@ -589,12 +592,13 @@ export default function PaymentsPage() {
           );
         }, 500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
 
       setError(
-        err?.message ||
-          "Unable to record payment."
+        err instanceof Error
+          ? err.message
+          : "Unable to record payment."
       );
     } finally {
       setSaving(false);

@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -89,137 +94,169 @@ export default function SalesPage() {
   const [success, setSuccess] =
     useState("");
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) {
-        throw authError;
+  const getCustomerName = useCallback(
+    (customerId: string | null) => {
+      if (!customerId) {
+        return "Walk-in Customer";
       }
 
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const {
-        data: membership,
-        error: membershipError,
-      } = await supabase
-        .from("company_members")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (membershipError) {
-        throw membershipError;
-      }
-
-      if (!membership?.company_id) {
-        throw new Error(
-          "No company membership found."
-        );
-      }
-
-      const companyId =
-        membership.company_id;
-
-      const [
-        companyResult,
-        ordersResult,
-        customersResult,
-      ] = await Promise.all([
-        supabase
-          .from("companies")
-          .select(
-            "id, name, currency"
-          )
-          .eq("id", companyId)
-          .single(),
-
-        supabase
-          .from("orders")
-          .select("*")
-          .eq(
-            "company_id",
-            companyId
-          )
-          .order("created_at", {
-            ascending: false,
-          }),
-
-        supabase
-          .from("customers")
-          .select(
-            "id, name, email, phone"
-          )
-          .eq(
-            "company_id",
-            companyId
-          )
-          .order("name", {
-            ascending: true,
-          }),
-      ]);
-
-      if (companyResult.error) {
-        throw companyResult.error;
-      }
-
-      if (ordersResult.error) {
-        throw ordersResult.error;
-      }
-
-      if (customersResult.error) {
-        throw customersResult.error;
-      }
-
-      const loadedOrders =
-        ordersResult.data || [];
-
-      setCompany(
-        companyResult.data
+      return (
+        customers.find(
+          (customer) =>
+            customer.id ===
+            customerId
+        )?.name ||
+        "Unknown customer"
       );
+    },
+    [customers]
+  );
 
-      setOrders(
-        loadedOrders
-      );
-
-      setCustomers(
-        customersResult.data || []
-      );
-
+  const getInvoice = useCallback(
+    (orderId: string) => {
       /*
-       * Load invoices linked to these sales orders.
-       *
-       * There is intentionally no unique constraint
-       * on invoices.order_id, so multiple invoices
-       * can technically exist for an order.
+       * Newest invoice first because loadData()
+       * orders invoices by created_at descending.
        */
-      if (loadedOrders.length > 0) {
-        const orderIds =
-          loadedOrders.map(
-            (order) => order.id
-          );
+      return (
+        invoices.find(
+          (invoice) =>
+            invoice.order_id ===
+            orderId
+        ) || null
+      );
+    },
+    [invoices]
+  );
+
+  const loadData = useCallback(
+    async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) {
+          throw authError;
+        }
+
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
 
         const {
-          data: invoiceData,
-          error: invoiceError,
+          data: membership,
+          error: membershipError,
         } = await supabase
-          .from("invoices")
-          .select(
-            `
+          .from("company_members")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (membershipError) {
+          throw membershipError;
+        }
+
+        if (!membership?.company_id) {
+          throw new Error(
+            "No company membership found."
+          );
+        }
+
+        const companyId =
+          membership.company_id;
+
+        const [
+          companyResult,
+          ordersResult,
+          customersResult,
+        ] = await Promise.all([
+          supabase
+            .from("companies")
+            .select(
+              "id, name, currency"
+            )
+            .eq("id", companyId)
+            .single(),
+
+          supabase
+            .from("orders")
+            .select("*")
+            .eq(
+              "company_id",
+              companyId
+            )
+            .order("created_at", {
+              ascending: false,
+            }),
+
+          supabase
+            .from("customers")
+            .select(
+              "id, name, email, phone"
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .order("name", {
+              ascending: true,
+            }),
+        ]);
+
+        if (companyResult.error) {
+          throw companyResult.error;
+        }
+
+        if (ordersResult.error) {
+          throw ordersResult.error;
+        }
+
+        if (customersResult.error) {
+          throw customersResult.error;
+        }
+
+        const loadedOrders =
+          ordersResult.data || [];
+
+        setCompany(
+          companyResult.data
+        );
+
+        setOrders(
+          loadedOrders
+        );
+
+        setCustomers(
+          customersResult.data || []
+        );
+
+        /*
+         * Load invoices linked to these sales orders.
+         *
+         * There is intentionally no unique constraint
+         * on invoices.order_id, so multiple invoices
+         * can technically exist for an order.
+         */
+        if (loadedOrders.length > 0) {
+          const orderIds =
+            loadedOrders.map(
+              (order) => order.id
+            );
+
+          const {
+            data: invoiceData,
+            error: invoiceError,
+          } = await supabase
+            .from("invoices")
+            .select(
+              `
               id,
               order_id,
               invoice_number,
@@ -228,76 +265,52 @@ export default function SalesPage() {
               amount_paid,
               created_at
             `
-          )
-          .eq(
-            "company_id",
-            companyId
-          )
-          .in(
-            "order_id",
-            orderIds
-          )
-          .order("created_at", {
-            ascending: false,
-          });
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .in(
+              "order_id",
+              orderIds
+            )
+            .order("created_at", {
+              ascending: false,
+            });
 
-        if (invoiceError) {
-          throw invoiceError;
+          if (invoiceError) {
+            throw invoiceError;
+          }
+
+          setInvoices(
+            invoiceData || []
+          );
+        } else {
+          setInvoices([]);
         }
-
-        setInvoices(
-          invoiceData || []
+      } catch (err: unknown) {
+        console.error(
+          "Sales page load error:",
+          err
         );
-      } else {
-        setInvoices([]);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load sales orders."
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      console.error(
-        "Sales page load error:",
-        err
-      );
+    },
+    [router, supabase]
+  );
 
-      setError(
-        err?.message ||
-          "Could not load sales orders."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function getCustomerName(
-    customerId: string | null
-  ) {
-    if (!customerId) {
-      return "Walk-in Customer";
-    }
-
-    return (
-      customers.find(
-        (customer) =>
-          customer.id ===
-          customerId
-      )?.name ||
-      "Unknown customer"
-    );
-  }
-
-  function getInvoice(
-    orderId: string
-  ) {
-    /*
-     * Newest invoice first because loadData()
-     * orders invoices by created_at descending.
-     */
-    return (
-      invoices.find(
-        (invoice) =>
-          invoice.order_id ===
-          orderId
-      ) || null
-    );
-  }
+  useEffect(() => {
+    // This effect intentionally starts the asynchronous sales order synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   const filteredOrders =
     useMemo(() => {
@@ -349,8 +362,8 @@ export default function SalesPage() {
       );
     }, [
       orders,
-      customers,
-      invoices,
+      getCustomerName,
+      getInvoice,
       search,
       statusFilter,
     ]);
@@ -440,8 +453,7 @@ export default function SalesPage() {
     };
   }, [
     orders,
-    invoices,
-    customers,
+    getInvoice,
   ]);
 
   function formatCurrency(
@@ -829,15 +841,16 @@ export default function SalesPage() {
       setTimeout(() => {
         setSuccess("");
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Sales order delete error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not delete sales order."
+        err instanceof Error
+          ? err.message
+          : "Could not delete sales order."
       );
     }
   }

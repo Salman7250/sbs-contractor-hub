@@ -1,5 +1,4 @@
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
-import Link from "next/link";
 
 const modules = [
   {

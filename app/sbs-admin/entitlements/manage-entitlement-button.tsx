@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { updateEntitlement } from "./actions/update-entitlement";
-import { usePlanEntitlement } from "./actions/use-plan-entitlement";
+import { usePlanEntitlement as restorePlanEntitlement } from "./actions/use-plan-entitlement";
 
 type Entitlement = {
   id: string;
@@ -90,7 +90,7 @@ export default function ManageEntitlementButton({
     setSuccess("");
 
     startTransition(async () => {
-      const result = await usePlanEntitlement(entitlement.id);
+      const result = await restorePlanEntitlement(entitlement.id);
 
       if (!result.success) {
         setError(

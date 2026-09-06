@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -87,17 +87,7 @@ export default function PaymentDetailsPage() {
   const [error, setError] =
     useState("");
 
-  useEffect(() => {
-    if (!paymentId) {
-      setError("Payment ID is missing.");
-      setLoading(false);
-      return;
-    }
-
-    loadPayment();
-  }, [paymentId]);
-
-  async function loadPayment() {
+  const loadPayment = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -299,20 +289,33 @@ export default function PaymentDetailsPage() {
 
         setOrder(orderData);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Payment details error:",
         err
       );
 
       setError(
-        err?.message ||
-          "Could not load payment."
+        err instanceof Error
+          ? err.message
+          : "Could not load payment."
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [paymentId, router, supabase]);
+
+  useEffect(() => {
+    if (!paymentId) {
+      // This effect intentionally synchronizes the invalid payment ID state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setError("Payment ID is missing.");
+      setLoading(false);
+      return;
+    }
+
+    void loadPayment();
+  }, [paymentId, loadPayment]);
 
   function formatCurrency(
     value: number,

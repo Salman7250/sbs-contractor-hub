@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
@@ -57,6 +62,62 @@ type Product = {
   id: string;
   name: string;
   brand: string | null;
+};
+
+type SerializedUnitRow = {
+  id: string;
+  company_id: string;
+  product_id: string;
+  variant_id: string | null;
+  serial_number: string;
+  barcode: string | null;
+  status: SerialStatus;
+  warehouse_id: string | null;
+  customer_id: string | null;
+  order_id: string | null;
+  invoice_id: string | null;
+  cost_price: number | string | null;
+  warranty_start: string | null;
+  warranty_end: string | null;
+  received_at: string | null;
+  sold_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  products:
+    | {
+        id: string;
+        name: string;
+        brand: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        brand: string | null;
+      }[]
+    | null;
+  product_variants:
+    | {
+        id: string;
+        name: string;
+        sku: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        sku: string | null;
+      }[]
+    | null;
+  customers:
+    | {
+        id: string;
+        name: string;
+      }
+    | {
+        id: string;
+        name: string;
+      }[]
+    | null;
 };
 
 const STATUS_OPTIONS: {
@@ -186,7 +247,6 @@ export default function SerialNumbersPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
   const [currency, setCurrency] = useState("USD");
 
   const [serialUnits, setSerialUnits] = useState<
@@ -202,7 +262,7 @@ export default function SerialNumbersPage() {
   const [productFilter, setProductFilter] =
     useState("all");
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMessage("");
@@ -243,8 +303,6 @@ export default function SerialNumbersPage() {
       }
 
       const currentCompanyId = membership.company_id;
-
-      setCompanyId(currentCompanyId);
 
       // ------------------------------------------------------
       // 3. Get company currency
@@ -317,36 +375,41 @@ export default function SerialNumbersPage() {
       }
 
       const normalizedUnits: SerializedUnit[] =
-        (serializedData || []).map((item: any) => ({
-          id: item.id,
-          company_id: item.company_id,
-          product_id: item.product_id,
-          variant_id: item.variant_id,
-          serial_number: item.serial_number,
-          barcode: item.barcode,
-          status: item.status,
-          warehouse_id: item.warehouse_id,
-          customer_id: item.customer_id,
-          order_id: item.order_id,
-          invoice_id: item.invoice_id,
-          cost_price: Number(item.cost_price || 0),
-          warranty_start: item.warranty_start,
-          warranty_end: item.warranty_end,
-          received_at: item.received_at,
-          sold_at: item.sold_at,
-          notes: item.notes,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          product: Array.isArray(item.products)
-            ? item.products[0] || null
-            : item.products || null,
-          variant: Array.isArray(item.product_variants)
-            ? item.product_variants[0] || null
-            : item.product_variants || null,
-          customer: Array.isArray(item.customers)
-            ? item.customers[0] || null
-            : item.customers || null,
-        }));
+        (serializedData || []).map((rawItem) => {
+          const item =
+            rawItem as unknown as SerializedUnitRow;
+
+          return {
+            id: item.id,
+            company_id: item.company_id,
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            serial_number: item.serial_number,
+            barcode: item.barcode,
+            status: item.status,
+            warehouse_id: item.warehouse_id,
+            customer_id: item.customer_id,
+            order_id: item.order_id,
+            invoice_id: item.invoice_id,
+            cost_price: Number(item.cost_price || 0),
+            warranty_start: item.warranty_start,
+            warranty_end: item.warranty_end,
+            received_at: item.received_at,
+            sold_at: item.sold_at,
+            notes: item.notes,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+            product: Array.isArray(item.products)
+              ? item.products[0] || null
+              : item.products || null,
+            variant: Array.isArray(item.product_variants)
+              ? item.product_variants[0] || null
+              : item.product_variants || null,
+            customer: Array.isArray(item.customers)
+              ? item.customers[0] || null
+              : item.customers || null,
+          };
+        });
 
       setSerialUnits(normalizedUnits);
 
@@ -380,11 +443,13 @@ export default function SerialNumbersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, supabase]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    // This effect intentionally starts the asynchronous serial-number synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   const stats = useMemo(() => {
     const total = serialUnits.length;

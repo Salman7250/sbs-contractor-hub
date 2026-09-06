@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -113,11 +114,11 @@ function getWorkspaceSections(): NavSection[] {
           available: true,
         },
         {
-  label: "Payments",
-  href: "/payments",
-  icon: "payments",
-  available: true,
-},
+          label: "Payments",
+          href: "/payments",
+          icon: "payments",
+          available: true,
+        },
       ],
     },
 
@@ -564,29 +565,7 @@ export default function AppShell({
     return sections.flatMap((section) => section.items);
   }, [sections]);
 
-  const activeItem = useMemo(() => {
-    if (pathname === "/") {
-      return allNavItems.find((item) => item.href === "/") ?? null;
-    }
-
-    return (
-      allNavItems
-        .filter((item) => item.href !== "/")
-        .sort((a, b) => b.href.length - a.href.length)
-        .find((item) => pathname.startsWith(item.href)) ?? null
-    );
-  }, [allNavItems, pathname]);
-
-  const activeTitle =
-    title || activeItem?.label || "Sharif Business Solutions";
-
-  const activeDescription =
-    description ||
-    (activeItem?.label === "Sales & Orders"
-      ? "Manage your sales, orders and customer transactions."
-      : undefined);
-
-  async function loadWorkspace() {
+  const loadWorkspace = useCallback(async () => {
     try {
       setLoadingWorkspace(true);
 
@@ -608,9 +587,7 @@ export default function AppShell({
       if (membership?.company_id) {
         const { data: companyData } = await supabase
           .from("companies")
-          .select(
-            "id, name, currency, timezone, business_type"
-          )
+          .select("id, name, currency, timezone, business_type")
           .eq("id", membership.company_id)
           .maybeSingle();
 
@@ -633,9 +610,11 @@ export default function AppShell({
     } finally {
       setLoadingWorkspace(false);
     }
-  }
+  }, [supabase]);
 
   useEffect(() => {
+    // Workspace state is intentionally synchronized from Supabase here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadWorkspace();
 
     const channel = supabase
@@ -656,9 +635,11 @@ export default function AppShell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [loadWorkspace, supabase]);
 
   useEffect(() => {
+    // Route changes should close the mobile navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileSidebarOpen(false);
   }, [pathname]);
 

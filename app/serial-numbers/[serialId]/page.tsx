@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
@@ -250,7 +255,7 @@ export default function SerialNumberDetailPage() {
 
   const [currency, setCurrency] = useState("USD");
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMessage("");
@@ -493,11 +498,13 @@ export default function SerialNumberDetailPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, serialId, supabase]);
 
   useEffect(() => {
-    loadData();
-  }, [serialId]);
+    // This effect intentionally starts the asynchronous serial-number synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   // ----------------------------------------------------------
   // Warranty state

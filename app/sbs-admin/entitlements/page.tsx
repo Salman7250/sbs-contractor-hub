@@ -40,6 +40,8 @@ type EntitlementRow = {
     | null;
 };
 
+const currentTime = Date.now();
+
 function getCompany(
   company:
     | EntitlementRow["companies"]
@@ -188,7 +190,8 @@ export default async function AdminEntitlementsPage() {
     (item) => item.source === "free"
   ).length;
 
-  const thirtyDaysFromNow = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  const thirtyDaysFromNow =
+    currentTime + 30 * 24 * 60 * 60 * 1000;
 
   const expiringCount = entitlements.filter((item) => {
     if (!item.expires_at) return false;
@@ -196,7 +199,7 @@ export default async function AdminEntitlementsPage() {
     const expiresAt = new Date(item.expires_at).getTime();
 
     return (
-      expiresAt > Date.now() &&
+      expiresAt > currentTime &&
       expiresAt <= thirtyDaysFromNow
     );
   }).length;
@@ -398,7 +401,7 @@ export default async function AdminEntitlementsPage() {
                     entitlement.companies
                   );
 
-                  const module = getModule(
+                  const moduleInfo = getModule(
                     entitlement.modules
                   );
 
@@ -421,11 +424,13 @@ export default async function AdminEntitlementsPage() {
                       {/* Module */}
                       <td className="px-6 py-5">
                         <div className="font-medium text-white">
-                          {module?.name ?? "Unknown module"}
+                          {moduleInfo?.name ?? "Unknown module"}
                         </div>
 
                         <div className="mt-1 text-xs text-slate-500">
-                          {module?.category ?? module?.slug ?? "—"}
+                          {moduleInfo?.category ??
+                            moduleInfo?.slug ??
+                            "—"}
                         </div>
                       </td>
 
@@ -488,7 +493,7 @@ export default async function AdminEntitlementsPage() {
 
                       {/* Action */}
                       <td className="px-6 py-5 text-right">
-                        {company && module && (
+                        {company && moduleInfo && (
                           <ManageEntitlementButton
                             entitlement={{
                               id: entitlement.id,
@@ -497,7 +502,7 @@ export default async function AdminEntitlementsPage() {
                               companyName: company.name,
                               moduleId:
                                 entitlement.module_id,
-                              moduleName: module.name,
+                              moduleName: moduleInfo.name,
                               access:
                                 entitlement.access,
                               source:

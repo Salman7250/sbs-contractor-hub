@@ -537,6 +537,8 @@ export default function OrderDetailsPage() {
   );
 
   useEffect(() => {
+    // This effect intentionally starts the asynchronous order synchronization.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadOrder();
   }, [loadOrder]);
 

@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 
@@ -1302,7 +1301,6 @@ export default function ProductsPage() {
               products={filteredProducts}
               selectedProductIds={selectedProductIds}
               actionProductId={actionProductId}
-              currency={currency}
               money={money}
               onToggleSelection={
                 toggleProductSelection
@@ -1368,7 +1366,6 @@ function ProductTable({
   products: ProductWithVariants[];
   selectedProductIds: string[];
   actionProductId: string | null;
-  currency: string;
   money: (value: number) => string;
   onToggleSelection: (id: string) => void;
   onToggleSelectAll: () => void;
