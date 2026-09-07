@@ -133,7 +133,7 @@ function Icon({
       return (
         <svg {...common}>
           <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 4 1-4Z" />
         </svg>
       );
 
@@ -649,24 +649,24 @@ export default function WarehouseLocationsPage() {
   return (
     <AppShell>
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1500px] px-6 py-8">
           {/* Header */}
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-                <span>Warehouses</span>
-                <Icon name="chevron" size={14} />
-                <span className="text-slate-700">Locations</span>
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-xl bg-slate-900 p-2.5 text-white">
+                <Icon name="location" size={20} />
               </div>
 
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Locations
-              </h1>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+                  Locations
+                </h1>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Manage the physical locations, zones, racks, shelves, and
-                bins inside your warehouses.
-              </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Manage the physical locations, zones, racks, shelves, and
+                  bins inside your warehouses.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -674,7 +674,7 @@ export default function WarehouseLocationsPage() {
                 type="button"
                 onClick={() => loadData(true)}
                 disabled={refreshing}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Icon name="refresh" size={17} />
                 Refresh
@@ -684,12 +684,39 @@ export default function WarehouseLocationsPage() {
                 type="button"
                 onClick={openCreateModal}
                 disabled={activeWarehouses.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="plus" size={17} />
                 New Location
               </button>
             </div>
+          </div>
+
+          {/* Module Navigation */}
+          <div className="mb-6 grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-white p-2">
+            <a
+              href="/warehouses"
+              className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Icon name="warehouse" size={16} />
+              Warehouses
+            </a>
+
+            <a
+              href="/warehouses/locations"
+              className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white"
+            >
+              <Icon name="location" size={16} />
+              Locations
+            </a>
+
+            <a
+              href="/warehouses/transfers"
+              className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Icon name="layers" size={16} />
+              Transfers
+            </a>
           </div>
 
           {/* Messages */}
@@ -723,13 +750,14 @@ export default function WarehouseLocationsPage() {
 
           {/* Stats */}
           <div className="mb-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">
                     Total Locations
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">
                     {stats.total}
                   </p>
                 </div>
@@ -744,13 +772,14 @@ export default function WarehouseLocationsPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">
                     Active
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">
                     {stats.active}
                   </p>
                 </div>
@@ -765,13 +794,14 @@ export default function WarehouseLocationsPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">
                     Inactive
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">
+
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">
                     {stats.inactive}
                   </p>
                 </div>
@@ -787,65 +817,80 @@ export default function WarehouseLocationsPage() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
-                <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Icon name="search" size={18} />
-                </div>
+          {/* Toolbar */}
+          <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">
+                  Warehouse Locations
+                </h2>
 
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search locations, codes, warehouses..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100"
-                />
+                <p className="mt-1 text-xs text-slate-500">
+                  {filteredLocations.length} location
+                  {filteredLocations.length === 1 ? "" : "s"} shown
+                </p>
               </div>
 
-              <select
-                value={warehouseFilter}
-                onChange={(e) => setWarehouseFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-              >
-                <option value="all">All Warehouses</option>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Icon name="search" size={18} />
+                  </div>
 
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                    {warehouse.code ? ` (${warehouse.code})` : ""}
-                  </option>
-                ))}
-              </select>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search locations..."
+                    className="w-full min-w-[260px] rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  />
+                </div>
 
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={showInactive}
-                  onChange={(e) => setShowInactive(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Show inactive
-              </label>
+                <select
+                  value={warehouseFilter}
+                  onChange={(e) => setWarehouseFilter(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                >
+                  <option value="all">All Warehouses</option>
+
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                      {warehouse.code ? ` (${warehouse.code})` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={showInactive}
+                    onChange={(e) => setShowInactive(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+
+                  Show inactive
+                </label>
+              </div>
             </div>
           </div>
 
           {/* Content */}
           {loading ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white p-12 text-center">
               <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800" />
+
               <p className="text-sm text-slate-500">
                 Loading locations...
               </p>
             </div>
           ) : activeWarehouses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
                 <Icon name="warehouse" size={24} />
               </div>
 
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-slate-950">
                 No active warehouses
               </h2>
 
@@ -855,12 +900,12 @@ export default function WarehouseLocationsPage() {
               </p>
             </div>
           ) : filteredLocations.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
                 <Icon name="location" size={24} />
               </div>
 
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-slate-950">
                 No locations found
               </h2>
 
@@ -874,7 +919,7 @@ export default function WarehouseLocationsPage() {
                 <button
                   type="button"
                   onClick={openCreateModal}
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
                   <Icon name="plus" size={17} />
                   New Location
@@ -882,12 +927,12 @@ export default function WarehouseLocationsPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              {/* Desktop table */}
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {/* Desktop */}
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[900px]">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/70">
+                    <tr className="border-b border-slate-200 bg-slate-50">
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Location
                       </th>
@@ -914,7 +959,7 @@ export default function WarehouseLocationsPage() {
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {filteredLocations.map((location) => {
                       const warehouse = warehouseMap.get(
                         location.warehouse_id
@@ -923,7 +968,7 @@ export default function WarehouseLocationsPage() {
                       return (
                         <tr
                           key={location.id}
-                          className="transition hover:bg-slate-50/60"
+                          className="border-b border-slate-100 transition last:border-0 hover:bg-slate-50"
                         >
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-3">
@@ -945,10 +990,8 @@ export default function WarehouseLocationsPage() {
 
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-2 text-sm text-slate-700">
-                              <Icon
-                                name="warehouse"
-                                size={16}
-                              />
+                              <Icon name="warehouse" size={16} />
+
                               <span>
                                 {warehouse?.name || "Unknown warehouse"}
                               </span>
@@ -991,9 +1034,7 @@ export default function WarehouseLocationsPage() {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  openEditModal(location)
-                                }
+                                onClick={() => openEditModal(location)}
                                 className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                                 title="Edit"
                               >
@@ -1024,9 +1065,7 @@ export default function WarehouseLocationsPage() {
 
                               <button
                                 type="button"
-                                onClick={() =>
-                                  deleteLocation(location)
-                                }
+                                onClick={() => deleteLocation(location)}
                                 className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                                 title="Delete"
                               >
@@ -1041,7 +1080,7 @@ export default function WarehouseLocationsPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
+              {/* Mobile */}
               <div className="divide-y divide-slate-100 md:hidden">
                 {filteredLocations.map((location) => {
                   const warehouse = warehouseMap.get(
@@ -1083,6 +1122,7 @@ export default function WarehouseLocationsPage() {
                           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                             Warehouse
                           </p>
+
                           <p className="mt-1 text-sm text-slate-700">
                             {warehouse?.name || "Unknown"}
                           </p>
@@ -1092,6 +1132,7 @@ export default function WarehouseLocationsPage() {
                           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                             Type
                           </p>
+
                           <p className="mt-1 text-sm capitalize text-slate-700">
                             {location.location_type || "bin"}
                           </p>
@@ -1101,6 +1142,7 @@ export default function WarehouseLocationsPage() {
                           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                             Parent
                           </p>
+
                           <p className="mt-1 text-sm text-slate-700">
                             {getParentName(location)}
                           </p>
@@ -1110,6 +1152,7 @@ export default function WarehouseLocationsPage() {
                           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
                             Created
                           </p>
+
                           <p className="mt-1 text-sm text-slate-700">
                             {formatDate(location.created_at)}
                           </p>
@@ -1120,7 +1163,7 @@ export default function WarehouseLocationsPage() {
                         <button
                           type="button"
                           onClick={() => openEditModal(location)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                         >
                           <Icon name="edit" size={15} />
                           Edit
@@ -1131,7 +1174,7 @@ export default function WarehouseLocationsPage() {
                           onClick={() =>
                             toggleLocationStatus(location)
                           }
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                         >
                           <Icon
                             name={
@@ -1141,6 +1184,7 @@ export default function WarehouseLocationsPage() {
                             }
                             size={15}
                           />
+
                           {location.is_active
                             ? "Deactivate"
                             : "Activate"}
@@ -1149,7 +1193,7 @@ export default function WarehouseLocationsPage() {
                         <button
                           type="button"
                           onClick={() => deleteLocation(location)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-medium text-red-600"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50"
                         >
                           <Icon name="trash" size={15} />
                           Delete
@@ -1162,7 +1206,6 @@ export default function WarehouseLocationsPage() {
             </div>
           )}
 
-          {/* Footer */}
           {!loading && filteredLocations.length > 0 && (
             <div className="mt-4 text-xs text-slate-400">
               Showing {filteredLocations.length} of {locations.length}{" "}
@@ -1177,7 +1220,7 @@ export default function WarehouseLocationsPage() {
             <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
               <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-slate-950">
                     {editingLocation
                       ? "Edit Location"
                       : "New Location"}
@@ -1192,7 +1235,7 @@ export default function WarehouseLocationsPage() {
                   type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                 >
                   <Icon name="close" size={19} />
                 </button>
@@ -1217,7 +1260,7 @@ export default function WarehouseLocationsPage() {
                           }))
                         }
                         required
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">Select warehouse</option>
 
@@ -1285,7 +1328,7 @@ export default function WarehouseLocationsPage() {
                             parent_location_id: e.target.value,
                           }))
                         }
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                       >
                         <option value="">
                           No parent — root location
@@ -1369,12 +1412,12 @@ export default function WarehouseLocationsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50/70 px-6 py-4">
+                <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
                   <button
                     type="button"
                     onClick={closeModal}
                     disabled={saving}
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -1382,7 +1425,7 @@ export default function WarehouseLocationsPage() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving && (
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />

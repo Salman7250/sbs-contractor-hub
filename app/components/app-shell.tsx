@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -69,7 +70,6 @@ type WorkspaceCompany = {
 
 type WorkspaceProfile = {
   full_name: string | null;
-  avatar_url: string | null;
 };
 
 function getWorkspaceSections(): NavSection[] {
@@ -149,9 +149,9 @@ function getWorkspaceSections(): NavSection[] {
         },
         {
           label: "Pricing",
-          href: "/pricing",
+          href: "/pricing/products",
           icon: "pricing",
-          available: false,
+          available: true,
         },
       ],
     },
@@ -564,7 +564,7 @@ export default function AppShell({
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url")
+        .select("full_name")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -750,6 +750,14 @@ export default function AppShell({
           letter-spacing: -0.03em;
           flex-shrink: 0;
           box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+          overflow: hidden;
+        }
+
+        .sbs-brand-logo {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
         }
 
         .sbs-brand-text {
@@ -1303,7 +1311,16 @@ export default function AppShell({
             onClick={() => router.push("/")}
             aria-label="Go to dashboard"
           >
-            <span className="sbs-brand-mark">SBS</span>
+            <span className="sbs-brand-mark">
+              <Image
+                src="/sbs-logo.png"
+                alt="Sharif Business Solutions"
+                width={36}
+                height={36}
+                className="sbs-brand-logo"
+                priority
+              />
+            </span>
 
             <span className="sbs-brand-text">
               <span className="sbs-brand-name">
