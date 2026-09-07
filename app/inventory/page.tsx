@@ -35,7 +35,12 @@ type Product = {
   name: string;
   brand: string | null;
   category: string | null;
-  tracking_mode: "none" | "quantity" | "batch" | "serial" | null;
+  tracking_mode:
+    | "none"
+    | "quantity"
+    | "batch"
+    | "serial"
+    | null;
   track_inventory: boolean;
 };
 
@@ -164,7 +169,10 @@ function getStatus(
     return "out_of_stock";
   }
 
-  if (available <= reorderLevel && reorderLevel > 0) {
+  if (
+    available <= reorderLevel &&
+    reorderLevel > 0
+  ) {
     return "low_stock";
   }
 
@@ -177,10 +185,13 @@ function statusLabel(
   switch (status) {
     case "in_stock":
       return "In Stock";
+
     case "low_stock":
       return "Low Stock";
+
     case "out_of_stock":
       return "Out of Stock";
+
     default:
       return status;
   }
@@ -380,7 +391,13 @@ function Icon({
     case "serial":
       return (
         <svg {...common}>
-          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <rect
+            x="4"
+            y="5"
+            width="16"
+            height="14"
+            rx="2"
+          />
           <path d="M8 9v6M11 9v6M14 9v6M17 9v6" />
         </svg>
       );
@@ -473,11 +490,13 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<InventoryStatus>("all");
+
   const [warehouseFilter, setWarehouseFilter] =
     useState("all");
 
   const [sortKey, setSortKey] =
     useState<SortKey>("product");
+
   const [sortDirection, setSortDirection] =
     useState<SortDirection>("asc");
 
@@ -542,6 +561,15 @@ export default function InventoryPage() {
             .eq("id", companyId)
             .maybeSingle(),
 
+          /*
+           * IMPORTANT:
+           * Never filter real inventory rows using product tracking
+           * metadata here.
+           *
+           * The inventory table is the authoritative quantity/balance
+           * ledger. Every real row must survive enrichment even if
+           * product metadata is temporarily incomplete.
+           */
           supabase
             .from("inventory")
             .select(
@@ -688,6 +716,9 @@ export default function InventoryPage() {
           (locationsResult.data ??
             []) as WarehouseLocation[];
 
+        /*
+         * Preserve every real inventory row.
+         */
         const inventoryRows =
           (inventoryResult.data ?? []) as InventoryRow[];
 
@@ -719,7 +750,30 @@ export default function InventoryPage() {
           ])
         );
 
-        const enrichedInventory =
+        /*
+         * These are the products whose quantity can be represented
+         * by the inventory quantity ledger.
+         *
+         * Serial products are intentionally excluded because their
+         * authoritative stock lives in serialized_units.
+         *
+         * Products with tracking_mode = none are also excluded because
+         * they are not inventory-tracked.
+         */
+        const trackedProductIds = new Set(
+          productRows
+            .filter(
+              (product) =>
+                product.tracking_mode === "quantity" ||
+                product.tracking_mode === "batch"
+            )
+            .map((product) => product.id)
+        );
+
+        /*
+         * Preserve ALL existing inventory rows first.
+         */
+        const enrichedRealInventory =
           inventoryRows.map((row) => ({
             ...row,
             product:
@@ -738,6 +792,74 @@ export default function InventoryPage() {
                 : null,
           }));
 
+        /*
+         * Add virtual zero-stock rows for tracked variants that do
+         * not yet have an inventory row.
+         *
+         * This allows a newly-created quantity/batch product to appear
+         * in Inventory as Out of Stock before its first receipt.
+         *
+         * We deliberately do NOT create database rows here.
+         */
+        const existingInventoryVariantIds =
+          new Set(
+            inventoryRows.map(
+              (row) => row.variant_id
+            )
+          );
+
+        const zeroInventoryRows: InventoryItem[] =
+          [];
+
+        for (const variant of variantRows) {
+          const product =
+            productMap.get(variant.product_id);
+
+          if (!product) {
+            continue;
+          }
+
+          if (
+            !trackedProductIds.has(
+              variant.product_id
+            )
+          ) {
+            continue;
+          }
+
+          if (
+            existingInventoryVariantIds.has(
+              variant.id
+            )
+          ) {
+            continue;
+          }
+
+          zeroInventoryRows.push({
+            id: `virtual-${variant.id}`,
+            company_id: companyId,
+            product_id: variant.product_id,
+            variant_id: variant.id,
+            quantity: 0,
+            reserved_quantity: 0,
+            reorder_level: 0,
+            reorder_quantity: 0,
+            warehouse_id: null,
+            location_id: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            product,
+            variant,
+            warehouse: null,
+            location: null,
+          });
+        }
+
+        const enrichedInventory = [
+          ...enrichedRealInventory,
+          ...zeroInventoryRows,
+        ];
+
         setCurrency(
           typeof companyResult.data?.currency ===
             "string"
@@ -749,6 +871,7 @@ export default function InventoryPage() {
         setVariants(variantRows);
         setWarehouses(warehouseRows);
         setInventory(enrichedInventory);
+
         setMovements(
           (movementsResult.data ?? []) as Movement[]
         );
@@ -1044,6 +1167,7 @@ export default function InventoryPage() {
           <div className="mx-auto max-w-[1600px] px-6 py-8">
             <div className="animate-pulse">
               <div className="h-8 w-48 rounded bg-slate-200" />
+
               <div className="mt-3 h-4 w-80 rounded bg-slate-200" />
 
               <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1110,11 +1234,7 @@ export default function InventoryPage() {
                 href="/inventory/receiving"
                 className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
               >
-                <Icon
-                  name="plus"
-                  size={16}
-                />
-
+                <Icon name="plus" size={16} />
                 Receive Stock
               </Link>
 
@@ -1126,11 +1246,7 @@ export default function InventoryPage() {
                     "1px solid #e2e8f0",
                 }}
               >
-                <Icon
-                  name="layers"
-                  size={16}
-                />
-
+                <Icon name="layers" size={16} />
                 Adjust Stock
               </Link>
 
@@ -1142,11 +1258,7 @@ export default function InventoryPage() {
                     "1px solid #e2e8f0",
                 }}
               >
-                <Icon
-                  name="serial"
-                  size={16}
-                />
-
+                <Icon name="serial" size={16} />
                 Serial Numbers
               </Link>
 
@@ -1162,10 +1274,7 @@ export default function InventoryPage() {
                     "1px solid #e2e8f0",
                 }}
               >
-                <Icon
-                  name="refresh"
-                  size={16}
-                />
+                <Icon name="refresh" size={16} />
 
                 {refreshing
                   ? "Refreshing..."
@@ -1470,12 +1579,15 @@ export default function InventoryPage() {
                     <option value="all">
                       All Status
                     </option>
+
                     <option value="in_stock">
                       In Stock
                     </option>
+
                     <option value="low_stock">
                       Low Stock
                     </option>
+
                     <option value="out_of_stock">
                       Out of Stock
                     </option>
@@ -1572,9 +1684,7 @@ export default function InventoryPage() {
                 <table className="min-w-[1050px] w-full">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70">
-                      <th
-                        className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
-                      >
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <button
                           type="button"
                           onClick={() =>
@@ -1593,9 +1703,7 @@ export default function InventoryPage() {
                         Tracking
                       </th>
 
-                      <th
-                        className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-                      >
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <button
                           type="button"
                           onClick={() =>
@@ -1610,9 +1718,7 @@ export default function InventoryPage() {
                         </button>
                       </th>
 
-                      <th
-                        className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-                      >
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <button
                           type="button"
                           onClick={() =>
@@ -1631,9 +1737,7 @@ export default function InventoryPage() {
                         Warehouse / Location
                       </th>
 
-                      <th
-                        className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-                      >
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <button
                           type="button"
                           onClick={() =>
@@ -1652,9 +1756,7 @@ export default function InventoryPage() {
                         Status
                       </th>
 
-                      <th
-                        className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-                      >
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <button
                           type="button"
                           onClick={() =>
@@ -1709,7 +1811,10 @@ export default function InventoryPage() {
                                 </div>
 
                                 <div className="min-w-0">
-                                  <Link href={`/inventory/${item.product_id}`}>
+                                  <Link
+                                    href={`/inventory/${item.product_id}`}
+                                    className="font-medium text-slate-900 hover:text-slate-600"
+                                  >
                                     {product?.name ??
                                       "Unknown Product"}
                                   </Link>

@@ -62,6 +62,22 @@ type OrderItem = {
   updated_at: string;
 };
 
+type ProductTracking = {
+  id: string;
+  tracking_mode: string | null;
+};
+
+type SerializedUnit = {
+  id: string;
+  serial_number: string;
+  barcode: string | null;
+  status: string;
+  product_id: string;
+  variant_id: string | null;
+  warehouse_id: string | null;
+  location_id: string | null;
+};
+
 type Invoice = {
   id: string;
   invoice_number: string;
@@ -88,6 +104,20 @@ type InvoicePayment = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+  code: string;
+  is_default: boolean;
+};
+
+type WarehouseLocation = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  code: string;
 };
 
 function formatCurrency(
@@ -207,10 +237,55 @@ export default function OrderDetailsPage() {
   const [printing, setPrinting] =
     useState(false);
 
+  const [isCancelling, setIsCancelling] =
+    useState(false);
+
+  const [cancellationError, setCancellationError] =
+    useState<string | null>(null);
+
+  const [cancellationSuccess, setCancellationSuccess] =
+    useState<string | null>(null);
+
   const [invoiceLoading, setInvoiceLoading] =
     useState(false);
 
   const [paymentsLoading, setPaymentsLoading] =
+    useState(false);
+
+  const [warehouses, setWarehouses] =
+    useState<Warehouse[]>([]);
+
+  const [locations, setLocations] =
+    useState<WarehouseLocation[]>([]);
+
+  const [selectedWarehouseId, setSelectedWarehouseId] =
+    useState("");
+
+  const [selectedLocationId, setSelectedLocationId] =
+    useState("");
+
+  const [fulfillmentOptionsLoading, setFulfillmentOptionsLoading] =
+    useState(false);
+
+  const [isFulfilling, setIsFulfilling] =
+    useState(false);
+
+  const [fulfillmentError, setFulfillmentError] =
+    useState<string | null>(null);
+
+  const [fulfillmentSuccess, setFulfillmentSuccess] =
+    useState<string | null>(null);
+
+  const [productTrackingModes, setProductTrackingModes] =
+    useState<Record<string, string>>({});
+
+  const [availableSerials, setAvailableSerials] =
+    useState<Record<string, SerializedUnit[]>>({});
+
+  const [selectedSerials, setSelectedSerials] =
+    useState<Record<string, string[]>>({});
+
+  const [serialsLoading, setSerialsLoading] =
     useState(false);
 
   const loadFinancialConnections = useCallback(
@@ -222,13 +297,6 @@ export default function OrderDetailsPage() {
       setPaymentsLoading(true);
 
       try {
-        /*
-         * An order can technically have more than one invoice
-         * because order_id is not currently UNIQUE.
-         *
-         * We therefore load the newest linked invoice instead
-         * of using maybeSingle().
-         */
         const {
           data: invoiceData,
           error: invoiceError,
@@ -329,6 +397,120 @@ export default function OrderDetailsPage() {
     [supabase]
   );
 
+  const loadFulfillmentOptions = useCallback(
+    async (companyId: string) => {
+      setFulfillmentOptionsLoading(true);
+      setFulfillmentError(null);
+
+      try {
+        const [
+          warehousesResult,
+          locationsResult,
+        ] = await Promise.all([
+          supabase
+            .from("warehouses")
+            .select(
+              "id, name, code, is_default"
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .eq("is_active", true)
+            .order("is_default", {
+              ascending: false,
+            })
+            .order("name", {
+              ascending: true,
+            }),
+
+          supabase
+            .from("warehouse_locations")
+            .select(
+              "id, warehouse_id, name, code"
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .eq("is_active", true)
+            .order("name", {
+              ascending: true,
+            }),
+        ]);
+
+        if (warehousesResult.error) {
+          throw warehousesResult.error;
+        }
+
+        if (locationsResult.error) {
+          throw locationsResult.error;
+        }
+
+        const loadedWarehouses =
+          (warehousesResult.data ||
+            []) as Warehouse[];
+
+        const loadedLocations =
+          (locationsResult.data ||
+            []) as WarehouseLocation[];
+
+        const defaultWarehouse =
+          loadedWarehouses.find(
+            (warehouse) =>
+              warehouse.is_default
+          ) ||
+          loadedWarehouses[0];
+
+        const defaultLocation =
+          defaultWarehouse
+            ? loadedLocations.find(
+                (location) =>
+                  location.warehouse_id ===
+                  defaultWarehouse.id
+              )
+            : null;
+
+        setWarehouses(
+          loadedWarehouses
+        );
+
+        setLocations(
+          loadedLocations
+        );
+
+        setSelectedWarehouseId(
+          defaultWarehouse?.id ||
+            ""
+        );
+
+        setSelectedLocationId(
+          defaultLocation?.id ||
+            ""
+        );
+      } catch (caughtError) {
+        console.error(
+          "Fulfillment options loading error:",
+          caughtError
+        );
+
+        setWarehouses([]);
+        setLocations([]);
+        setSelectedWarehouseId("");
+        setSelectedLocationId("");
+
+        setFulfillmentError(
+          "Unable to load active warehouses and locations."
+        );
+      } finally {
+        setFulfillmentOptionsLoading(
+          false
+        );
+      }
+    },
+    [supabase]
+  );
+
   const loadOrder = useCallback(
     async () => {
       if (!orderId) {
@@ -343,7 +525,8 @@ export default function OrderDetailsPage() {
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (userError || !user) {
         setError(
@@ -359,7 +542,10 @@ export default function OrderDetailsPage() {
       } = await supabase
         .from("company_members")
         .select("company_id")
-        .eq("user_id", user.id)
+        .eq(
+          "user_id",
+          user.id
+        )
         .limit(1)
         .maybeSingle();
 
@@ -377,15 +563,14 @@ export default function OrderDetailsPage() {
       const companyId =
         membership.company_id;
 
-      /*
-       * Load company information.
-       */
       const {
         data: companyData,
         error: companyError,
       } = await supabase
         .from("companies")
-        .select("id, name, currency")
+        .select(
+          "id, name, currency"
+        )
         .eq("id", companyId)
         .maybeSingle();
 
@@ -402,12 +587,6 @@ export default function OrderDetailsPage() {
         );
       }
 
-      /*
-       * Load the order.
-       *
-       * company_id is always included in the query
-       * to maintain tenant isolation.
-       */
       const {
         data: orderData,
         error: orderError,
@@ -440,7 +619,10 @@ export default function OrderDetailsPage() {
           `
         )
         .eq("id", orderId)
-        .eq("company_id", companyId)
+        .eq(
+          "company_id",
+          companyId
+        )
         .maybeSingle();
 
       if (orderError) {
@@ -452,6 +634,7 @@ export default function OrderDetailsPage() {
         setError(
           "We couldn't load this order."
         );
+
         setLoading(false);
         return;
       }
@@ -460,13 +643,11 @@ export default function OrderDetailsPage() {
         setError(
           "This order could not be found."
         );
+
         setLoading(false);
         return;
       }
 
-      /*
-       * Load order items.
-       */
       const {
         data: itemsData,
         error: itemsError,
@@ -492,8 +673,14 @@ export default function OrderDetailsPage() {
             updated_at
           `
         )
-        .eq("order_id", orderId)
-        .eq("company_id", companyId)
+        .eq(
+          "order_id",
+          orderId
+        )
+        .eq(
+          "company_id",
+          companyId
+        )
         .order("created_at", {
           ascending: true,
         });
@@ -507,25 +694,95 @@ export default function OrderDetailsPage() {
         setError(
           "The order loaded, but its items could not be loaded."
         );
+
         setLoading(false);
         return;
       }
+
+      const loadedItems =
+        (itemsData ||
+          []) as OrderItem[];
 
       setOrder(
         orderData as unknown as Order
       );
 
-      setItems(
-        (itemsData || []) as OrderItem[]
-      );
+      setItems(loadedItems);
 
-      /*
-       * Load invoice + payments connected to this order.
-       */
-      await loadFinancialConnections(
-        companyId,
-        orderId
-      );
+      const productIds =
+        Array.from(
+          new Set(
+            loadedItems
+              .map(
+                (item) =>
+                  item.product_id
+              )
+              .filter(
+                (
+                  productId
+                ): productId is string =>
+                  Boolean(productId)
+              )
+          )
+        );
+
+      if (productIds.length > 0) {
+        const {
+          data: trackingData,
+          error: trackingError,
+        } = await supabase
+          .from("products")
+          .select(
+            "id, tracking_mode"
+          )
+          .eq(
+            "company_id",
+            companyId
+          )
+          .in(
+            "id",
+            productIds
+          );
+
+        if (trackingError) {
+          console.error(
+            "Product tracking mode loading error:",
+            trackingError
+          );
+        }
+
+        const trackingMap:
+          Record<string, string> =
+          {};
+
+        for (
+          const product of
+            (trackingData ||
+              []) as ProductTracking[]
+        ) {
+          trackingMap[
+            product.id
+          ] =
+            product.tracking_mode ||
+            "none";
+        }
+
+        setProductTrackingModes(
+          trackingMap
+        );
+      } else {
+        setProductTrackingModes({});
+      }
+
+      await Promise.all([
+        loadFinancialConnections(
+          companyId,
+          orderId
+        ),
+        loadFulfillmentOptions(
+          companyId
+        ),
+      ]);
 
       setLoading(false);
     },
@@ -533,14 +790,19 @@ export default function OrderDetailsPage() {
       orderId,
       supabase,
       loadFinancialConnections,
+      loadFulfillmentOptions,
     ]
   );
 
   useEffect(() => {
-    // This effect intentionally starts the asynchronous order synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  const timer = window.setTimeout(() => {
     void loadOrder();
-  }, [loadOrder]);
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [loadOrder]);
 
   function printOrder() {
     setPrinting(true);
@@ -582,6 +844,609 @@ export default function OrderDetailsPage() {
         invoice.id
       )}`
     );
+  }
+
+  const availableLocations =
+    useMemo(
+      () =>
+        locations.filter(
+          (location) =>
+            location.warehouse_id ===
+            selectedWarehouseId
+        ),
+      [
+        locations,
+        selectedWarehouseId,
+      ]
+    );
+
+  const serialItems =
+    useMemo(
+      () =>
+        items.filter(
+          (item) =>
+            Boolean(
+              item.product_id
+            ) &&
+            productTrackingModes[
+              item.product_id ||
+                ""
+            ] === "serial"
+        ),
+      [
+        items,
+        productTrackingModes,
+      ]
+    );
+
+  const hasSerialItems =
+    serialItems.length > 0;
+
+  const loadAvailableSerials =
+    useCallback(
+      async () => {
+        if (
+          !order ||
+          !selectedWarehouseId ||
+          !selectedLocationId ||
+          serialItems.length === 0
+        ) {
+          setAvailableSerials(
+            {}
+          );
+          setSelectedSerials({});
+          return;
+        }
+
+        setSerialsLoading(true);
+
+        try {
+          const productIds =
+            Array.from(
+              new Set(
+                serialItems
+                  .map(
+                    (item) =>
+                      item.product_id
+                  )
+                  .filter(
+                    (
+                      id
+                    ): id is string =>
+                      Boolean(id)
+                  )
+              )
+            );
+
+          const {
+            data,
+            error: serialError,
+          } =
+            await supabase
+              .from(
+                "serialized_units"
+              )
+              .select(
+                `
+                  id,
+                  serial_number,
+                  barcode,
+                  status,
+                  product_id,
+                  variant_id,
+                  warehouse_id,
+                  location_id
+                `
+              )
+              .eq(
+                "company_id",
+                order.company_id
+              )
+              .eq(
+                "status",
+                "available"
+              )
+              .eq(
+                "warehouse_id",
+                selectedWarehouseId
+              )
+              .eq(
+                "location_id",
+                selectedLocationId
+              )
+              .in(
+                "product_id",
+                productIds
+              )
+              .order(
+                "serial_number",
+                {
+                  ascending: true,
+                }
+              );
+
+          if (serialError) {
+            throw serialError;
+          }
+
+          const loadedSerials =
+            (data ||
+              []) as SerializedUnit[];
+
+          const serialMap:
+            Record<
+              string,
+              SerializedUnit[]
+            > = {};
+
+          for (
+            const item of serialItems
+          ) {
+            serialMap[item.id] =
+              loadedSerials.filter(
+                (serial) =>
+                  serial.product_id ===
+                    item.product_id &&
+                  serial.variant_id ===
+                    item.variant_id
+              );
+          }
+
+          setAvailableSerials(
+            serialMap
+          );
+
+          setSelectedSerials(
+            (current) => {
+              const next:
+                Record<
+                  string,
+                  string[]
+                > = {};
+
+              for (
+                const item of serialItems
+              ) {
+                const validIds =
+                  new Set(
+                    (
+                      serialMap[
+                        item.id
+                      ] || []
+                    ).map(
+                      (serial) =>
+                        serial.id
+                    )
+                  );
+
+                next[item.id] =
+                  (
+                    current[
+                      item.id
+                    ] || []
+                  ).filter(
+                    (id) =>
+                      validIds.has(
+                        id
+                      )
+                  );
+              }
+
+              return next;
+            }
+          );
+        } catch (caughtError) {
+          console.error(
+            "Available serial loading error:",
+            caughtError
+          );
+
+          setAvailableSerials({});
+          setSelectedSerials({});
+
+          setFulfillmentError(
+            "Unable to load available serial numbers for the selected warehouse location."
+          );
+        } finally {
+          setSerialsLoading(false);
+        }
+      },
+      [
+        order,
+        selectedWarehouseId,
+        selectedLocationId,
+        serialItems,
+        supabase,
+      ]
+    );
+
+  useEffect(() => {
+  const timer = window.setTimeout(() => {
+    void loadAvailableSerials();
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [
+  order,
+  selectedWarehouseId,
+  selectedLocationId,
+  loadAvailableSerials,
+]);
+
+
+  /*
+   * CANCEL ORDER
+   *
+   * IMPORTANT:
+   * This function is intentionally outside fulfillOrder().
+   *
+   * The frontend does NOT directly change inventory.
+   * The API route calls the atomic cancel_sales_order RPC.
+   */
+  async function cancelOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (isCancelling) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Cancel order ${order.order_number}?\n\n` +
+        `If this order has already been fulfilled, its inventory ` +
+        `will be reversed automatically.\n\n` +
+        `This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancellationError(null);
+    setCancellationSuccess(null);
+
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/cancel`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              reason:
+                "Sales order cancellation",
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Unable to cancel this order."
+        );
+      }
+
+      setCancellationSuccess(
+        "Order cancelled successfully. Any fulfilled inventory was reversed."
+      );
+
+      await loadOrder();
+      router.refresh();
+    } catch (error) {
+      console.error(
+        "Cancel order error:",
+        error
+      );
+
+      setCancellationError(
+        error instanceof Error
+          ? error.message
+          : "Unable to cancel this order."
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
+  /*
+   * QUANTITY FULFILLMENT
+   */
+  async function fulfillOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (
+      !selectedWarehouseId ||
+      !selectedLocationId
+    ) {
+      setFulfillmentError(
+        "Select an active warehouse and location before fulfilling this order."
+      );
+      return;
+    }
+
+    setIsFulfilling(true);
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/fulfill`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              warehouse_id:
+                selectedWarehouseId,
+              location_id:
+                selectedLocationId,
+            }),
+          }
+        );
+
+      const result =
+        (await response.json()) as {
+          error?: string;
+          fulfilled_inventory_lines?: number;
+          fulfilled_non_inventory_lines?: number;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "The sales order could not be fulfilled."
+        );
+      }
+
+      const inventoryLineLabel =
+        result.fulfilled_inventory_lines ===
+        1
+          ? "inventory line"
+          : "inventory lines";
+
+      setFulfillmentSuccess(
+        `Order fulfilled. ${
+          result.fulfilled_inventory_lines ||
+          0
+        } ${inventoryLineLabel} were issued from inventory.`
+      );
+
+      await loadOrder();
+      router.refresh();
+    } catch (caughtError) {
+      console.error(
+        "Order fulfillment error:",
+        caughtError
+      );
+
+      setFulfillmentError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The sales order could not be fulfilled."
+      );
+    } finally {
+      setIsFulfilling(false);
+    }
+  }
+
+  /*
+   * SERIAL FULFILLMENT
+   */
+  async function fulfillSerialOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (
+      !selectedWarehouseId ||
+      !selectedLocationId
+    ) {
+      setFulfillmentError(
+        "Select an active warehouse and location before fulfilling this order."
+      );
+      return;
+    }
+
+    if (serialItems.length === 0) {
+      return;
+    }
+
+    const allocations: {
+      order_item_id: string;
+      serialized_unit_ids: string[];
+    }[] = [];
+
+    for (
+      const item of serialItems
+    ) {
+      const selected =
+        selectedSerials[
+          item.id
+        ] || [];
+
+      const requiredQuantity =
+        Number(
+          item.quantity || 0
+        );
+
+      if (
+        !Number.isInteger(
+          requiredQuantity
+        ) ||
+        requiredQuantity <= 0
+      ) {
+        setFulfillmentError(
+          `${item.product_name} has an invalid serialized quantity.`
+        );
+        return;
+      }
+
+      if (
+        selected.length !==
+        requiredQuantity
+      ) {
+        setFulfillmentError(
+          `${item.product_name} requires ${requiredQuantity} serial number${
+            requiredQuantity === 1
+              ? ""
+              : "s"
+          }, but ${selected.length} ${
+            selected.length === 1
+              ? "was"
+              : "were"
+          } selected.`
+        );
+        return;
+      }
+
+      allocations.push({
+        order_item_id:
+          item.id,
+        serialized_unit_ids:
+          selected,
+      });
+    }
+
+    setIsFulfilling(true);
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/serial-fulfill`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              warehouse_id:
+                selectedWarehouseId,
+              location_id:
+                selectedLocationId,
+              allocations,
+            }),
+          }
+        );
+
+      const result =
+        (await response.json()) as {
+          error?: string;
+          total_quantity_fulfilled?: number;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "The serialized sales order could not be fulfilled."
+        );
+      }
+
+      const quantity =
+        Number(
+          result.total_quantity_fulfilled ||
+            0
+        );
+
+      setFulfillmentSuccess(
+        `Order fulfilled. ${quantity} serialized unit${
+          quantity === 1
+            ? ""
+            : "s"
+        } allocated successfully.`
+      );
+
+      setSelectedSerials({});
+
+      await loadOrder();
+      router.refresh();
+    } catch (caughtError) {
+      console.error(
+        "Serial order fulfillment error:",
+        caughtError
+      );
+
+      setFulfillmentError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The serialized sales order could not be fulfilled."
+      );
+    } finally {
+      setIsFulfilling(false);
+    }
+  }
+
+  function toggleSerial(
+    itemId: string,
+    serialId: string,
+    requiredQuantity: number
+  ) {
+    setSelectedSerials(
+      (current) => {
+        const existing =
+          current[itemId] || [];
+
+        if (
+          existing.includes(
+            serialId
+          )
+        ) {
+          return {
+            ...current,
+            [itemId]:
+              existing.filter(
+                (id) =>
+                  id !==
+                  serialId
+              ),
+          };
+        }
+
+        if (
+          existing.length >=
+          requiredQuantity
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [itemId]: [
+            ...existing,
+            serialId,
+          ],
+        };
+      }
+    );
+
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
   }
 
   if (loading) {
@@ -655,7 +1520,8 @@ export default function OrderDetailsPage() {
           </div>
 
           <strong>
-            {error || "Order not found"}
+            {error ||
+              "Order not found"}
           </strong>
 
           <span>
@@ -666,7 +1532,9 @@ export default function OrderDetailsPage() {
             <button
               type="button"
               onClick={() =>
-                router.push("/sales")
+                router.push(
+                  "/sales"
+                )
               }
             >
               Back to Sales
@@ -759,62 +1627,95 @@ export default function OrderDetailsPage() {
     company?.name ||
     "Company";
 
-  const totalQuantity = items.reduce(
-    (sum, item) =>
-      sum + Number(item.quantity || 0),
-    0
-  );
+  const totalQuantity =
+    items.reduce(
+      (sum, item) =>
+        sum +
+        Number(
+          item.quantity || 0
+        ),
+      0
+    );
 
   const hasDiscount =
-    Number(order.discount_amount || 0) > 0;
+    Number(
+      order.discount_amount || 0
+    ) > 0;
 
   const hasTax =
-    Number(order.tax_amount || 0) > 0;
+    Number(
+      order.tax_amount || 0
+    ) > 0;
 
   const hasShipping =
-    Number(order.shipping_amount || 0) > 0;
+    Number(
+      order.shipping_amount || 0
+    ) > 0;
 
-  /*
-   * Payment figures come from the actual invoice/payment
-   * relationship rather than a manually selected payment status.
-   */
   const recordedPaymentsTotal =
     payments.reduce(
       (sum, payment) =>
-        sum + Number(payment.amount || 0),
+        sum +
+        Number(
+          payment.amount || 0
+        ),
       0
     );
 
   const paidAmount = invoice
     ? Math.max(
-        Number(invoice.amount_paid || 0),
+        Number(
+          invoice.amount_paid ||
+            0
+        ),
         recordedPaymentsTotal
       )
     : 0;
 
   const invoiceTotal =
-    Number(invoice?.total || 0);
+    Number(
+      invoice?.total || 0
+    );
 
-  const balanceDue = Math.max(
-    invoiceTotal - paidAmount,
-    0
-  );
+  const balanceDue =
+    Math.max(
+      invoiceTotal -
+        paidAmount,
+      0
+    );
 
   const invoicePaymentStatus =
     invoice
-      ? paidAmount >= invoiceTotal &&
+      ? paidAmount >=
+          invoiceTotal &&
         invoiceTotal > 0
         ? "paid"
         : paidAmount > 0
           ? "partially_paid"
-          : invoice.status === "overdue"
+          : invoice.status ===
+              "overdue"
             ? "overdue"
             : "unpaid"
       : "unpaid";
 
+  const allSerialSelectionsComplete =
+    serialItems.every(
+      (item) =>
+        (
+          selectedSerials[
+            item.id
+          ] || []
+        ).length ===
+        Number(
+          item.quantity || 0
+        )
+    );
+
   return (
     <AppShell
-      title={order.order_number}
+      title={
+        order.order_number
+      }
       description={`Created ${formatDateTime(
         order.created_at
       )}`}
@@ -825,7 +1726,9 @@ export default function OrderDetailsPage() {
             type="button"
             className="order-back-button"
             onClick={() =>
-              router.push("/sales")
+              router.push(
+                "/sales"
+              )
             }
           >
             <svg
@@ -849,27 +1752,13 @@ export default function OrderDetailsPage() {
             <button
               type="button"
               className="order-invoice-button"
-              onClick={createInvoice}
-              disabled={invoiceLoading}
+              onClick={
+                createInvoice
+              }
+              disabled={
+                invoiceLoading
+              }
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M6 2h9l3 3v17H6z" />
-                <path d="M14 2v4h4" />
-                <path d="M9 13h6" />
-                <path d="M9 17h6" />
-                <path d="M9 9h2" />
-              </svg>
-
               Create Invoice
             </button>
           )}
@@ -878,25 +1767,10 @@ export default function OrderDetailsPage() {
             <button
               type="button"
               className="order-invoice-button"
-              onClick={viewInvoice}
+              onClick={
+                viewInvoice
+              }
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M6 2h9l3 3v17H6z" />
-                <path d="M14 2v4h4" />
-                <path d="M9 13h6" />
-                <path d="M9 17h4" />
-              </svg>
-
               View Invoice
             </button>
           )}
@@ -904,41 +1778,40 @@ export default function OrderDetailsPage() {
           <button
             type="button"
             className="order-print-button"
-            onClick={printOrder}
+            onClick={
+              printOrder
+            }
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 9V3h12v6" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <path d="M6 14h12v7H6z" />
-            </svg>
-
             {printing
               ? "Printing..."
               : "Print / PDF"}
           </button>
+
+          {order.status !== "cancelled" &&
+            order.status !== "refunded" && (
+              <button
+                type="button"
+                className="order-cancel-button"
+                onClick={() =>
+                  void cancelOrder()
+                }
+                disabled={
+                  isCancelling ||
+                  isFulfilling
+                }
+              >
+                {isCancelling
+                  ? "Cancelling..."
+                  : "Cancel Order"}
+              </button>
+          )}
 
         </div>
       }
     >
       <div className="order-page">
 
-        {/* =========================================
-            PROFESSIONAL SALES ORDER DOCUMENT
-        ========================================== */}
-
         <section className="invoice-document">
-
-          {/* DOCUMENT HEADER */}
 
           <header className="invoice-header">
 
@@ -959,14 +1832,14 @@ export default function OrderDetailsPage() {
               </div>
 
               <div className="invoice-number">
-                {order.order_number}
+                {
+                  order.order_number
+                }
               </div>
 
             </div>
 
           </header>
-
-          {/* DOCUMENT META */}
 
           <div className="invoice-meta-row">
 
@@ -1036,8 +1909,6 @@ export default function OrderDetailsPage() {
 
           </div>
 
-          {/* BILL TO */}
-
           <div className="invoice-parties">
 
             <div className="invoice-party">
@@ -1047,23 +1918,39 @@ export default function OrderDetailsPage() {
               </div>
 
               <strong className="invoice-party-name">
-                {customerName}
+                {
+                  customerName
+                }
               </strong>
 
-              {order.customers?.email && (
+              {order.customers
+                ?.email && (
                 <span>
-                  {order.customers.email}
+                  {
+                    order
+                      .customers
+                      .email
+                  }
                 </span>
               )}
 
-              {order.customers?.phone && (
+              {order.customers
+                ?.phone && (
                 <span>
-                  {order.customers.phone}
+                  {
+                    order
+                      .customers
+                      .phone
+                  }
                 </span>
               )}
 
-              {!order.customers?.email &&
-                !order.customers?.phone && (
+              {!order
+                .customers
+                ?.email &&
+                !order
+                  .customers
+                  ?.phone && (
                   <span>
                     Walk-in customer
                   </span>
@@ -1078,7 +1965,9 @@ export default function OrderDetailsPage() {
               </div>
 
               <strong className="invoice-party-name">
-                {companyName}
+                {
+                  companyName
+                }
               </strong>
 
               <span>
@@ -1086,14 +1975,15 @@ export default function OrderDetailsPage() {
               </span>
 
               <span>
-                Order #{order.order_number}
+                Order #
+                {
+                  order.order_number
+                }
               </span>
 
             </div>
 
           </div>
-
-          {/* ITEMS */}
 
           <div className="invoice-items-section">
 
@@ -1101,7 +1991,8 @@ export default function OrderDetailsPage() {
               ITEMS
             </div>
 
-            {items.length === 0 ? (
+            {items.length ===
+            0 ? (
               <div className="invoice-empty">
                 No items were found for this order.
               </div>
@@ -1137,35 +2028,51 @@ export default function OrderDetailsPage() {
                 <tbody>
 
                   {items.map(
-                    (item) => (
-                      <tr key={item.id}>
+                    (
+                      item
+                    ) => (
+                      <tr
+                        key={
+                          item.id
+                        }
+                      >
 
                         <td className="item-description">
 
                           <strong>
-                            {item.product_name}
+                            {
+                              item.product_name
+                            }
                           </strong>
 
                           {item.variant_name && (
                             <span>
-                              {item.variant_name}
+                              {
+                                item.variant_name
+                              }
                             </span>
                           )}
 
                         </td>
 
                         <td className="item-sku">
-                          {item.sku || "—"}
+                          {
+                            item.sku ||
+                            "—"
+                          }
                         </td>
 
                         <td className="item-qty">
-                          {item.quantity}
+                          {
+                            item.quantity
+                          }
                         </td>
 
                         <td className="item-price">
                           {formatCurrency(
                             Number(
-                              item.unit_price || 0
+                              item.unit_price ||
+                                0
                             ),
                             currency
                           )}
@@ -1176,7 +2083,8 @@ export default function OrderDetailsPage() {
                           <strong>
                             {formatCurrency(
                               Number(
-                                item.line_total || 0
+                                item.line_total ||
+                                  0
                               ),
                               currency
                             )}
@@ -1195,8 +2103,6 @@ export default function OrderDetailsPage() {
 
           </div>
 
-          {/* TOTALS */}
-
           <div className="invoice-bottom">
 
             <div className="invoice-notes-block">
@@ -1208,7 +2114,9 @@ export default function OrderDetailsPage() {
                   </div>
 
                   <p>
-                    {order.notes}
+                    {
+                      order.notes
+                    }
                   </p>
                 </>
               ) : (
@@ -1230,7 +2138,8 @@ export default function OrderDetailsPage() {
                 <strong>
                   {formatCurrency(
                     Number(
-                      order.subtotal || 0
+                      order.subtotal ||
+                        0
                     ),
                     currency
                   )}
@@ -1249,7 +2158,8 @@ export default function OrderDetailsPage() {
                     −
                     {formatCurrency(
                       Number(
-                        order.discount_amount || 0
+                        order.discount_amount ||
+                          0
                       ),
                       currency
                     )}
@@ -1268,7 +2178,8 @@ export default function OrderDetailsPage() {
                   <strong>
                     {formatCurrency(
                       Number(
-                        order.tax_amount || 0
+                        order.tax_amount ||
+                          0
                       ),
                       currency
                     )}
@@ -1287,7 +2198,8 @@ export default function OrderDetailsPage() {
                   <strong>
                     {formatCurrency(
                       Number(
-                        order.shipping_amount || 0
+                        order.shipping_amount ||
+                          0
                       ),
                       currency
                     )}
@@ -1307,7 +2219,8 @@ export default function OrderDetailsPage() {
                 <strong>
                   {formatCurrency(
                     Number(
-                      order.total_amount || 0
+                      order.total_amount ||
+                        0
                     ),
                     currency
                   )}
@@ -1319,18 +2232,21 @@ export default function OrderDetailsPage() {
 
           </div>
 
-          {/* FOOTER */}
-
           <footer className="invoice-footer">
 
             <div>
 
               <strong>
-                {companyName}
+                {
+                  companyName
+                }
               </strong>
 
               <span>
-                Sales Order · {order.order_number}
+                Sales Order ·{" "}
+                {
+                  order.order_number
+                }
               </span>
 
             </div>
@@ -1342,7 +2258,9 @@ export default function OrderDetailsPage() {
               </span>
 
               <strong>
-                {currency}
+                {
+                  currency
+                }
               </strong>
 
             </div>
@@ -1351,13 +2269,19 @@ export default function OrderDetailsPage() {
 
         </section>
 
-        {/* =========================================
-            SCREEN INFORMATION
-        ========================================== */}
+        {cancellationError && (
+          <div className="cancellation-feedback error">
+            {cancellationError}
+          </div>
+        )}
+
+        {cancellationSuccess && (
+          <div className="cancellation-feedback success">
+            {cancellationSuccess}
+          </div>
+        )}
 
         <section className="screen-information">
-
-          {/* ORDER INFORMATION */}
 
           <div className="screen-card">
 
@@ -1383,7 +2307,9 @@ export default function OrderDetailsPage() {
                 </span>
 
                 <strong>
-                  {order.order_number}
+                  {
+                    order.order_number
+                  }
                 </strong>
               </div>
 
@@ -1417,7 +2343,9 @@ export default function OrderDetailsPage() {
                 </span>
 
                 <strong>
-                  {totalQuantity}
+                  {
+                    totalQuantity
+                  }
                 </strong>
               </div>
 
@@ -1425,7 +2353,464 @@ export default function OrderDetailsPage() {
 
           </div>
 
-          {/* CUSTOMER */}
+          <div className="screen-card fulfillment-card">
+
+            <div className="screen-card-header">
+
+              <div>
+                <h2>
+                  Inventory Fulfillment
+                </h2>
+
+                <p>
+                  Issue inventory-tracked items from one warehouse location.
+                </p>
+              </div>
+
+            </div>
+
+            <div className="fulfillment-body">
+
+              {order.fulfillment_status ===
+              "fulfilled" ? (
+                <div className="fulfillment-complete">
+
+                  <strong>
+                    Order fulfilled
+                  </strong>
+
+                  <span>
+                    Inventory was issued for this order. Further stock-out actions are blocked.
+                  </span>
+
+                </div>
+              ) : [
+                  "cancelled",
+                  "refunded",
+                ].includes(
+                  order.status
+                ) ? (
+                <div className="fulfillment-complete fulfillment-blocked">
+
+                  <strong>
+                    Fulfillment unavailable
+                  </strong>
+
+                  <span>
+                    Cancelled and refunded orders cannot issue inventory.
+                  </span>
+
+                </div>
+              ) : (
+                <>
+                  <div className="fulfillment-fields">
+
+                    <label>
+                      <span>
+                        Warehouse
+                      </span>
+
+                      <select
+                        value={
+                          selectedWarehouseId
+                        }
+                        onChange={(
+                          event
+                        ) => {
+                          const warehouseId =
+                            event
+                              .target
+                              .value;
+
+                          const firstLocation =
+                            locations.find(
+                              (
+                                location
+                              ) =>
+                                location.warehouse_id ===
+                                warehouseId
+                            );
+
+                          setSelectedWarehouseId(
+                            warehouseId
+                          );
+
+                          setSelectedLocationId(
+                            firstLocation?.id ||
+                              ""
+                          );
+
+                          setFulfillmentError(
+                            null
+                          );
+
+                          setFulfillmentSuccess(
+                            null
+                          );
+                        }}
+                        disabled={
+                          fulfillmentOptionsLoading ||
+                          isFulfilling
+                        }
+                      >
+                        <option value="">
+                          Select warehouse
+                        </option>
+
+                        {warehouses.map(
+                          (
+                            warehouse
+                          ) => (
+                            <option
+                              key={
+                                warehouse.id
+                              }
+                              value={
+                                warehouse.id
+                              }
+                            >
+                              {
+                                warehouse.name
+                              }{" "}
+                              (
+                              {
+                                warehouse.code
+                              }
+                              )
+                            </option>
+                          )
+                        )}
+                      </select>
+
+                    </label>
+
+                    <label>
+                      <span>
+                        Location
+                      </span>
+
+                      <select
+                        value={
+                          selectedLocationId
+                        }
+                        onChange={(
+                          event
+                        ) => {
+                          setSelectedLocationId(
+                            event
+                              .target
+                              .value
+                          );
+
+                          setFulfillmentError(
+                            null
+                          );
+
+                          setFulfillmentSuccess(
+                            null
+                          );
+                        }}
+                        disabled={
+                          fulfillmentOptionsLoading ||
+                          isFulfilling ||
+                          !selectedWarehouseId
+                        }
+                      >
+                        <option value="">
+                          {
+                            selectedWarehouseId
+                              ? "Select location"
+                              : "Select warehouse first"
+                          }
+                        </option>
+
+                        {availableLocations.map(
+                          (
+                            location
+                          ) => (
+                            <option
+                              key={
+                                location.id
+                              }
+                              value={
+                                location.id
+                              }
+                            >
+                              {
+                                location.name
+                              }{" "}
+                              (
+                              {
+                                location.code
+                              }
+                              )
+                            </option>
+                          )
+                        )}
+                      </select>
+
+                    </label>
+
+                  </div>
+
+                  {hasSerialItems && (
+                    <div className="serial-allocation-section">
+
+                      <div className="serial-allocation-header">
+
+                        <div>
+                          <strong>
+                            Serial Number Allocation
+                          </strong>
+
+                          <span>
+                            Select the exact serial number for each serialized item.
+                          </span>
+                        </div>
+
+                        {serialsLoading && (
+                          <span className="serial-loading">
+                            Loading serials...
+                          </span>
+                        )}
+
+                      </div>
+
+                      {serialItems.map(
+                        (
+                          item
+                        ) => {
+                          const serials =
+                            availableSerials[
+                              item.id
+                            ] || [];
+
+                          const selected =
+                            selectedSerials[
+                              item.id
+                            ] || [];
+
+                          const requiredQuantity =
+                            Number(
+                              item.quantity ||
+                                0
+                            );
+
+                          return (
+                            <div
+                              key={
+                                item.id
+                              }
+                              className="serial-item"
+                            >
+
+                              <div className="serial-item-header">
+
+                                <div>
+                                  <strong>
+                                    {
+                                      item.product_name
+                                    }
+                                  </strong>
+
+                                  {item.variant_name && (
+                                    <span>
+                                      {
+                                        item.variant_name
+                                      }
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div
+                                  className={`serial-count ${
+                                    selected.length ===
+                                    requiredQuantity
+                                      ? "complete"
+                                      : ""
+                                  }`}
+                                >
+                                  {
+                                    selected.length
+                                  }{" "}
+                                  /{" "}
+                                  {
+                                    requiredQuantity
+                                  }{" "}
+                                  selected
+                                </div>
+
+                              </div>
+
+                              {serials.length ===
+                              0 ? (
+                                <div className="serial-empty">
+
+                                  {serialsLoading
+                                    ? "Loading available serial numbers..."
+                                    : "No available serial numbers were found in the selected warehouse and location."}
+
+                                </div>
+                              ) : (
+                                <div className="serial-list">
+
+                                  {serials.map(
+                                    (
+                                      serial
+                                    ) => {
+                                      const isSelected =
+                                        selected.includes(
+                                          serial.id
+                                        );
+
+                                      const maxReached =
+                                        selected.length >=
+                                          requiredQuantity &&
+                                        !isSelected;
+
+                                      return (
+                                        <label
+                                          key={
+                                            serial.id
+                                          }
+                                          className={`serial-row ${
+                                            isSelected
+                                              ? "selected"
+                                              : ""
+                                          } ${
+                                            maxReached
+                                              ? "disabled"
+                                              : ""
+                                          }`}
+                                        >
+
+                                          <input
+                                            type="checkbox"
+                                            checked={
+                                              isSelected
+                                            }
+                                            disabled={
+                                              maxReached ||
+                                              isFulfilling
+                                            }
+                                            onChange={() =>
+                                              toggleSerial(
+                                                item.id,
+                                                serial.id,
+                                                requiredQuantity
+                                              )
+                                            }
+                                          />
+
+                                          <div className="serial-row-main">
+
+                                            <strong>
+                                              {
+                                                serial.serial_number
+                                              }
+                                            </strong>
+
+                                            <span>
+                                              {serial.barcode
+                                                ? `Barcode: ${serial.barcode}`
+                                                : "No barcode"}
+                                            </span>
+
+                                          </div>
+
+                                          <span className="serial-status">
+                                            Available
+                                          </span>
+
+                                        </label>
+                                      );
+                                    }
+                                  )}
+
+                                </div>
+                              )}
+
+                            </div>
+                          );
+                        }
+                      )}
+
+                    </div>
+                  )}
+
+                  {fulfillmentError && (
+                    <div className="fulfillment-feedback error">
+                      {
+                        fulfillmentError
+                      }
+                    </div>
+                  )}
+
+                  {fulfillmentSuccess && (
+                    <div className="fulfillment-feedback success">
+                      {
+                        fulfillmentSuccess
+                      }
+                    </div>
+                  )}
+
+                  <div className="fulfillment-actions">
+
+                    <span>
+                      {hasSerialItems
+                        ? "Quantity-tracked lines are deducted from inventory. Serial-tracked lines require exact serial allocation."
+                        : "Quantity-tracked lines are deducted when this action completes."}
+                    </span>
+
+                    {hasSerialItems ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void fulfillSerialOrder()
+                        }
+                        disabled={
+                          fulfillmentOptionsLoading ||
+                          serialsLoading ||
+                          isFulfilling ||
+                          items.length ===
+                            0 ||
+                          !selectedWarehouseId ||
+                          !selectedLocationId ||
+                          !allSerialSelectionsComplete
+                        }
+                      >
+                        {isFulfilling
+                          ? "Fulfilling..."
+                          : "Fulfill Serial Order"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void fulfillOrder()
+                        }
+                        disabled={
+                          fulfillmentOptionsLoading ||
+                          isFulfilling ||
+                          items.length ===
+                            0 ||
+                          !selectedWarehouseId ||
+                          !selectedLocationId
+                        }
+                      >
+                        {isFulfilling
+                          ? "Fulfilling..."
+                          : "Fulfill Order"}
+                      </button>
+                    )}
+
+                  </div>
+                </>
+              )}
+
+            </div>
+
+          </div>
 
           <div className="screen-card">
 
@@ -1446,30 +2831,49 @@ export default function OrderDetailsPage() {
             <div className="screen-customer">
 
               <div className="screen-customer-avatar">
-                {customerName
-                  .slice(0, 1)
-                  .toUpperCase()}
+                {
+                  customerName
+                    .slice(
+                      0,
+                      1
+                    )
+                    .toUpperCase()
+                }
               </div>
 
               <div>
 
                 <strong>
-                  {customerName}
+                  {
+                    customerName
+                  }
                 </strong>
 
-                {order.customers?.email && (
+                {order
+                  .customers
+                  ?.email && (
                   <a
                     href={`mailto:${order.customers.email}`}
                   >
-                    {order.customers.email}
+                    {
+                      order
+                        .customers
+                        .email
+                    }
                   </a>
                 )}
 
-                {order.customers?.phone && (
+                {order
+                  .customers
+                  ?.phone && (
                   <a
                     href={`tel:${order.customers.phone}`}
                   >
-                    {order.customers.phone}
+                    {
+                      order
+                        .customers
+                        .phone
+                    }
                   </a>
                 )}
 
@@ -1479,636 +2883,253 @@ export default function OrderDetailsPage() {
 
           </div>
 
-        </section>
+          <div className="screen-card">
 
-        {/* =========================================
-            CONNECTED FINANCIAL DOCUMENTS
-        ========================================== */}
+            <div className="screen-card-header">
 
-        <section className="financial-section">
+              <div>
+                <h2>
+                  Invoice
+                </h2>
 
-          <div className="financial-section-header">
+                <p>
+                  Billing document connected to this order
+                </p>
+              </div>
 
-            <div>
-              <h2>
-                Financial Documents
-              </h2>
+            </div>
 
-              <p>
-                Invoice and payment activity connected to this sales order.
-              </p>
+            <div className="invoice-connection">
+
+              {invoiceLoading ? (
+                <div className="connection-loading">
+                  Loading invoice...
+                </div>
+              ) : invoice ? (
+                <>
+                  <div className="connection-main">
+
+                    <strong>
+                      {
+                        invoice.invoice_number
+                      }
+                    </strong>
+
+                    <span>
+                      Status:{" "}
+                      {
+                        formatStatus(
+                          invoice.status
+                        )
+                      }
+                    </span>
+
+                  </div>
+
+                  <div className="connection-actions">
+
+                    <button
+                      type="button"
+                      onClick={
+                        viewInvoice
+                      }
+                    >
+                      View Invoice
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={
+                        recordPayment
+                      }
+                    >
+                      Record Payment
+                    </button>
+
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="connection-main">
+
+                    <strong>
+                      No invoice linked
+                    </strong>
+
+                    <span>
+                      Create an invoice for this sales order.
+                    </span>
+
+                  </div>
+
+                  <div className="connection-actions">
+
+                    <button
+                      type="button"
+                      onClick={
+                        createInvoice
+                      }
+                    >
+                      Create Invoice
+                    </button>
+
+                  </div>
+                </>
+              )}
+
             </div>
 
           </div>
 
-          {/* INVOICE CARD */}
+          <div className="screen-card">
 
-          <div className="financial-card">
+            <div className="screen-card-header">
 
-            <div className="financial-card-header">
+              <div>
+                <h2>
+                  Payments
+                </h2>
 
-              <div className="financial-icon invoice-icon">
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 2h9l3 3v17H6z" />
-                  <path d="M14 2v4h4" />
-                  <path d="M9 13h6" />
-                  <path d="M9 17h6" />
-                  <path d="M9 9h2" />
-                </svg>
-              </div>
-
-              <div className="financial-card-title">
-
-                <div>
-                  <h3>
-                    Invoice
-                  </h3>
-
-                  <p>
-                    {invoice
-                      ? invoice.invoice_number
-                      : "No invoice created"}
-                  </p>
-                </div>
-
-                {invoice && (
-                  <span
-                    className={`financial-status ${getStatusClass(
-                      invoice.status
-                    )}`}
-                  >
-                    {formatStatus(
-                      invoice.status
-                    )}
-                  </span>
-                )}
-
+                <p>
+                  Payments recorded against the linked invoice
+                </p>
               </div>
 
             </div>
 
-            {invoiceLoading ? (
-              <div className="financial-loading">
-                <div className="small-spinner" />
-                Loading invoice...
-              </div>
-            ) : invoice ? (
-              <>
-                <div className="financial-metrics">
+            <div className="payments-summary">
 
-                  <div>
-                    <span>
-                      Invoice Total
-                    </span>
+              <div>
+                <span>
+                  Invoice Total
+                </span>
 
-                    <strong>
-                      {formatCurrency(
+                <strong>
+                  {invoice
+                    ? formatCurrency(
                         invoiceTotal,
                         currency
-                      )}
-                    </strong>
-                  </div>
+                      )
+                    : "—"}
+                </strong>
+              </div>
 
-                  <div>
-                    <span>
-                      Paid
-                    </span>
+              <div>
+                <span>
+                  Paid
+                </span>
 
-                    <strong className="paid-value">
-                      {formatCurrency(
+                <strong>
+                  {invoice
+                    ? formatCurrency(
                         paidAmount,
                         currency
-                      )}
-                    </strong>
-                  </div>
+                      )
+                    : "—"}
+                </strong>
+              </div>
 
-                  <div>
-                    <span>
-                      Balance Due
-                    </span>
+              <div>
+                <span>
+                  Balance Due
+                </span>
 
-                    <strong
-                      className={
-                        balanceDue > 0
-                          ? "balance-value"
-                          : "paid-value"
-                      }
-                    >
-                      {formatCurrency(
+                <strong
+                  className={
+                    balanceDue >
+                    0
+                      ? "payment-due"
+                      : "payment-clear"
+                  }
+                >
+                  {invoice
+                    ? formatCurrency(
                         balanceDue,
                         currency
-                      )}
-                    </strong>
-                  </div>
+                      )
+                    : "—"}
+                </strong>
+              </div>
 
-                  <div>
-                    <span>
-                      Due Date
-                    </span>
+            </div>
 
-                    <strong>
-                      {invoice.due_date
-                        ? formatDate(
-                            invoice.due_date
-                          )
-                        : "No due date"}
-                    </strong>
-                  </div>
+            {paymentsLoading ? (
+              <div className="connection-loading">
+                Loading payments...
+              </div>
+            ) : payments.length >
+              0 ? (
+              <div className="payment-list">
 
-                </div>
-
-                <div className="financial-card-actions">
-
-                  <button
-                    type="button"
-                    className="secondary-financial-button"
-                    onClick={viewInvoice}
-                  >
-                    View Invoice
-                  </button>
-
-                  {balanceDue > 0 && (
-                    <button
-                      type="button"
-                      className="primary-financial-button"
-                      onClick={recordPayment}
+                {payments.map(
+                  (
+                    payment
+                  ) => (
+                    <div
+                      key={
+                        payment.id
+                      }
+                      className="payment-row"
                     >
-                      Record Payment
-                    </button>
-                  )}
 
-                </div>
-              </>
+                      <div>
+                        <strong>
+                          {formatCurrency(
+                            Number(
+                              payment.amount ||
+                                0
+                            ),
+                            payment.currency ||
+                              currency
+                          )}
+                        </strong>
+
+                        <span>
+                          {
+                            payment.payment_method ||
+                            "Payment"
+                          }
+                        </span>
+                      </div>
+
+                      <div>
+                        <span>
+                          {
+                            payment.reference ||
+                            "No reference"
+                          }
+                        </span>
+
+                        <span>
+                          {formatDateTime(
+                            payment.paid_at
+                          )}
+                        </span>
+                      </div>
+
+                    </div>
+                  )
+                )}
+
+              </div>
             ) : (
-              <div className="financial-empty">
-
-                <div>
-                  <strong>
-                    No invoice linked to this order
-                  </strong>
-
-                  <span>
-                    Create an invoice from this sales order to begin tracking customer billing and payments.
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  className="primary-financial-button"
-                  onClick={createInvoice}
-                >
-                  Create Invoice
-                </button>
-
+              <div className="connection-empty">
+                No payments have been recorded.
               </div>
             )}
 
           </div>
 
-          {/* PAYMENT HISTORY */}
-
-          {invoice && (
-            <div className="financial-card payment-card">
-
-              <div className="financial-card-header">
-
-                <div className="financial-icon payment-icon">
-                  <svg
-                    width="17"
-                    height="17"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect
-                      x="2"
-                      y="5"
-                      width="20"
-                      height="14"
-                      rx="2"
-                    />
-                    <path d="M2 10h20" />
-                    <path d="M6 15h4" />
-                  </svg>
-                </div>
-
-                <div className="financial-card-title">
-
-                  <div>
-                    <h3>
-                      Payments
-                    </h3>
-
-                    <p>
-                      Payments recorded against {invoice.invoice_number}
-                    </p>
-                  </div>
-
-                  <span className="payment-count">
-                    {payments.length}{" "}
-                    {payments.length === 1
-                      ? "payment"
-                      : "payments"}
-                  </span>
-
-                </div>
-
-              </div>
-
-              {paymentsLoading ? (
-                <div className="financial-loading">
-                  <div className="small-spinner" />
-                  Loading payment history...
-                </div>
-              ) : payments.length === 0 ? (
-                <div className="payment-empty">
-                  <span>
-                    No payments have been recorded for this invoice yet.
-                  </span>
-
-                  {balanceDue > 0 && (
-                    <button
-                      type="button"
-                      className="primary-financial-button"
-                      onClick={recordPayment}
-                    >
-                      Record Payment
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="payment-table-wrapper">
-
-                    <table className="payment-table">
-
-                      <thead>
-                        <tr>
-
-                          <th>
-                            DATE
-                          </th>
-
-                          <th>
-                            METHOD
-                          </th>
-
-                          <th>
-                            REFERENCE
-                          </th>
-
-                          <th className="payment-amount-column">
-                            AMOUNT
-                          </th>
-
-                        </tr>
-                      </thead>
-
-                      <tbody>
-
-                        {payments.map(
-                          (payment) => (
-                            <tr key={payment.id}>
-
-                              <td>
-                                <strong>
-                                  {formatDate(
-                                    payment.paid_at
-                                  )}
-                                </strong>
-
-                                <span>
-                                  {formatDateTime(
-                                    payment.paid_at
-                                  )}
-                                </span>
-                              </td>
-
-                              <td>
-                                <span className="payment-method">
-                                  {payment.payment_method
-                                    ? formatStatus(
-                                        payment.payment_method
-                                      )
-                                    : "—"}
-                                </span>
-                              </td>
-
-                              <td>
-                                {payment.reference ? (
-                                  <span className="payment-reference">
-                                    {payment.reference}
-                                  </span>
-                                ) : (
-                                  <span className="payment-muted">
-                                    —
-                                  </span>
-                                )}
-                              </td>
-
-                              <td className="payment-amount-column">
-
-                                <strong>
-                                  {formatCurrency(
-                                    Number(
-                                      payment.amount || 0
-                                    ),
-                                    payment.currency ||
-                                      currency
-                                  )}
-                                </strong>
-
-                              </td>
-
-                            </tr>
-                          )
-                        )}
-
-                      </tbody>
-
-                      <tfoot>
-
-                        <tr>
-
-                          <td
-                            colSpan={3}
-                          >
-                            Total Recorded
-                          </td>
-
-                          <td className="payment-amount-column">
-
-                            <strong>
-                              {formatCurrency(
-                                recordedPaymentsTotal,
-                                currency
-                              )}
-                            </strong>
-
-                          </td>
-
-                        </tr>
-
-                      </tfoot>
-
-                    </table>
-
-                  </div>
-
-                  <div className="payment-footer-actions">
-
-                    <div>
-                      <span>
-                        Current Balance
-                      </span>
-
-                      <strong
-                        className={
-                          balanceDue > 0
-                            ? "balance-value"
-                            : "paid-value"
-                        }
-                      >
-                        {formatCurrency(
-                          balanceDue,
-                          currency
-                        )}
-                      </strong>
-                    </div>
-
-                    {balanceDue > 0 && (
-                      <button
-                        type="button"
-                        className="primary-financial-button"
-                        onClick={recordPayment}
-                      >
-                        Record Payment
-                      </button>
-                    )}
-
-                  </div>
-
-                </>
-              )}
-
-            </div>
-          )}
-
         </section>
-
-        {/* =========================================
-            FINANCIAL CONNECTION FLOW
-        ========================================== */}
-
-        <section className="connection-card">
-
-          <div className="connection-header">
-
-            <div>
-              <h2>
-                Document Flow
-              </h2>
-
-              <p>
-                How this transaction connects across SBS.
-              </p>
-            </div>
-
-          </div>
-
-          <div className="connection-flow">
-
-            <div className="connection-node">
-
-              <div className="connection-node-icon">
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4 4h16v16H4z" />
-                  <path d="M8 9h8" />
-                  <path d="M8 13h5" />
-                </svg>
-              </div>
-
-              <div>
-                <strong>
-                  Sales Order
-                </strong>
-
-                <span>
-                  {order.order_number}
-                </span>
-              </div>
-
-            </div>
-
-            <div className="connection-arrow">
-              →
-            </div>
-
-            <div
-              className={`connection-node ${
-                invoice
-                  ? "connection-active"
-                  : ""
-              }`}
-            >
-
-              <div className="connection-node-icon">
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 2h9l3 3v17H6z" />
-                  <path d="M14 2v4h4" />
-                  <path d="M9 13h6" />
-                  <path d="M9 17h6" />
-                </svg>
-              </div>
-
-              <div>
-                <strong>
-                  Invoice
-                </strong>
-
-                <span>
-                  {invoice
-                    ? invoice.invoice_number
-                    : "Not created"}
-                </span>
-              </div>
-
-            </div>
-
-            <div className="connection-arrow">
-              →
-            </div>
-
-            <div
-              className={`connection-node ${
-                payments.length > 0
-                  ? "connection-active"
-                  : ""
-              }`}
-            >
-
-              <div className="connection-node-icon">
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect
-                    x="2"
-                    y="5"
-                    width="20"
-                    height="14"
-                    rx="2"
-                  />
-                  <path d="M2 10h20" />
-                </svg>
-              </div>
-
-              <div>
-                <strong>
-                  Payments
-                </strong>
-
-                <span>
-                  {payments.length} recorded
-                </span>
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* =========================================
-            MOBILE ACTIONS
-        ========================================== */}
-
-        <div className="mobile-order-actions">
-
-          <button
-            type="button"
-            onClick={() =>
-              router.push("/sales")
-            }
-          >
-            Back to Sales
-          </button>
-
-          {!invoice && (
-            <button
-              type="button"
-              onClick={createInvoice}
-            >
-              Create Invoice
-            </button>
-          )}
-
-          {invoice && balanceDue > 0 && (
-            <button
-              type="button"
-              onClick={recordPayment}
-            >
-              Record Payment
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={printOrder}
-          >
-            Print / PDF
-          </button>
-
-        </div>
 
       </div>
 
       <style jsx>{`
-
-        /* =========================================
-           SCREEN
-        ========================================= */
-
         .order-page {
           width: 100%;
           max-width: 1180px;
           margin: 0 auto;
+          padding: 10px 0 50px;
         }
 
         .order-header-actions {
@@ -2117,71 +3138,79 @@ export default function OrderDetailsPage() {
           gap: 8px;
         }
 
-        .order-back-button,
-        .order-invoice-button,
-        .order-print-button {
-          height: 41px;
+        .order-header-actions button {
+          height: 36px;
+          padding: 0 12px;
+          border-radius: 8px;
+          border: 1px solid #dfe4eb;
+          background: #ffffff;
+          color: #586274;
+          cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           gap: 7px;
-          padding: 0 13px;
-          border-radius: 8px;
           font-family: inherit;
           font-size: 10px;
           font-weight: 700;
-          cursor: pointer;
-          white-space: nowrap;
         }
 
-        .order-back-button {
-          border: 1px solid #dfe4eb;
-          background: #ffffff;
-          color: #687386;
-        }
-
-        .order-back-button:hover {
-          background: #f7f8fa;
+        .order-header-actions button:hover {
+          background: #f7f9fb;
           color: #263043;
         }
 
-        .order-invoice-button {
-          border: 1px solid #dfe4eb;
-          background: #ffffff;
-          color: #596476;
-        }
-
-        .order-invoice-button:hover {
-          background: #f7f8fa;
-          color: #263043;
-        }
-
-        .order-invoice-button:disabled {
-          opacity: 0.55;
+        .order-header-actions button:disabled {
+          opacity: 0.5;
           cursor: not-allowed;
         }
 
+        .order-invoice-button {
+          background: #f7f9fb !important;
+        }
+
         .order-print-button {
-          border: 1px solid #172033;
-          background: #172033;
-          color: #ffffff;
+          background: #ffffff;
         }
 
-        .order-print-button:hover {
-          background: #263043;
+        .order-cancel-button {
+          border-color: #ead6d6 !important;
+          background: #fff8f8 !important;
+          color: #925d5d !important;
         }
 
-        /* =========================================
-           PROFESSIONAL DOCUMENT
-        ========================================= */
+        .order-cancel-button:hover:not(:disabled) {
+          border-color: #dfc1c1 !important;
+          background: #fff1f1 !important;
+          color: #7e4e4e !important;
+        }
+
+        .cancellation-feedback {
+          margin-top: 12px;
+          padding: 10px 12px;
+          border-radius: 7px;
+          font-size: 9px;
+          line-height: 1.5;
+        }
+
+        .cancellation-feedback.error {
+          border: 1px solid #eddada;
+          background: #fff8f8;
+          color: #8d5c5c;
+        }
+
+        .cancellation-feedback.success {
+          border: 1px solid #d8e9dc;
+          background: #f5fbf6;
+          color: #55775e;
+        }
 
         .invoice-document {
-          overflow: hidden;
-          border: 1px solid #dfe4eb;
-          border-radius: 14px;
           background: #ffffff;
-          box-shadow:
-            0 8px 30px rgba(23, 32, 51, 0.05);
+          border: 1px solid #e4e8ee;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 3px 14px rgba(31, 41, 55, 0.035);
         }
 
         .invoice-header {
@@ -2189,25 +3218,29 @@ export default function OrderDetailsPage() {
           align-items: flex-start;
           justify-content: space-between;
           gap: 30px;
-          padding: 35px 38px 28px;
-          border-bottom: 1px solid #e5e8ed;
+          padding: 30px 32px 25px;
+          border-bottom: 1px solid #edf0f3;
+        }
+
+        .invoice-company-block {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
 
         .invoice-company-block h1 {
           margin: 0;
-          color: #172033;
-          font-size: 24px;
-          line-height: 30px;
+          color: #263043;
+          font-size: 19px;
+          line-height: 1.2;
           font-weight: 800;
-          letter-spacing: -0.035em;
+          letter-spacing: -0.03em;
         }
 
         .invoice-company-block span {
-          display: block;
-          margin-top: 5px;
-          color: #8b95a4;
-          font-size: 10px;
-          font-weight: 500;
+          color: #969fac;
+          font-size: 9px;
+          font-weight: 600;
         }
 
         .invoice-title-block {
@@ -2215,131 +3248,119 @@ export default function OrderDetailsPage() {
         }
 
         .invoice-title {
-          color: #6d7786;
-          font-size: 10px;
+          color: #6d7685;
+          font-size: 9px;
           font-weight: 800;
           letter-spacing: 0.12em;
         }
 
         .invoice-number {
-          margin-top: 7px;
-          color: #172033;
-          font-size: 16px;
+          margin-top: 5px;
+          color: #263043;
+          font-size: 14px;
           font-weight: 800;
-          letter-spacing: -0.02em;
         }
 
         .invoice-meta-row {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          border-bottom: 1px solid #e5e8ed;
+          border-bottom: 1px solid #edf0f3;
         }
 
         .invoice-meta-group {
-          min-height: 75px;
+          min-height: 67px;
+          padding: 14px 18px;
+          border-right: 1px solid #edf0f3;
           display: flex;
           flex-direction: column;
           justify-content: center;
-          gap: 6px;
-          padding: 12px 22px;
-          border-right: 1px solid #e5e8ed;
+          gap: 5px;
         }
 
         .invoice-meta-group:last-child {
           border-right: 0;
         }
 
-        .invoice-meta-group > span {
-          color: #9aa2af;
+        .invoice-meta-group span {
+          color: #a0a7b2;
           font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 0.07em;
+          font-weight: 700;
           text-transform: uppercase;
+          letter-spacing: 0.06em;
         }
 
-        .invoice-meta-group > strong {
-          color: #465163;
+        .invoice-meta-group strong {
+          color: #4d586a;
           font-size: 10px;
           font-weight: 700;
         }
 
         .invoice-status {
+          display: inline-flex;
           width: fit-content;
           padding: 4px 7px;
           border-radius: 5px;
-          font-size: 8px !important;
         }
 
         .invoice-status.success {
-          background: #eef8f1;
-          color: #3f7652;
+          background: #f0f8f2;
+          color: #4d7a5b !important;
         }
 
         .invoice-status.warning {
-          background: #f4f4ed;
-          color: #77724b;
+          background: #fbf7eb;
+          color: #8b7542 !important;
         }
 
         .invoice-status.danger {
-          background: #f9eeee;
-          color: #915858;
+          background: #fff4f4;
+          color: #925d5d !important;
         }
 
         .invoice-status.neutral {
-          background: #f2f4f6;
-          color: #687284;
+          background: #f4f6f8;
+          color: #697386 !important;
         }
-
-        /* =========================================
-           PARTIES
-        ========================================= */
 
         .invoice-parties {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 50px;
-          padding: 29px 38px;
-          border-bottom: 1px solid #e5e8ed;
+          gap: 20px;
+          padding: 24px 32px;
+          border-bottom: 1px solid #edf0f3;
         }
 
         .invoice-party {
           display: flex;
           flex-direction: column;
-          align-items: flex-start;
+          gap: 4px;
         }
 
         .invoice-party-right {
-          align-items: flex-end;
           text-align: right;
+          align-items: flex-end;
         }
 
         .invoice-section-label {
-          margin-bottom: 10px;
-          color: #9aa2af;
+          margin-bottom: 7px;
+          color: #9ba3af;
           font-size: 8px;
           font-weight: 800;
           letter-spacing: 0.1em;
         }
 
         .invoice-party-name {
-          color: #30394a;
-          font-size: 12px;
-          font-weight: 750;
+          color: #3f4a5c;
+          font-size: 11px;
         }
 
-        .invoice-party > span {
-          margin-top: 4px;
-          color: #7e8897;
+        .invoice-party span {
+          color: #8992a0;
           font-size: 9px;
-          line-height: 14px;
         }
-
-        /* =========================================
-           ITEMS
-        ========================================= */
 
         .invoice-items-section {
-          padding: 27px 38px 0;
+          padding: 23px 32px 8px;
         }
 
         .invoice-items-table {
@@ -2348,16 +3369,21 @@ export default function OrderDetailsPage() {
         }
 
         .invoice-items-table th {
-          height: 38px;
-          padding: 0 10px;
-          border-top: 1px solid #e5e8ed;
-          border-bottom: 1px solid #e5e8ed;
-          color: #8f98a6;
+          padding: 8px 7px;
+          border-bottom: 1px solid #e9edf1;
+          color: #9aa2ad;
           font-size: 8px;
           font-weight: 800;
-          letter-spacing: 0.07em;
           text-align: left;
-          white-space: nowrap;
+          letter-spacing: 0.07em;
+        }
+
+        .invoice-items-table td {
+          padding: 13px 7px;
+          border-bottom: 1px solid #f0f2f5;
+          color: #657082;
+          font-size: 9px;
+          vertical-align: middle;
         }
 
         .invoice-items-table th:first-child,
@@ -2370,132 +3396,111 @@ export default function OrderDetailsPage() {
           padding-right: 0;
         }
 
-        .invoice-items-table td {
-          min-height: 58px;
-          padding: 13px 10px;
-          border-bottom: 1px solid #edf0f3;
-          color: #687386;
-          font-size: 10px;
-          vertical-align: middle;
+        .invoice-items-table .item-description {
+          width: 42%;
         }
 
-        .invoice-items-table tbody tr:last-child td {
-          border-bottom: 0;
-        }
-
-        .item-description {
-          width: 48%;
-        }
-
-        .item-description strong,
-        .item-description span {
+        .invoice-items-table .item-description strong {
           display: block;
-        }
-
-        .item-description strong {
-          color: #394355;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .item-description span {
-          margin-top: 3px;
-          color: #9aa2af;
-          font-size: 8px;
-        }
-
-        .item-sku {
-          color: #929ba8 !important;
-          white-space: nowrap;
-        }
-
-        .item-qty {
-          width: 70px;
-          text-align: center !important;
-        }
-
-        .item-price,
-        .item-total {
-          width: 125px;
-          text-align: right !important;
-          white-space: nowrap;
-        }
-
-        .item-total strong {
-          color: #344052;
-          font-weight: 750;
-        }
-
-        .invoice-empty {
-          padding: 35px;
-          border-top: 1px solid #e5e8ed;
-          color: #9aa2af;
-          font-size: 10px;
-          text-align: center;
-        }
-
-        /* =========================================
-           TOTALS
-        ========================================= */
-
-        .invoice-bottom {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 340px;
-          gap: 50px;
-          padding: 30px 38px;
-          border-top: 1px solid #e5e8ed;
-        }
-
-        .invoice-notes-block {
-          min-height: 150px;
-        }
-
-        .invoice-notes-block p {
-          max-width: 500px;
-          margin: 0;
-          color: #687386;
-          font-size: 10px;
-          line-height: 17px;
-          white-space: pre-wrap;
-        }
-
-        .invoice-thank-you {
-          padding-top: 20px;
-          color: #9aa2af;
-          font-size: 10px;
-        }
-
-        .invoice-total-block {
-          width: 100%;
-        }
-
-        .invoice-total-row {
-          min-height: 31px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .invoice-total-row span {
-          color: #7e8897;
-          font-size: 10px;
-        }
-
-        .invoice-total-row strong {
           color: #465163;
           font-size: 10px;
           font-weight: 700;
         }
 
+        .invoice-items-table .item-description span {
+          display: block;
+          margin-top: 3px;
+          color: #9aa2ad;
+          font-size: 8px;
+        }
+
+        .invoice-items-table .item-sku {
+          color: #8c95a3;
+          font-size: 8px;
+        }
+
+        .invoice-items-table .item-qty {
+          width: 9%;
+          text-align: center;
+        }
+
+        .invoice-items-table .item-price,
+        .invoice-items-table .item-total {
+          text-align: right;
+          white-space: nowrap;
+        }
+
+        .invoice-items-table .item-price {
+          width: 17%;
+        }
+
+        .invoice-items-table .item-total {
+          width: 17%;
+        }
+
+        .invoice-items-table .item-total strong {
+          color: #465163;
+          font-weight: 800;
+        }
+
+        .invoice-empty {
+          padding: 30px 0;
+          color: #9aa2ad;
+          font-size: 10px;
+          text-align: center;
+        }
+
+        .invoice-bottom {
+          display: grid;
+          grid-template-columns: 1fr 340px;
+          gap: 35px;
+          padding: 25px 32px 28px;
+        }
+
+        .invoice-notes-block {
+          min-width: 0;
+        }
+
+        .invoice-notes-block p {
+          max-width: 520px;
+          margin: 0;
+          color: #6f7887;
+          font-size: 9px;
+          line-height: 1.6;
+        }
+
+        .invoice-thank-you {
+          color: #9aa2ad;
+          font-size: 9px;
+        }
+
+        .invoice-total-block {
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+        }
+
+        .invoice-total-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          color: #7d8796;
+          font-size: 9px;
+        }
+
+        .invoice-total-row strong {
+          color: #4c5768;
+          font-size: 9px;
+        }
+
         .invoice-total-divider {
           height: 1px;
-          margin: 10px 0;
-          background: #dfe4eb;
+          margin: 3px 0;
+          background: #e8ebef;
         }
 
         .invoice-grand-total {
-          min-height: 55px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -2503,32 +3508,26 @@ export default function OrderDetailsPage() {
         }
 
         .invoice-grand-total span {
-          color: #30394a;
+          color: #5c6675;
           font-size: 10px;
           font-weight: 800;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.05em;
         }
 
         .invoice-grand-total strong {
-          color: #172033;
-          font-size: 22px;
+          color: #263043;
+          font-size: 15px;
           font-weight: 800;
-          letter-spacing: -0.035em;
         }
 
-        /* =========================================
-           FOOTER
-        ========================================= */
-
         .invoice-footer {
-          min-height: 62px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 20px;
-          padding: 13px 38px;
-          border-top: 1px solid #e5e8ed;
-          background: #fafbfd;
+          padding: 17px 32px;
+          border-top: 1px solid #edf0f3;
+          background: #fbfcfd;
         }
 
         .invoice-footer > div {
@@ -2538,730 +3537,628 @@ export default function OrderDetailsPage() {
         }
 
         .invoice-footer strong {
-          color: #596476;
-          font-size: 9px;
-          font-weight: 750;
+          color: #5b6574;
+          font-size: 8px;
         }
 
         .invoice-footer span {
-          color: #9aa2af;
+          color: #a0a7b2;
           font-size: 8px;
         }
 
         .invoice-footer-right {
-          align-items: flex-end;
           text-align: right;
+          align-items: flex-end;
         }
 
-        /* =========================================
-           SCREEN INFORMATION
-        ========================================= */
-
         .screen-information {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 17px;
-          margin-top: 17px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 15px;
         }
 
         .screen-card {
-          overflow: hidden;
-          border: 1px solid #e2e6ec;
-          border-radius: 13px;
           background: #ffffff;
+          border: 1px solid #e4e8ee;
+          border-radius: 11px;
+          overflow: hidden;
         }
 
         .screen-card-header {
-          min-height: 65px;
           display: flex;
           align-items: center;
-          padding: 13px 17px;
-          border-bottom: 1px solid #edf0f4;
+          justify-content: space-between;
+          padding: 17px 19px;
+          border-bottom: 1px solid #edf0f3;
         }
 
         .screen-card-header h2 {
           margin: 0;
-          color: #30394a;
-          font-size: 13px;
-          font-weight: 780;
+          color: #3f4a5c;
+          font-size: 11px;
+          font-weight: 800;
         }
 
         .screen-card-header p {
           margin: 4px 0 0;
-          color: #9aa2af;
-          font-size: 9px;
+          color: #9aa2ad;
+          font-size: 8px;
         }
 
         .screen-info-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(4, 1fr);
         }
 
         .screen-info-grid > div {
-          min-height: 65px;
+          min-height: 72px;
+          padding: 15px 19px;
+          border-right: 1px solid #edf0f3;
           display: flex;
           flex-direction: column;
           justify-content: center;
           gap: 5px;
-          padding: 12px 17px;
-          border-right: 1px solid #edf0f4;
-          border-bottom: 1px solid #edf0f4;
         }
 
-        .screen-info-grid > div:nth-child(2n) {
+        .screen-info-grid > div:last-child {
           border-right: 0;
         }
 
-        .screen-info-grid > div:nth-last-child(-n + 2) {
-          border-bottom: 0;
-        }
-
         .screen-info-grid span {
-          color: #9aa2af;
+          color: #9aa2ad;
           font-size: 8px;
-          font-weight: 650;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          font-weight: 700;
         }
 
         .screen-info-grid strong {
           color: #596476;
           font-size: 10px;
+        }
+
+        .fulfillment-body {
+          padding: 18px 19px 19px;
+        }
+
+        .fulfillment-fields {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .fulfillment-fields label {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .fulfillment-fields label > span {
+          color: #8e97a5;
+          font-size: 8px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+
+        .fulfillment-fields select {
+          width: 100%;
+          height: 38px;
+          padding: 0 11px;
+          border: 1px solid #dfe4eb;
+          border-radius: 7px;
+          background: #ffffff;
+          color: #586274;
+          outline: none;
+          font-family: inherit;
+          font-size: 10px;
+        }
+
+        .fulfillment-fields select:focus {
+          border-color: #b8c0cb;
+        }
+
+        .fulfillment-feedback {
+          margin-top: 12px;
+          padding: 10px 12px;
+          border-radius: 7px;
+          font-size: 9px;
+          line-height: 1.5;
+        }
+
+        .fulfillment-feedback.error {
+          border: 1px solid #eddada;
+          background: #fff8f8;
+          color: #8d5c5c;
+        }
+
+        .fulfillment-feedback.success {
+          border: 1px solid #d8e9dc;
+          background: #f5fbf6;
+          color: #55775e;
+        }
+
+        .fulfillment-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          margin-top: 15px;
+          padding-top: 14px;
+          border-top: 1px solid #edf0f3;
+        }
+
+        .fulfillment-actions > span {
+          max-width: 650px;
+          color: #929aa7;
+          font-size: 8px;
+          line-height: 1.5;
+        }
+
+        .fulfillment-actions button {
+          flex: 0 0 auto;
+          height: 37px;
+          padding: 0 15px;
+          border: 0;
+          border-radius: 7px;
+          background: #3f4b5c;
+          color: #ffffff;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 9px;
+          font-weight: 800;
+        }
+
+        .fulfillment-actions button:hover:not(:disabled) {
+          background: #303b4b;
+        }
+
+        .fulfillment-actions button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .fulfillment-complete {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 13px 14px;
+          border: 1px solid #d8e9dc;
+          border-radius: 8px;
+          background: #f6fbf7;
+        }
+
+        .fulfillment-complete strong {
+          color: #52715b;
+          font-size: 10px;
+        }
+
+        .fulfillment-complete span {
+          color: #7d9182;
+          font-size: 8px;
+          line-height: 1.5;
+        }
+
+        .fulfillment-blocked {
+          border-color: #eadada;
+          background: #fff8f8;
+        }
+
+        .fulfillment-blocked strong {
+          color: #8b5d5d;
+        }
+
+        .fulfillment-blocked span {
+          color: #a27d7d;
+        }
+
+        .serial-allocation-section {
+          margin-top: 16px;
+          border: 1px solid #e3e7ed;
+          border-radius: 9px;
+          background: #fbfcfd;
+          overflow: hidden;
+        }
+
+        .serial-allocation-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 15px;
+          border-bottom: 1px solid #e3e7ed;
+        }
+
+        .serial-allocation-header > div {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .serial-allocation-header strong {
+          color: #344054;
+          font-size: 10px;
+        }
+
+        .serial-allocation-header span {
+          color: #8b95a5;
+          font-size: 8px;
+        }
+
+        .serial-loading {
+          color: #697386 !important;
           font-weight: 700;
+        }
+
+        .serial-item {
+          padding: 14px 15px;
+          border-bottom: 1px solid #e8ebf0;
+        }
+
+        .serial-item:last-child {
+          border-bottom: 0;
+        }
+
+        .serial-item-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+
+        .serial-item-header > div:first-child {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .serial-item-header strong {
+          color: #3d4758;
+          font-size: 10px;
+        }
+
+        .serial-item-header span {
+          color: #8b95a5;
+          font-size: 8px;
+        }
+
+        .serial-count {
+          padding: 5px 8px;
+          border: 1px solid #e1e5eb;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #7b8492;
+          font-size: 8px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .serial-count.complete {
+          border-color: #cfe5d6;
+          background: #f3fbf5;
+          color: #4b8060;
+        }
+
+        .serial-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .serial-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 50px;
+          padding: 9px 10px;
+          border: 1px solid #e1e5eb;
+          border-radius: 7px;
+          background: #ffffff;
+          cursor: pointer;
+          transition:
+            border-color 0.15s ease,
+            background 0.15s ease;
+        }
+
+        .serial-row:hover {
+          border-color: #cbd2dc;
+          background: #fafbfc;
+        }
+
+        .serial-row.selected {
+          border-color: #a9c4b2;
+          background: #f5faf6;
+        }
+
+        .serial-row.disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+
+        .serial-row input {
+          width: 15px;
+          height: 15px;
+          margin: 0;
+          accent-color: #536b5d;
+          cursor: pointer;
+        }
+
+        .serial-row input:disabled {
+          cursor: not-allowed;
+        }
+
+        .serial-row-main {
+          min-width: 0;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .serial-row-main strong {
+          color: #344054;
+          font-size: 10px;
+          font-weight: 800;
+          word-break: break-all;
+        }
+
+        .serial-row-main span {
+          color: #929baa;
+          font-size: 8px;
+        }
+
+        .serial-status {
+          padding: 4px 7px;
+          border-radius: 5px;
+          background: #f2f7f3;
+          color: #5f7b69;
+          font-size: 7px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .serial-empty {
+          padding: 12px;
+          border: 1px dashed #d9dee6;
+          border-radius: 7px;
+          background: #ffffff;
+          color: #8d96a4;
+          font-size: 9px;
+          line-height: 1.5;
         }
 
         .screen-customer {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 18px;
+          padding: 17px 19px;
         }
 
         .screen-customer-avatar {
-          width: 40px;
-          height: 40px;
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
           display: grid;
           place-items: center;
-          flex: 0 0 40px;
-          border: 1px solid #e2e6ec;
-          border-radius: 9px;
-          background: #f7f8fa;
-          color: #697386;
-          font-size: 12px;
+          border-radius: 50%;
+          background: #f1f3f6;
+          color: #657082;
+          font-size: 11px;
           font-weight: 800;
         }
 
         .screen-customer > div:last-child {
           display: flex;
           flex-direction: column;
-          align-items: flex-start;
+          gap: 4px;
         }
 
         .screen-customer strong {
-          color: #465163;
-          font-size: 11px;
-          font-weight: 750;
+          color: #4d586a;
+          font-size: 10px;
         }
 
         .screen-customer a {
-          margin-top: 3px;
-          color: #7e8897;
-          font-size: 9px;
+          color: #8b94a2;
+          font-size: 8px;
           text-decoration: none;
         }
 
         .screen-customer a:hover {
-          color: #263043;
-          text-decoration: underline;
+          color: #4f596a;
         }
 
-        /* =========================================
-           FINANCIAL SECTION
-        ========================================= */
-
-        .financial-section {
-          margin-top: 17px;
-        }
-
-        .financial-section-header {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          margin-bottom: 10px;
-          padding: 0 2px;
-        }
-
-        .financial-section-header h2 {
-          margin: 0;
-          color: #30394a;
-          font-size: 15px;
-          font-weight: 800;
-          letter-spacing: -0.02em;
-        }
-
-        .financial-section-header p {
-          margin: 4px 0 0;
-          color: #9aa2af;
-          font-size: 9px;
-        }
-
-        .financial-card {
-          overflow: hidden;
-          margin-bottom: 12px;
-          border: 1px solid #e2e6ec;
-          border-radius: 13px;
-          background: #ffffff;
-        }
-
-        .financial-card:last-child {
-          margin-bottom: 0;
-        }
-
-        .financial-card-header {
-          min-height: 69px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 14px 17px;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .financial-icon {
-          width: 38px;
-          height: 38px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 38px;
-          border: 1px solid #e3e7ec;
-          border-radius: 9px;
-          background: #f7f8fa;
-          color: #697386;
-        }
-
-        .financial-card-title {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-        }
-
-        .financial-card-title h3 {
-          margin: 0;
-          color: #394355;
-          font-size: 12px;
-          font-weight: 780;
-        }
-
-        .financial-card-title p {
-          margin: 4px 0 0;
-          color: #9aa2af;
-          font-size: 9px;
-        }
-
-        .financial-status {
-          flex: 0 0 auto;
-          padding: 5px 8px;
-          border-radius: 5px;
-          font-size: 8px;
-          font-weight: 750;
-        }
-
-        .financial-status.success {
-          background: #eef8f1;
-          color: #3f7652;
-        }
-
-        .financial-status.warning {
-          background: #f4f4ed;
-          color: #77724b;
-        }
-
-        .financial-status.danger {
-          background: #f9eeee;
-          color: #915858;
-        }
-
-        .financial-status.neutral {
-          background: #f2f4f6;
-          color: #687284;
-        }
-
-        .financial-metrics {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .financial-metrics > div {
-          min-height: 78px;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          gap: 5px;
-          padding: 12px 17px;
-          border-right: 1px solid #edf0f4;
-        }
-
-        .financial-metrics > div:last-child {
-          border-right: 0;
-        }
-
-        .financial-metrics span {
-          color: #9aa2af;
-          font-size: 8px;
-          font-weight: 700;
-        }
-
-        .financial-metrics strong {
-          color: #465163;
-          font-size: 12px;
-          font-weight: 780;
-        }
-
-        .paid-value {
-          color: #3f7652 !important;
-        }
-
-        .balance-value {
-          color: #915858 !important;
-        }
-
-        .financial-card-actions {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          padding: 12px 17px;
-        }
-
-        .primary-financial-button,
-        .secondary-financial-button {
-          height: 36px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 12px;
-          border-radius: 7px;
-          font-family: inherit;
-          font-size: 9px;
-          font-weight: 750;
-          cursor: pointer;
-        }
-
-        .primary-financial-button {
-          border: 1px solid #172033;
-          background: #172033;
-          color: #ffffff;
-        }
-
-        .primary-financial-button:hover {
-          background: #263043;
-        }
-
-        .secondary-financial-button {
-          border: 1px solid #dfe4eb;
-          background: #ffffff;
-          color: #596476;
-        }
-
-        .secondary-financial-button:hover {
-          background: #f7f8fa;
-          color: #263043;
-        }
-
-        .financial-empty {
-          min-height: 95px;
+        .invoice-connection {
+          min-height: 68px;
+          padding: 15px 19px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 20px;
-          padding: 18px;
         }
 
-        .financial-empty > div {
+        .connection-main {
           display: flex;
           flex-direction: column;
+          gap: 4px;
+        }
+
+        .connection-main strong {
+          color: #4d586a;
+          font-size: 10px;
+        }
+
+        .connection-main span {
+          color: #969fac;
+          font-size: 8px;
+        }
+
+        .connection-actions {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .connection-actions button {
+          height: 32px;
+          padding: 0 10px;
+          border: 1px solid #dfe4eb;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #647083;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 8px;
+          font-weight: 700;
+        }
+
+        .connection-actions button:hover {
+          background: #f7f9fb;
+          color: #303b4b;
+        }
+
+        .connection-loading,
+        .connection-empty {
+          padding: 17px 19px;
+          color: #9aa2ad;
+          font-size: 9px;
+        }
+
+        .payments-summary {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          border-bottom: 1px solid #edf0f3;
+        }
+
+        .payments-summary > div {
+          min-height: 72px;
+          padding: 15px 19px;
+          border-right: 1px solid #edf0f3;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
           gap: 5px;
         }
 
-        .financial-empty strong {
-          color: #465163;
-          font-size: 10px;
-          font-weight: 750;
+        .payments-summary > div:last-child {
+          border-right: 0;
         }
 
-        .financial-empty span {
-          color: #9aa2af;
-          font-size: 9px;
-          line-height: 15px;
-        }
-
-        .financial-loading {
-          min-height: 95px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          color: #8f98a6;
-          font-size: 9px;
-        }
-
-        .small-spinner {
-          width: 15px;
-          height: 15px;
-          border: 2px solid #e5e8ed;
-          border-top-color: #697386;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-
-        /* =========================================
-           PAYMENTS
-        ========================================= */
-
-        .payment-count {
-          padding: 5px 8px;
-          border: 1px solid #e3e7ec;
-          border-radius: 5px;
-          background: #f7f8fa;
-          color: #697386;
+        .payments-summary span {
+          color: #9aa2ad;
           font-size: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
           font-weight: 700;
         }
 
-        .payment-table-wrapper {
-          overflow-x: auto;
-        }
-
-        .payment-table {
-          width: 100%;
-          min-width: 620px;
-          border-collapse: collapse;
-        }
-
-        .payment-table th {
-          height: 36px;
-          padding: 0 17px;
-          border-bottom: 1px solid #edf0f4;
-          color: #929ba8;
-          font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 0.07em;
-          text-align: left;
-          white-space: nowrap;
-        }
-
-        .payment-table td {
-          padding: 13px 17px;
-          border-bottom: 1px solid #edf0f4;
-          color: #697386;
-          font-size: 9px;
-          vertical-align: middle;
-        }
-
-        .payment-table tbody tr:last-child td {
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .payment-table td > strong,
-        .payment-table td > span {
-          display: block;
-        }
-
-        .payment-table td strong {
-          color: #465163;
-          font-size: 9px;
-          font-weight: 700;
-        }
-
-        .payment-table td span {
-          margin-top: 3px;
-          color: #9aa2af;
-          font-size: 8px;
-        }
-
-        .payment-method {
-          color: #596476 !important;
-          font-weight: 650;
-        }
-
-        .payment-reference {
-          color: #697386 !important;
-          max-width: 180px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .payment-muted {
-          color: #b1b7c0 !important;
-        }
-
-        .payment-amount-column {
-          text-align: right !important;
-          white-space: nowrap;
-        }
-
-        .payment-table tfoot td {
-          height: 49px;
-          border-bottom: 0;
-          color: #7e8897;
-          font-size: 9px;
-          font-weight: 700;
-        }
-
-        .payment-table tfoot td:last-child strong {
-          color: #172033;
+        .payments-summary strong {
+          color: #596476;
           font-size: 11px;
-          font-weight: 800;
         }
 
-        .payment-empty {
-          min-height: 105px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 18px;
+        .payments-summary .payment-due {
+          color: #8b6464;
         }
 
-        .payment-empty > span {
-          color: #9aa2af;
-          font-size: 9px;
+        .payments-summary .payment-clear {
+          color: #557760;
         }
 
-        .payment-footer-actions {
-          min-height: 62px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 10px 17px;
-          border-top: 1px solid #edf0f4;
-          background: #fafbfd;
-        }
-
-        .payment-footer-actions > div {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-
-        .payment-footer-actions span {
-          color: #8f98a6;
-          font-size: 9px;
-        }
-
-        .payment-footer-actions strong {
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        /* =========================================
-           DOCUMENT FLOW
-        ========================================= */
-
-        .connection-card {
-          overflow: hidden;
-          margin-top: 12px;
-          border: 1px solid #e2e6ec;
-          border-radius: 13px;
-          background: #ffffff;
-        }
-
-        .connection-header {
-          min-height: 65px;
-          display: flex;
-          align-items: center;
-          padding: 13px 17px;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .connection-header h2 {
-          margin: 0;
-          color: #30394a;
-          font-size: 13px;
-          font-weight: 780;
-        }
-
-        .connection-header p {
-          margin: 4px 0 0;
-          color: #9aa2af;
-          font-size: 9px;
-        }
-
-        .connection-flow {
-          min-height: 105px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 18px;
-          padding: 18px;
-        }
-
-        .connection-node {
-          min-width: 190px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 11px 13px;
-          border: 1px solid #e3e7ec;
-          border-radius: 9px;
-          background: #fafbfd;
-        }
-
-        .connection-node.connection-active {
-          border-color: #d9e8dd;
-          background: #f8fcf9;
-        }
-
-        .connection-node-icon {
-          width: 32px;
-          height: 32px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 32px;
-          border: 1px solid #e3e7ec;
-          border-radius: 7px;
-          background: #ffffff;
-          color: #697386;
-        }
-
-        .connection-node > div:last-child {
+        .payment-list {
           display: flex;
           flex-direction: column;
-          gap: 3px;
-          min-width: 0;
         }
 
-        .connection-node strong {
-          color: #465163;
-          font-size: 9px;
-          font-weight: 750;
+        .payment-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 13px 19px;
+          border-bottom: 1px solid #f0f2f5;
         }
 
-        .connection-node span {
-          overflow: hidden;
-          color: #9aa2af;
+        .payment-row:last-child {
+          border-bottom: 0;
+        }
+
+        .payment-row > div {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .payment-row > div:last-child {
+          align-items: flex-end;
+        }
+
+        .payment-row strong {
+          color: #4d586a;
+          font-size: 10px;
+        }
+
+        .payment-row span {
+          color: #969fac;
           font-size: 8px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
         }
 
-        .connection-arrow {
-          color: #b1b7c0;
-          font-size: 17px;
-          font-weight: 500;
-        }
-
-        .mobile-order-actions {
-          display: none;
-        }
-
-        /* =========================================
-           TABLET
-        ========================================= */
-
-        @media (max-width: 850px) {
+        @media (max-width: 800px) {
+          .order-page {
+            padding: 8px 0 35px;
+          }
 
           .invoice-header {
-            padding: 27px 25px 23px;
+            padding: 23px 20px 20px;
           }
 
           .invoice-parties {
-            padding: 25px;
+            padding: 20px;
           }
 
           .invoice-items-section {
-            padding: 24px 25px 0;
+            padding-left: 20px;
+            padding-right: 20px;
           }
 
           .invoice-bottom {
-            padding: 27px 25px;
+            grid-template-columns: 1fr;
+            gap: 22px;
+            padding: 22px 20px;
           }
 
           .invoice-footer {
-            padding: 13px 25px;
+            padding: 15px 20px;
           }
 
-          .invoice-meta-group {
-            padding: 12px 15px;
-          }
-
-          .invoice-bottom {
-            grid-template-columns: 1fr 300px;
-            gap: 30px;
-          }
-
-          .financial-metrics {
+          .screen-info-grid {
             grid-template-columns: 1fr 1fr;
           }
 
-          .financial-metrics > div:nth-child(2) {
+          .screen-info-grid > div:nth-child(2) {
             border-right: 0;
           }
 
-          .financial-metrics > div:nth-child(-n + 2) {
-            border-bottom: 1px solid #edf0f4;
+          .screen-info-grid > div:nth-child(-n + 2) {
+            border-bottom: 1px solid #edf0f3;
           }
 
-          .connection-flow {
-            gap: 10px;
+          .fulfillment-actions {
+            align-items: flex-start;
+            flex-direction: column;
           }
 
-          .connection-node {
-            min-width: 0;
-            flex: 1;
+          .fulfillment-actions button {
+            width: 100%;
           }
-
         }
 
-        /* =========================================
-           MOBILE
-        ========================================= */
-
-        @media (max-width: 650px) {
-
+        @media (max-width: 600px) {
           .order-header-actions {
-            gap: 5px;
-          }
-
-          .order-back-button,
-          .order-invoice-button,
-          .order-print-button {
-            height: 37px;
-            padding: 0 9px;
-            font-size: 9px;
-          }
-
-          .order-back-button svg {
-            display: none;
-          }
-
-          .order-print-button svg {
-            display: none;
-          }
-
-          .order-invoice-button svg {
-            display: none;
-          }
-
-          .invoice-document {
-            border-radius: 11px;
-          }
-
-          .invoice-header {
-            flex-direction: column;
-            gap: 17px;
-            padding: 23px 18px;
-          }
-
-          .invoice-company-block h1 {
-            font-size: 20px;
-            line-height: 26px;
-          }
-
-          .invoice-title-block {
-            text-align: left;
+            flex-wrap: wrap;
           }
 
           .invoice-meta-row {
@@ -3273,22 +4170,16 @@ export default function OrderDetailsPage() {
           }
 
           .invoice-meta-group:nth-child(-n + 2) {
-            border-bottom: 1px solid #e5e8ed;
+            border-bottom: 1px solid #edf0f3;
           }
 
           .invoice-parties {
             grid-template-columns: 1fr;
-            gap: 23px;
-            padding: 22px 18px;
           }
 
           .invoice-party-right {
-            align-items: flex-start;
             text-align: left;
-          }
-
-          .invoice-items-section {
-            padding: 22px 18px 0;
+            align-items: flex-start;
           }
 
           .invoice-items-table {
@@ -3299,264 +4190,68 @@ export default function OrderDetailsPage() {
             overflow-x: auto;
           }
 
-          .invoice-bottom {
+          .payments-summary {
             grid-template-columns: 1fr;
-            gap: 15px;
-            padding: 22px 18px;
           }
 
-          .invoice-notes-block {
-            min-height: auto;
+          .payments-summary > div {
+            border-right: 0;
+            border-bottom: 1px solid #edf0f3;
           }
 
-          .invoice-total-block {
+          .payments-summary > div:last-child {
+            border-bottom: 0;
+          }
+
+          .invoice-connection {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .connection-actions {
             width: 100%;
           }
 
-          .invoice-footer {
-            align-items: flex-start;
-            flex-direction: column;
-            padding: 14px 18px;
-          }
-
-          .invoice-footer-right {
-            align-items: flex-start;
-            text-align: left;
-          }
-
-          .screen-information {
-            grid-template-columns: 1fr;
-          }
-
-          .financial-section-header {
-            align-items: flex-start;
-          }
-
-          .financial-card-title {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 6px;
-          }
-
-          .financial-status,
-          .payment-count {
-            align-self: flex-start;
-          }
-
-          .financial-metrics {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .financial-metrics > div {
-            min-height: 68px;
-            padding: 10px 13px;
-          }
-
-          .financial-card-actions {
-            justify-content: stretch;
-          }
-
-          .financial-card-actions button {
+          .connection-actions button {
             flex: 1;
           }
 
-          .financial-empty {
+          .serial-allocation-header,
+          .serial-item-header {
             align-items: flex-start;
             flex-direction: column;
           }
 
-          .financial-empty .primary-financial-button {
-            width: 100%;
+          .serial-count {
+            align-self: flex-start;
           }
 
-          .payment-empty {
+          .serial-row {
             align-items: flex-start;
-            flex-direction: column;
           }
 
-          .payment-empty .primary-financial-button {
-            width: 100%;
-          }
-
-          .payment-footer-actions {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .payment-footer-actions > div {
-            width: 100%;
-            justify-content: space-between;
-          }
-
-          .payment-footer-actions .primary-financial-button {
-            width: 100%;
-          }
-
-          .connection-flow {
-            align-items: stretch;
-            flex-direction: column;
-            gap: 5px;
-          }
-
-          .connection-node {
-            width: 100%;
-          }
-
-          .connection-arrow {
+          .serial-status {
             display: none;
           }
-
-          .mobile-order-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 17px;
-          }
-
-          .mobile-order-actions button {
-            min-height: 42px;
-            padding: 0 8px;
-            border: 1px solid #dfe4eb;
-            border-radius: 8px;
-            background: #ffffff;
-            color: #596476;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 9px;
-            font-weight: 700;
-          }
-
-          .mobile-order-actions button:last-child {
-            border-color: #172033;
-            background: #172033;
-            color: #ffffff;
-          }
-
         }
 
-        /* =========================================
-           PRINT / PDF
-        ========================================= */
-
         @media print {
-
-          @page {
-            size: A4;
-            margin: 12mm;
-          }
-
-          :global(html),
-          :global(body) {
-            width: 100%;
-            min-width: 0;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-          }
-
-          :global(body *) {
-            visibility: hidden;
-          }
-
-          .order-page,
-          .order-page * {
-            visibility: visible;
+          .order-header-actions,
+          .screen-information,
+          .cancellation-feedback {
+            display: none !important;
           }
 
           .order-page {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
             max-width: none;
-            margin: 0;
             padding: 0;
           }
 
           .invoice-document {
-            width: 100%;
-            max-width: none;
-            overflow: visible;
             border: 0;
-            border-radius: 0;
             box-shadow: none;
           }
-
-          .invoice-header {
-            padding: 0 0 18px;
-          }
-
-          .invoice-company-block h1 {
-            font-size: 22px;
-          }
-
-          .invoice-meta-row {
-            grid-template-columns: repeat(4, 1fr);
-          }
-
-          .invoice-meta-group {
-            min-height: 62px;
-            padding: 9px 12px;
-          }
-
-          .invoice-parties {
-            padding: 20px 0;
-          }
-
-          .invoice-items-section {
-            padding: 20px 0 0;
-          }
-
-          .invoice-items-table th {
-            height: 34px;
-          }
-
-          .invoice-items-table td {
-            padding: 10px 8px;
-          }
-
-          .invoice-bottom {
-            grid-template-columns: minmax(0, 1fr) 285px;
-            gap: 35px;
-            padding: 22px 0;
-          }
-
-          .invoice-footer {
-            padding: 12px 0;
-            background: #ffffff;
-          }
-
-          .screen-information,
-          .financial-section,
-          .connection-card,
-          .mobile-order-actions,
-          .order-header-actions {
-            display: none !important;
-          }
-
-          .invoice-items-table {
-            page-break-inside: auto;
-          }
-
-          .invoice-items-table tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-          }
-
-          .invoice-items-table thead {
-            display: table-header-group;
-          }
-
-          .invoice-bottom {
-            page-break-inside: avoid;
-          }
-
-          .invoice-footer {
-            page-break-inside: avoid;
-          }
-
         }
-
       `}</style>
     </AppShell>
   );

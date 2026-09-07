@@ -85,7 +85,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "SALES",
       items: [
@@ -121,7 +120,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "PRODUCTS & INVENTORY",
       items: [
@@ -157,7 +155,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "PROCUREMENT",
       items: [
@@ -181,7 +178,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "SERVICE",
       items: [
@@ -205,7 +201,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "BUSINESS",
       items: [
@@ -235,7 +230,6 @@ function getWorkspaceSections(): NavSection[] {
         },
       ],
     },
-
     {
       label: "SYSTEM",
       items: [
@@ -252,7 +246,7 @@ function getWorkspaceSections(): NavSection[] {
 
 function Icon({
   name,
-  size = 20,
+  size = 18,
 }: {
   name: IconName;
   size?: number;
@@ -263,7 +257,7 @@ function Icon({
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.8,
+    strokeWidth: 2,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
@@ -273,13 +267,12 @@ function Icon({
     case "dashboard":
       return (
         <svg {...common}>
-          <rect x="3" y="3" width="7" height="7" rx="1" />
-          <rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" />
-          <rect x="14" y="14" width="7" height="7" rx="1" />
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
       );
-
     case "customers":
       return (
         <svg {...common}>
@@ -289,7 +282,6 @@ function Icon({
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       );
-
     case "quotes":
       return (
         <svg {...common}>
@@ -300,7 +292,6 @@ function Icon({
           <line x1="8" y1="9" x2="10" y2="9" />
         </svg>
       );
-
     case "orders":
       return (
         <svg {...common}>
@@ -311,7 +302,6 @@ function Icon({
           <path d="M8 9h2" />
         </svg>
       );
-
     case "invoices":
       return (
         <svg {...common}>
@@ -321,7 +311,6 @@ function Icon({
           <line x1="8" y1="16" x2="16" y2="16" />
         </svg>
       );
-
     case "payments":
       return (
         <svg {...common}>
@@ -330,7 +319,6 @@ function Icon({
           <line x1="6" y1="15" x2="10" y2="15" />
         </svg>
       );
-
     case "products":
       return (
         <svg {...common}>
@@ -340,7 +328,6 @@ function Icon({
           <path d="M12 13v8" />
         </svg>
       );
-
     case "serials":
       return (
         <svg {...common}>
@@ -351,7 +338,6 @@ function Icon({
           <line x1="17" y1="8" x2="17" y2="16" />
         </svg>
       );
-
     case "inventory":
       return (
         <svg {...common}>
@@ -362,7 +348,6 @@ function Icon({
           <path d="M17 4v16" />
         </svg>
       );
-
     case "warehouses":
       return (
         <svg {...common}>
@@ -370,7 +355,6 @@ function Icon({
           <path d="M8 21v-6h8v6" />
         </svg>
       );
-
     case "pricing":
       return (
         <svg {...common}>
@@ -378,7 +362,6 @@ function Icon({
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H7" />
         </svg>
       );
-
     case "suppliers":
       return (
         <svg {...common}>
@@ -390,7 +373,6 @@ function Icon({
           <line x1="8" y1="15" x2="10" y2="15" />
         </svg>
       );
-
     case "purchases":
       return (
         <svg {...common}>
@@ -400,7 +382,6 @@ function Icon({
           <path d="M8 17h5" />
         </svg>
       );
-
     case "expenses":
       return (
         <svg {...common}>
@@ -409,7 +390,6 @@ function Icon({
           <line x1="12" y1="6" x2="12" y2="18" />
         </svg>
       );
-
     case "warranty":
       return (
         <svg {...common}>
@@ -417,14 +397,12 @@ function Icon({
           <path d="m9 12 2 2 4-4" />
         </svg>
       );
-
     case "repairs":
       return (
         <svg {...common}>
           <path d="M14.7 6.3a4 4 0 0 0-5.7 5.7l-6 6a2 2 0 0 0 2.8 2.8l6-6a4 4 0 0 0 5.7-5.7l-2.2 2.2-2.8-2.8 2.2-2.2Z" />
         </svg>
       );
-
     case "rma":
       return (
         <svg {...common}>
@@ -434,7 +412,6 @@ function Icon({
           <path d="M3 21v-5h5" />
         </svg>
       );
-
     case "portal":
       return (
         <svg {...common}>
@@ -444,7 +421,6 @@ function Icon({
           <circle cx="10" cy="6.5" r=".5" />
         </svg>
       );
-
     case "reports":
       return (
         <svg {...common}>
@@ -454,7 +430,6 @@ function Icon({
           <line x1="22" y1="20" x2="22" y2="7" />
         </svg>
       );
-
     case "employees":
       return (
         <svg {...common}>
@@ -464,7 +439,6 @@ function Icon({
           <path d="M16 11h6" />
         </svg>
       );
-
     case "documents":
       return (
         <svg {...common}>
@@ -474,7 +448,6 @@ function Icon({
           <line x1="8" y1="17" x2="14" y2="17" />
         </svg>
       );
-
     case "settings":
       return (
         <svg {...common}>
@@ -482,7 +455,6 @@ function Icon({
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-2.6v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.6h.4A1.7 1.7 0 0 0 8 10.4a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h2.6v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.4V13h-.4a1.7 1.7 0 0 0-1.6 1Z" />
         </svg>
       );
-
     case "search":
       return (
         <svg {...common}>
@@ -490,7 +462,6 @@ function Icon({
           <line x1="16.5" y1="16.5" x2="21" y2="21" />
         </svg>
       );
-
     case "menu":
       return (
         <svg {...common}>
@@ -499,7 +470,6 @@ function Icon({
           <line x1="4" y1="18" x2="20" y2="18" />
         </svg>
       );
-
     case "close":
       return (
         <svg {...common}>
@@ -507,7 +477,6 @@ function Icon({
           <line x1="18" y1="6" x2="6" y2="18" />
         </svg>
       );
-
     case "logout":
       return (
         <svg {...common}>
@@ -516,14 +485,12 @@ function Icon({
           <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
         </svg>
       );
-
     case "chevron":
       return (
         <svg {...common}>
           <polyline points="9 18 15 12 9 6" />
         </svg>
       );
-
     case "bell":
       return (
         <svg {...common}>
@@ -531,7 +498,6 @@ function Icon({
           <path d="M10 21h4" />
         </svg>
       );
-
     default:
       return null;
   }
@@ -613,8 +579,6 @@ export default function AppShell({
   }, [supabase]);
 
   useEffect(() => {
-    // Workspace state is intentionally synchronized from Supabase here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadWorkspace();
 
     const channel = supabase
@@ -638,8 +602,6 @@ export default function AppShell({
   }, [loadWorkspace, supabase]);
 
   useEffect(() => {
-    // Route changes should close the mobile navigation.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileSidebarOpen(false);
   }, [pathname]);
 
@@ -729,30 +691,34 @@ export default function AppShell({
       <style jsx global>{`
         .sbs-app-shell {
           min-height: 100vh;
-          background: #f6f7f9;
-          color: #111827;
+          background: #f8fafc;
+          color: #0f172a;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+          -webkit-font-smoothing: antialiased;
         }
 
+        /* Sidebar Styling */
         .sbs-sidebar {
           position: fixed;
           inset: 0 auto 0 0;
-          width: 285px;
+          width: 270px;
           height: 100vh;
           background: #ffffff;
-          border-right: 1px solid #e5e7eb;
+          border-right: 1px solid #e2e8f0;
           z-index: 100;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          transition: transform 0.25s ease;
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .sbs-sidebar-header {
-          height: 76px;
-          padding: 0 22px;
+          height: 70px;
+          padding: 0 20px;
           display: flex;
           align-items: center;
-          border-bottom: 1px solid #f0f1f3;
+          border-bottom: 1px solid #f1f5f9;
           flex-shrink: 0;
         }
 
@@ -763,128 +729,137 @@ export default function AppShell({
           min-width: 0;
           text-decoration: none;
           color: inherit;
+          background: transparent;
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          text-align: left;
         }
 
         .sbs-brand-mark {
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
-          background: #111827;
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
           color: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 800;
-          letter-spacing: -0.04em;
+          letter-spacing: -0.03em;
           flex-shrink: 0;
+          box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
         }
 
         .sbs-brand-text {
           min-width: 0;
+          display: flex;
+          flex-direction: column;
         }
 
         .sbs-brand-name {
-          font-size: 14px;
-          line-height: 18px;
-          font-weight: 750;
-          color: #111827;
+          font-size: 13.5px;
+          line-height: 1.2;
+          font-weight: 700;
+          color: #0f172a;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .sbs-brand-subtitle {
-          margin-top: 2px;
+          margin-top: 3px;
           font-size: 11px;
-          line-height: 15px;
-          color: #9ca3af;
+          line-height: 1;
+          color: #64748b;
+          font-weight: 500;
         }
 
         .sbs-sidebar-scroll {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          padding: 16px 12px 20px;
+          padding: 20px 12px 20px;
         }
 
         .sbs-sidebar-scroll::-webkit-scrollbar {
-          width: 5px;
+          width: 4px;
         }
 
         .sbs-sidebar-scroll::-webkit-scrollbar-thumb {
-          background: #d1d5db;
+          background: #cbd5e1;
           border-radius: 99px;
         }
 
         .sbs-nav-section {
-          margin-bottom: 20px;
+          margin-bottom: 22px;
         }
 
         .sbs-nav-section-label {
-          padding: 0 12px;
-          margin-bottom: 7px;
+          padding: 0 10px;
+          margin-bottom: 8px;
           font-size: 10px;
-          line-height: 15px;
-          font-weight: 800;
+          line-height: 1;
+          font-weight: 700;
           letter-spacing: 0.08em;
-          color: #9ca3af;
+          color: #94a3b8;
+          text-transform: uppercase;
         }
 
         .sbs-nav-list {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 3px;
         }
 
         .sbs-nav-button {
           width: 100%;
-          min-height: 42px;
+          height: 38px;
           border: 0;
-          border-radius: 9px;
-          padding: 0 12px;
+          border-radius: 7px;
+          padding: 0 10px;
           display: flex;
           align-items: center;
-          gap: 11px;
+          gap: 10px;
           background: transparent;
-          color: #4b5563;
+          color: #475569;
           font: inherit;
           font-size: 13px;
-          font-weight: 550;
+          font-weight: 500;
           text-align: left;
           cursor: pointer;
-          transition:
-            background 0.15s ease,
-            color 0.15s ease;
+          transition: all 0.15s ease;
         }
 
-        .sbs-nav-button:hover {
-          background: #f3f4f6;
-          color: #111827;
+        .sbs-nav-button:hover:not(.disabled) {
+          background: #f1f5f9;
+          color: #0f172a;
         }
 
         .sbs-nav-button.active {
-          background: #111827;
-          color: #ffffff;
+          background: #eff6ff;
+          color: #2563eb;
+          font-weight: 600;
         }
 
         .sbs-nav-button.disabled {
-          color: #b8bdc5;
-          cursor: default;
-        }
-
-        .sbs-nav-button.disabled:hover {
-          background: transparent;
-          color: #b8bdc5;
+          color: #cbd5e1;
+          cursor: not-allowed;
         }
 
         .sbs-nav-icon {
-          width: 20px;
-          height: 20px;
+          width: 18px;
+          height: 18px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          color: inherit;
+        }
+
+        .sbs-nav-button.active .sbs-nav-icon {
+          color: #2563eb;
         }
 
         .sbs-nav-label {
@@ -897,42 +872,44 @@ export default function AppShell({
 
         .sbs-coming-soon {
           font-size: 9px;
-          line-height: 15px;
-          font-weight: 700;
-          color: #9ca3af;
-          background: #f3f4f6;
-          padding: 1px 5px;
+          line-height: 1;
+          font-weight: 600;
+          color: #94a3b8;
+          background: #f1f5f9;
+          padding: 3px 6px;
           border-radius: 4px;
           flex-shrink: 0;
         }
 
         .sbs-sidebar-footer {
-          padding: 12px;
-          border-top: 1px solid #f0f1f3;
+          padding: 14px 12px;
+          border-top: 1px solid #f1f5f9;
           flex-shrink: 0;
+          background: #ffffff;
         }
 
         .sbs-company-card {
-          border: 1px solid #e5e7eb;
-          border-radius: 10px;
-          padding: 10px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 8px 10px;
           display: flex;
           align-items: center;
           gap: 10px;
           min-width: 0;
+          background: #f8fafc;
         }
 
         .sbs-company-avatar {
-          width: 34px;
-          height: 34px;
-          border-radius: 9px;
-          background: #f3f4f6;
-          color: #374151;
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          background: #e2e8f0;
+          color: #334155;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 11px;
-          font-weight: 800;
+          font-weight: 700;
           flex-shrink: 0;
         }
 
@@ -943,8 +920,8 @@ export default function AppShell({
 
         .sbs-company-name {
           font-size: 12px;
-          font-weight: 700;
-          color: #111827;
+          font-weight: 600;
+          color: #0f172a;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -953,47 +930,79 @@ export default function AppShell({
         .sbs-company-type {
           margin-top: 2px;
           font-size: 10px;
-          color: #9ca3af;
+          color: #64748b;
           text-transform: capitalize;
         }
 
+        .sbs-logout-button {
+          width: 100%;
+          margin-top: 8px;
+          height: 34px;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #64748b;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .sbs-logout-button:hover:not(:disabled) {
+          background: #fef2f2;
+          border-color: #fecaca;
+          color: #ef4444;
+        }
+
+        .sbs-logout-button:disabled {
+          opacity: 0.6;
+          cursor: wait;
+        }
+
+        /* Layout & Topbar */
         .sbs-main-area {
           min-height: 100vh;
-          margin-left: 285px;
+          margin-left: 270px;
           min-width: 0;
+          display: flex;
+          flex-direction: column;
         }
 
         .sbs-topbar {
-          height: 76px;
+          height: 70px;
           position: sticky;
           top: 0;
           z-index: 50;
-          background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(14px);
-          border-bottom: 1px solid #e5e7eb;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(12px);
+          border-bottom: 1px solid #e2e8f0;
           display: flex;
           align-items: center;
-          padding: 0 28px;
-          gap: 18px;
+          padding: 0 32px;
+          gap: 16px;
         }
 
         .sbs-mobile-menu {
           display: none;
-          width: 38px;
-          height: 38px;
-          border: 1px solid #e5e7eb;
+          width: 36px;
+          height: 36px;
+          border: 1px solid #e2e8f0;
           background: #ffffff;
-          border-radius: 9px;
+          border-radius: 7px;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #374151;
+          color: #334155;
           flex-shrink: 0;
         }
 
         .sbs-topbar-search {
-          width: min(430px, 100%);
-          position: relative;
+          width: min(380px, 100%);
         }
 
         .sbs-search-form {
@@ -1002,38 +1011,37 @@ export default function AppShell({
 
         .sbs-search-icon {
           position: absolute;
-          left: 13px;
+          left: 12px;
           top: 50%;
           transform: translateY(-50%);
-          color: #9ca3af;
+          color: #94a3b8;
           pointer-events: none;
+          display: flex;
+          align-items: center;
         }
 
         .sbs-search-input {
           width: 100%;
-          height: 40px;
-          border: 1px solid #e5e7eb;
-          background: #f9fafb;
-          border-radius: 9px;
+          height: 38px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          border-radius: 7px;
           outline: none;
-          padding: 0 14px 0 40px;
+          padding: 0 12px 0 36px;
           font: inherit;
           font-size: 13px;
-          color: #111827;
-          transition:
-            border-color 0.15s ease,
-            background 0.15s ease,
-            box-shadow 0.15s ease;
+          color: #0f172a;
+          transition: all 0.15s ease;
         }
 
         .sbs-search-input::placeholder {
-          color: #9ca3af;
+          color: #94a3b8;
         }
 
         .sbs-search-input:focus {
           background: #ffffff;
-          border-color: #cbd5e1;
-          box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.05);
+          border-color: #2563eb;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .sbs-topbar-spacer {
@@ -1045,85 +1053,100 @@ export default function AppShell({
           align-items: center;
           gap: 8px;
           min-width: 0;
-          max-width: 230px;
+          max-width: 220px;
+          padding: 4px 10px;
+          background: #f8fafc;
+          border: 1px solid #f1f5f9;
+          border-radius: 6px;
         }
 
         .sbs-topbar-company-name {
           font-size: 12px;
-          font-weight: 650;
-          color: #4b5563;
+          font-weight: 500;
+          color: #475569;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .sbs-notification-button {
-          width: 38px;
-          height: 38px;
-          border: 1px solid #e5e7eb;
+          width: 36px;
+          height: 36px;
+          border: 1px solid #e2e8f0;
           background: #ffffff;
-          color: #4b5563;
-          border-radius: 9px;
+          color: #475569;
+          border-radius: 7px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           position: relative;
+          transition: all 0.15s ease;
+        }
+
+        .sbs-notification-button:hover {
+          background: #f8fafc;
+          color: #0f172a;
         }
 
         .sbs-notification-dot {
           position: absolute;
-          top: 7px;
-          right: 7px;
+          top: 8px;
+          right: 8px;
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: #111827;
+          background: #2563eb;
           border: 1px solid #ffffff;
         }
 
         .sbs-profile {
           display: flex;
           align-items: center;
-          gap: 9px;
+          gap: 10px;
           min-width: 0;
+          padding-left: 8px;
+          border-left: 1px solid #f1f5f9;
         }
 
         .sbs-profile-avatar {
-          width: 36px;
-          height: 36px;
+          width: 34px;
+          height: 34px;
           border-radius: 50%;
-          background: #111827;
+          background: #0f172a;
           color: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 11px;
-          font-weight: 800;
+          font-weight: 700;
           flex-shrink: 0;
         }
 
         .sbs-profile-name {
-          max-width: 130px;
-          font-size: 12px;
-          font-weight: 700;
-          color: #111827;
+          max-width: 140px;
+          font-size: 12.5px;
+          font-weight: 600;
+          color: #0f172a;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
+        /* Content Area */
         .sbs-content {
-          padding: 30px 32px 48px;
+          padding: 32px 32px 48px;
           max-width: 1600px;
+          width: 100%;
           margin: 0 auto;
+          box-sizing: border-box;
         }
 
         .sbs-page-header {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 24px;
+          gap: 20px;
           margin-bottom: 28px;
         }
 
@@ -1133,87 +1156,60 @@ export default function AppShell({
 
         .sbs-page-title {
           margin: 0;
-          font-size: 28px;
-          line-height: 36px;
-          font-weight: 750;
-          letter-spacing: -0.025em;
-          color: #111827;
+          font-size: 24px;
+          line-height: 1.25;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: #0f172a;
         }
 
         .sbs-page-description {
-          margin: 6px 0 0;
+          margin: 4px 0 0;
           font-size: 13px;
-          line-height: 20px;
-          color: #6b7280;
+          line-height: 1.5;
+          color: #64748b;
         }
 
         .sbs-page-actions {
           flex-shrink: 0;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
         .sbs-mobile-overlay {
           display: none;
         }
 
-        .sbs-logout-button {
-          width: 100%;
-          margin-top: 10px;
-          min-height: 38px;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          background: #ffffff;
-          color: #4b5563;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 650;
-          cursor: pointer;
-        }
-
-        .sbs-logout-button:hover {
-          background: #f9fafb;
-          color: #111827;
-        }
-
-        .sbs-logout-button:disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-
-        @media (max-width: 1100px) {
+        /* Responsive Styles */
+        @media (max-width: 1024px) {
           .sbs-sidebar {
-            width: 260px;
+            width: 250px;
           }
 
           .sbs-main-area {
-            margin-left: 260px;
+            margin-left: 250px;
           }
 
           .sbs-topbar {
-            padding: 0 20px;
+            padding: 0 24px;
           }
 
           .sbs-content {
-            padding: 24px 22px 40px;
+            padding: 24px 24px 40px;
           }
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 868px) {
           .sbs-sidebar {
-            width: 285px;
+            width: 270px;
             transform: translateX(-100%);
             box-shadow: none;
           }
 
           .sbs-sidebar.mobile-open {
             transform: translateX(0);
-            box-shadow: 18px 0 50px rgba(15, 23, 42, 0.12);
+            box-shadow: 12px 0 30px rgba(15, 23, 42, 0.15);
           }
 
           .sbs-main-area {
@@ -1228,30 +1224,35 @@ export default function AppShell({
             position: fixed;
             inset: 0;
             display: block;
-            background: rgba(15, 23, 42, 0.28);
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(2px);
             z-index: 90;
+            border: none;
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
           }
 
           .sbs-topbar {
             padding: 0 16px;
-            gap: 10px;
           }
 
           .sbs-topbar-search {
             flex: 1;
-            width: auto;
           }
 
-          .sbs-topbar-company {
-            display: none;
-          }
-
+          .sbs-topbar-company,
           .sbs-profile-name {
             display: none;
           }
 
+          .sbs-profile {
+            padding-left: 0;
+            border-left: none;
+          }
+
           .sbs-content {
-            padding: 22px 16px 36px;
+            padding: 20px 16px 32px;
           }
         }
 
@@ -1264,27 +1265,15 @@ export default function AppShell({
             height: 64px;
           }
 
-          .sbs-notification-button {
-            display: none;
-          }
-
-          .sbs-profile-avatar {
-            width: 34px;
-            height: 34px;
-          }
-
-          .sbs-search-input {
-            height: 38px;
-          }
-
           .sbs-page-header {
             flex-direction: column;
-            margin-bottom: 22px;
+            align-items: stretch;
+            gap: 16px;
+            margin-bottom: 20px;
           }
 
           .sbs-page-title {
-            font-size: 24px;
-            line-height: 31px;
+            font-size: 20px;
           }
 
           .sbs-page-actions {
@@ -1318,11 +1307,11 @@ export default function AppShell({
 
             <span className="sbs-brand-text">
               <span className="sbs-brand-name">
-                Sharif Business Solutions
+                Sharif Business
               </span>
 
               <span className="sbs-brand-subtitle">
-                Business Management Platform
+                Management Platform
               </span>
             </span>
           </button>
@@ -1367,7 +1356,7 @@ export default function AppShell({
 
                       {!item.available && (
                         <span className="sbs-coming-soon">
-                          SOON
+                          Soon
                         </span>
                       )}
                     </button>
@@ -1379,27 +1368,23 @@ export default function AppShell({
         </div>
 
         <div className="sbs-sidebar-footer">
-          <div className="sbs-company-card">
-            <div className="sbs-company-avatar">
-              {initials}
-            </div>
-
-            <div className="sbs-company-info">
-              <div className="sbs-company-name">
-                {loadingWorkspace
-                  ? "Loading workspace..."
-                  : company?.name || "My Company"}
+          {company && (
+            <div className="sbs-company-card">
+              <div className="sbs-company-avatar">
+                {company.name.slice(0, 2).toUpperCase()}
               </div>
-
-              <div className="sbs-company-type">
-                {company?.business_type === "product"
-                  ? "Product Business"
-                  : company?.business_type === "service"
-                    ? "Service Business"
-                    : "Business Workspace"}
+              <div className="sbs-company-info">
+                <div className="sbs-company-name">
+                  {company.name}
+                </div>
+                {company.business_type && (
+                  <div className="sbs-company-type">
+                    {company.business_type}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           <button
             type="button"
@@ -1407,8 +1392,8 @@ export default function AppShell({
             onClick={handleLogout}
             disabled={loggingOut}
           >
-            <Icon name="logout" size={16} />
-            {loggingOut ? "Signing out..." : "Sign out"}
+            <Icon name="logout" size={14} />
+            <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
           </button>
         </div>
       </aside>
@@ -1418,50 +1403,36 @@ export default function AppShell({
           <button
             type="button"
             className="sbs-mobile-menu"
-            onClick={() =>
-              setMobileSidebarOpen((current) => !current)
-            }
-            aria-label={
-              mobileSidebarOpen
-                ? "Close navigation"
-                : "Open navigation"
-            }
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Open navigation menu"
           >
-            <Icon
-              name={mobileSidebarOpen ? "close" : "menu"}
-              size={19}
-            />
+            <Icon name="menu" size={20} />
           </button>
 
           <div className="sbs-topbar-search">
-            <form
-              className="sbs-search-form"
-              onSubmit={handleSearchSubmit}
-            >
+            <form onSubmit={handleSearchSubmit} className="sbs-search-form">
               <span className="sbs-search-icon">
-                <Icon name="search" size={17} />
+                <Icon name="search" size={16} />
               </span>
-
               <input
-                type="search"
-                value={searchValue}
-                onChange={(event) =>
-                  setSearchValue(event.target.value)
-                }
+                type="text"
                 className="sbs-search-input"
-                placeholder="Search pages..."
-                aria-label="Search pages"
+                placeholder="Search module..."
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
               />
             </form>
           </div>
 
           <div className="sbs-topbar-spacer" />
 
-          <div className="sbs-topbar-company">
-            <span className="sbs-topbar-company-name">
-              {company?.name || ""}
-            </span>
-          </div>
+          {company && (
+            <div className="sbs-topbar-company">
+              <span className="sbs-topbar-company-name">
+                {company.name}
+              </span>
+            </div>
+          )}
 
           <button
             type="button"
@@ -1473,15 +1444,10 @@ export default function AppShell({
           </button>
 
           <div className="sbs-profile">
-            <div className="sbs-profile-avatar">
-              {initials}
-            </div>
-
-            <div className="sbs-profile-name">
-              {profile?.full_name ||
-                company?.name ||
-                "Workspace User"}
-            </div>
+            <div className="sbs-profile-avatar">{initials}</div>
+            <span className="sbs-profile-name">
+              {profile?.full_name || "Account"}
+            </span>
           </div>
         </header>
 
@@ -1489,23 +1455,14 @@ export default function AppShell({
           {(title || description || actions) && (
             <div className="sbs-page-header">
               <div className="sbs-page-header-copy">
-                {title && (
-                  <h1 className="sbs-page-title">
-                    {title}
-                  </h1>
-                )}
-
+                {title && <h1 className="sbs-page-title">{title}</h1>}
                 {description && (
-                  <p className="sbs-page-description">
-                    {description}
-                  </p>
+                  <p className="sbs-page-description">{description}</p>
                 )}
               </div>
 
               {actions && (
-                <div className="sbs-page-actions">
-                  {actions}
-                </div>
+                <div className="sbs-page-actions">{actions}</div>
               )}
             </div>
           )}
