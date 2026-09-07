@@ -145,7 +145,7 @@ function getWorkspaceSections(): NavSection[] {
           label: "Warehouses",
           href: "/warehouses",
           icon: "warehouses",
-          available: false,
+          available: true,
         },
         {
           label: "Pricing",
