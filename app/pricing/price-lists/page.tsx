@@ -260,8 +260,10 @@ export default function PriceListsPage() {
   );
 
   useEffect(() => {
+  queueMicrotask(() => {
     void loadPriceLists();
-  }, [loadPriceLists]);
+  });
+}, [loadPriceLists]);
 
   const filteredPriceLists = useMemo(() => {
     const query = search.trim().toLowerCase();

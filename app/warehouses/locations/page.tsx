@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+import { Link } from "lucide-react";
 
 type Warehouse = {
   id: string;
@@ -324,10 +325,12 @@ export default function WarehouseLocationsPage() {
 
         setWarehouses(warehouseResult.data ?? []);
         setLocations(locationResult.data ?? []);
-      } catch (error: any) {
-        setErrorMessage(
-          error?.message || "Unable to load warehouse locations."
-        );
+     } catch (error: unknown) {
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "Unable to load warehouse locations."
+  );
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -337,8 +340,10 @@ export default function WarehouseLocationsPage() {
   );
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+  queueMicrotask(() => {
+    void loadData();
+  });
+}, [loadData]);
 
   const warehouseMap = useMemo(() => {
     const map = new Map<string, Warehouse>();
@@ -553,11 +558,13 @@ export default function WarehouseLocationsPage() {
       setForm(emptyForm());
 
       await loadData(true);
-    } catch (error: any) {
-      setErrorMessage(
-        error?.message || "Unable to save this location."
-      );
-    } finally {
+    } catch (error: unknown) {
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "Unable to save this location."
+     );
+   } finally {
       setSaving(false);
     }
   };
@@ -590,11 +597,13 @@ export default function WarehouseLocationsPage() {
       );
 
       await loadData(true);
-    } catch (error: any) {
-      setErrorMessage(
-        error?.message || "Unable to update location status."
-      );
-    }
+    } catch (error: unknown) {
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "Unable to update location status."
+  );
+}
   };
 
   const deleteLocation = async (location: WarehouseLocation) => {
@@ -623,12 +632,13 @@ export default function WarehouseLocationsPage() {
       setSuccessMessage(`${location.name} was deleted.`);
 
       await loadData(true);
-    } catch (error: any) {
-      setErrorMessage(
-        error?.message ||
-          "This location could not be deleted. It may already be referenced by inventory or other records."
-      );
-    }
+    } catch (error: unknown) {
+  setErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "This location could not be deleted. It may already be referenced by inventory or other records."
+  );
+}
   };
 
   const getParentName = (location: WarehouseLocation) => {
@@ -710,13 +720,13 @@ export default function WarehouseLocationsPage() {
               Locations
             </a>
 
-            <a
-              href="/warehouses/transfers"
-              className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-            >
-              <Icon name="layers" size={16} />
-              Transfers
-            </a>
+           <Link
+  href="/warehouses/transfers"
+  className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+>
+  <Icon name="layers" size={16} />
+  Transfers
+</Link>
           </div>
 
           {/* Messages */}

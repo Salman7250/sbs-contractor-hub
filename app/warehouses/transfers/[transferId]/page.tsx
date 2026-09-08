@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -133,18 +133,28 @@ function getStatusClasses(status: TransferStatus) {
   }
 }
 
-function getStatusIcon(status: TransferStatus) {
+function StatusIcon({
+  status,
+}: {
+  status: TransferStatus | null;
+}) {
   switch (status) {
     case "draft":
-      return Clock3;
+      return <Clock3 className="h-3.5 w-3.5" />;
+
     case "in_transit":
-      return Truck;
+      return <Truck className="h-3.5 w-3.5" />;
+
     case "completed":
-      return CheckCircle2;
+      return (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      );
+
     case "cancelled":
-      return XCircle;
+      return <XCircle className="h-3.5 w-3.5" />;
+
     default:
-      return Clock3;
+      return <Clock3 className="h-3.5 w-3.5" />;
   }
 }
 
@@ -165,7 +175,6 @@ function getTrackingLabel(trackingMode: string | null) {
 
 export default function TransferDetailsPage() {
   const params = useParams();
-  const router = useRouter();
 
   const transferId = useMemo(() => {
     const value = params?.transferId;
@@ -365,13 +374,31 @@ export default function TransferDetailsPage() {
         }
 
         setTransfer(transferResult.data as Transfer);
-        setItems((itemsResult.data ?? []) as TransferItem[]);
-        setWarehouses((warehousesResult.data ?? []) as Warehouse[]);
-        setLocations((locationsResult.data ?? []) as Location[]);
-        setProducts((productsResult.data ?? []) as Product[]);
-        setVariants((variantsResult.data ?? []) as Variant[]);
+
+        setItems(
+          (itemsResult.data ?? []) as TransferItem[]
+        );
+
+        setWarehouses(
+          (warehousesResult.data ?? []) as Warehouse[]
+        );
+
+        setLocations(
+          (locationsResult.data ?? []) as Location[]
+        );
+
+        setProducts(
+          (productsResult.data ?? []) as Product[]
+        );
+
+        setVariants(
+          (variantsResult.data ?? []) as Variant[]
+        );
       } catch (error) {
-        console.error("Transfer details load error:", error);
+        console.error(
+          "Transfer details load error:",
+          error
+        );
 
         setTransfer(null);
 
@@ -389,7 +416,9 @@ export default function TransferDetailsPage() {
   );
 
   useEffect(() => {
-    void loadData();
+    queueMicrotask(() => {
+      void loadData();
+    });
   }, [loadData]);
 
   const warehouseMap = useMemo(() => {
@@ -433,7 +462,9 @@ export default function TransferDetailsPage() {
     : undefined;
 
   const destinationWarehouse = transfer
-    ? warehouseMap.get(transfer.destination_warehouse_id)
+    ? warehouseMap.get(
+        transfer.destination_warehouse_id
+      )
     : undefined;
 
   const sourceLocation = transfer
@@ -441,21 +472,18 @@ export default function TransferDetailsPage() {
     : undefined;
 
   const destinationLocation = transfer
-    ? locationMap.get(transfer.destination_location_id)
+    ? locationMap.get(
+        transfer.destination_location_id
+      )
     : undefined;
 
   const totalUnits = useMemo(() => {
     return items.reduce(
-      (total, item) => total + Number(item.quantity || 0),
+      (total, item) =>
+        total + Number(item.quantity || 0),
       0
     );
   }, [items]);
-
-  const statusIcon = transfer
-    ? getStatusIcon(transfer.status)
-    : Clock3;
-
-  const StatusIcon = statusIcon;
 
   const runAction = useCallback(
     async (
@@ -705,14 +733,20 @@ export default function TransferDetailsPage() {
                         transfer.status
                       )}`}
                     >
-                      <StatusIcon className="h-3.5 w-3.5" />
-                      {getStatusLabel(transfer.status)}
+                      <StatusIcon
+                        status={transfer.status}
+                      />
+                      {getStatusLabel(
+                        transfer.status
+                      )}
                     </span>
                   </div>
 
                   <p className="mt-1 text-sm text-slate-500">
                     Warehouse transfer created{" "}
-                    {formatShortDate(transfer.created_at)}
+                    {formatShortDate(
+                      transfer.created_at
+                    )}
                   </p>
                 </div>
               </div>
@@ -721,13 +755,20 @@ export default function TransferDetailsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => void loadData(true)}
-                disabled={refreshing || actionLoading !== null}
+                onClick={() =>
+                  void loadData(true)
+                }
+                disabled={
+                  refreshing ||
+                  actionLoading !== null
+                }
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw
                   className={`h-4 w-4 ${
-                    refreshing ? "animate-spin" : ""
+                    refreshing
+                      ? "animate-spin"
+                      : ""
                   }`}
                 />
                 Refresh
@@ -740,10 +781,13 @@ export default function TransferDetailsPage() {
                     onClick={() =>
                       void runAction("cancel")
                     }
-                    disabled={actionLoading !== null}
+                    disabled={
+                      actionLoading !== null
+                    }
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {actionLoading === "cancel" ? (
+                    {actionLoading ===
+                    "cancel" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <XCircle className="h-4 w-4" />
@@ -754,12 +798,17 @@ export default function TransferDetailsPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      void runAction("dispatch")
+                      void runAction(
+                        "dispatch"
+                      )
                     }
-                    disabled={actionLoading !== null}
+                    disabled={
+                      actionLoading !== null
+                    }
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {actionLoading === "dispatch" ? (
+                    {actionLoading ===
+                    "dispatch" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Send className="h-4 w-4" />
@@ -769,16 +818,20 @@ export default function TransferDetailsPage() {
                 </>
               )}
 
-              {transfer.status === "in_transit" && (
+              {transfer.status ===
+                "in_transit" && (
                 <button
                   type="button"
                   onClick={() =>
                     void runAction("receive")
                   }
-                  disabled={actionLoading !== null}
+                  disabled={
+                    actionLoading !== null
+                  }
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {actionLoading === "receive" ? (
+                  {actionLoading ===
+                  "receive" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <CheckCircle2 className="h-4 w-4" />
@@ -902,7 +955,9 @@ export default function TransferDetailsPage() {
                   </p>
 
                   <p className="mt-1 text-sm font-semibold text-slate-950">
-                    {formatDate(transfer.updated_at)}
+                    {formatDate(
+                      transfer.updated_at
+                    )}
                   </p>
                 </div>
               </div>
@@ -957,7 +1012,8 @@ export default function TransferDetailsPage() {
 
                   {sourceWarehouse?.code && (
                     <p className="mt-3 text-xs font-medium text-slate-400">
-                      Warehouse: {sourceWarehouse.code}
+                      Warehouse:{" "}
+                      {sourceWarehouse.code}
                     </p>
                   )}
                 </div>
@@ -1034,8 +1090,12 @@ export default function TransferDetailsPage() {
 
                 <div className="text-sm font-medium text-slate-500">
                   {items.length}{" "}
-                  {items.length === 1 ? "item" : "items"} ·{" "}
-                  {totalUnits.toLocaleString()} units
+                  {items.length === 1
+                    ? "item"
+                    : "items"}{" "}
+                  ·{" "}
+                  {totalUnits.toLocaleString()}{" "}
+                  units
                 </div>
               </div>
             </div>
@@ -1085,13 +1145,15 @@ export default function TransferDetailsPage() {
 
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {items.map((item) => {
-                        const product = productMap.get(
-                          item.product_id
-                        );
+                        const product =
+                          productMap.get(
+                            item.product_id
+                          );
 
-                        const variant = variantMap.get(
-                          item.variant_id
-                        );
+                        const variant =
+                          variantMap.get(
+                            item.variant_id
+                          );
 
                         return (
                           <tr key={item.id}>
@@ -1111,7 +1173,8 @@ export default function TransferDetailsPage() {
 
                             <td className="px-6 py-4">
                               <div className="text-sm text-slate-500">
-                                {variant?.sku || "—"}
+                                {variant?.sku ||
+                                  "—"}
                               </div>
                             </td>
 
@@ -1141,13 +1204,15 @@ export default function TransferDetailsPage() {
                 {/* Mobile cards */}
                 <div className="divide-y divide-slate-200 md:hidden">
                   {items.map((item) => {
-                    const product = productMap.get(
-                      item.product_id
-                    );
+                    const product =
+                      productMap.get(
+                        item.product_id
+                      );
 
-                    const variant = variantMap.get(
-                      item.variant_id
-                    );
+                    const variant =
+                      variantMap.get(
+                        item.variant_id
+                      );
 
                     return (
                       <div
@@ -1168,7 +1233,8 @@ export default function TransferDetailsPage() {
 
                             {variant?.sku && (
                               <p className="mt-1 text-xs text-slate-400">
-                                SKU: {variant.sku}
+                                SKU:{" "}
+                                {variant.sku}
                               </p>
                             )}
                           </div>
@@ -1253,13 +1319,17 @@ export default function TransferDetailsPage() {
                     </p>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      {formatDate(transfer.created_at)}
+                      {formatDate(
+                        transfer.created_at
+                      )}
                     </p>
                   </div>
                 </div>
 
-                {transfer.status !== "draft" &&
-                  transfer.status !== "cancelled" && (
+                {transfer.status !==
+                  "draft" &&
+                  transfer.status !==
+                    "cancelled" && (
                     <div className="flex gap-3">
                       <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50">
                         <Send className="h-4 w-4 text-blue-600" />
@@ -1278,7 +1348,8 @@ export default function TransferDetailsPage() {
                     </div>
                   )}
 
-                {transfer.status === "completed" && (
+                {transfer.status ===
+                  "completed" && (
                   <div className="flex gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -1301,7 +1372,8 @@ export default function TransferDetailsPage() {
                   </div>
                 )}
 
-                {transfer.status === "cancelled" && (
+                {transfer.status ===
+                  "cancelled" && (
                   <div className="flex gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50">
                       <XCircle className="h-4 w-4 text-red-600" />

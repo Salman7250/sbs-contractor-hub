@@ -162,13 +162,13 @@ function getWorkspaceSections(): NavSection[] {
           label: "Suppliers",
           href: "/suppliers",
           icon: "suppliers",
-          available: false,
+          available: true,
         },
         {
           label: "Purchase Orders",
-          href: "/purchases",
+          href: "/purchase-orders",
           icon: "purchases",
-          available: false,
+          available: true,
         },
         {
           label: "Expenses",
@@ -522,7 +522,6 @@ export default function AppShell({
   const [searchValue, setSearchValue] = useState("");
   const [company, setCompany] = useState<WorkspaceCompany | null>(null);
   const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
-  const [loadingWorkspace, setLoadingWorkspace] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const sections = useMemo(() => getWorkspaceSections(), []);
@@ -533,8 +532,6 @@ export default function AppShell({
 
   const loadWorkspace = useCallback(async () => {
     try {
-      setLoadingWorkspace(true);
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -574,14 +571,15 @@ export default function AppShell({
     } catch (error) {
       console.error("Failed to load workspace:", error);
     } finally {
-      setLoadingWorkspace(false);
     }
   }, [supabase]);
 
   useEffect(() => {
+  queueMicrotask(() => {
     void loadWorkspace();
+  });
 
-    const channel = supabase
+  const channel = supabase
       .channel("sbs-company-updates")
       .on(
         "postgres_changes",
@@ -602,8 +600,10 @@ export default function AppShell({
   }, [loadWorkspace, supabase]);
 
   useEffect(() => {
+  queueMicrotask(() => {
     setMobileSidebarOpen(false);
-  }, [pathname]);
+  });
+}, [pathname]);
 
   function isActive(item: NavItem) {
     if (item.href === "/") {

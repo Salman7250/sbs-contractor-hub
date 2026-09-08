@@ -269,8 +269,10 @@ export default function ProductPricingPage() {
   );
 
   useEffect(() => {
+  queueMicrotask(() => {
     void loadData();
-  }, [loadData]);
+  });
+}, [loadData]);
 
   const currency = company?.currency || "USD";
 
@@ -1145,7 +1147,7 @@ export default function ProductPricingPage() {
                 <span className="font-medium text-slate-700">
                   (selling price − cost) ÷ selling price
                 </span>
-                . Changes made here update the variant's
+                . Changes made here update the variant&apos;s
                 base selling price and are recorded in the
                 pricing history when possible.
               </p>

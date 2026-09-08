@@ -10,6 +10,7 @@ import {
 
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+import { Link } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -860,25 +861,25 @@ export default function WarehousesPage() {
               </a>
 
               {/* Transfers */}
-              <a
-                href="/warehouses/transfers"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
-              >
-                <Icon
-                  name="layers"
-                  size={18}
-                />
+              <Link
+  href="/warehouses/transfers"
+  className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
+>
+  <Icon
+    name="layers"
+    size={18}
+  />
 
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    Transfers
-                  </div>
+  <div className="min-w-0">
+    <div className="text-sm font-medium">
+      Transfers
+    </div>
 
                   <div className="mt-0.5 text-xs text-slate-400">
                     Move stock between locations
                   </div>
                 </div>
-              </a>
+              </Link>
             </div>
           </div>
 

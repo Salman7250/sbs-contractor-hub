@@ -359,8 +359,10 @@ export default function PricingHistoryPage() {
   );
 
   useEffect(() => {
+  queueMicrotask(() => {
     void loadHistory();
-  }, [loadHistory]);
+  });
+}, [loadHistory]);
 
   const priceLists = useMemo(() => {
     const map = new Map<string, string>();
@@ -515,11 +517,7 @@ export default function PricingHistoryPage() {
     );
   }, [filteredHistory, currentPage]);
 
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
+  
 
   const clearFilters = () => {
     setSearch("");

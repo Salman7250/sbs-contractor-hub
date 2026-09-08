@@ -347,6 +347,13 @@ export default function PurchaseOrdersPage() {
     const totalOrders =
       purchaseOrders.length;
 
+    const draft =
+      purchaseOrders.filter(
+        (purchaseOrder) =>
+          purchaseOrder.status ===
+          "draft"
+      ).length;
+
     const openOrders =
       purchaseOrders.filter(
         (purchaseOrder) =>
@@ -363,6 +370,12 @@ export default function PurchaseOrdersPage() {
         (purchaseOrder) =>
           purchaseOrder.status ===
           "received"
+      ).length;
+
+    const overdue =
+      purchaseOrders.filter(
+        (purchaseOrder) =>
+          isOverdue(purchaseOrder)
       ).length;
 
     const outstandingValue =
@@ -386,8 +399,10 @@ export default function PurchaseOrdersPage() {
 
     return {
       totalOrders,
+      draft,
       openOrders,
       receivedOrders,
+      overdue,
       outstandingValue,
     };
   }, [purchaseOrders]);
@@ -787,6 +802,20 @@ export default function PurchaseOrdersPage() {
 
           <div className="stat-card">
             <div className="stat-label">
+              Draft
+            </div>
+
+            <div className="stat-value">
+              {stats.draft}
+            </div>
+
+            <div className="stat-description">
+              Orders still being prepared
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
               Open Orders
             </div>
 
@@ -795,21 +824,7 @@ export default function PurchaseOrdersPage() {
             </div>
 
             <div className="stat-description">
-              Orders awaiting receipt
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-label">
-              Received
-            </div>
-
-            <div className="stat-value">
-              {stats.receivedOrders}
-            </div>
-
-            <div className="stat-description">
-              Fully received orders
+              Awaiting supplier receipt
             </div>
           </div>
 
@@ -825,7 +840,41 @@ export default function PurchaseOrdersPage() {
             </div>
 
             <div className="stat-description">
-              Value still awaiting receipt
+              Value not fully received
+            </div>
+          </div>
+
+          <div
+            className={`stat-card ${
+              stats.overdue > 0
+                ? "stat-card-warning"
+                : ""
+            }`}
+          >
+            <div className="stat-label">
+              Overdue
+            </div>
+
+            <div className="stat-value">
+              {stats.overdue}
+            </div>
+
+            <div className="stat-description">
+              Past expected delivery date
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Received
+            </div>
+
+            <div className="stat-value">
+              {stats.receivedOrders}
+            </div>
+
+            <div className="stat-description">
+              Fully received orders
             </div>
           </div>
         </div>
@@ -1240,7 +1289,7 @@ export default function PurchaseOrdersPage() {
 
         .stats-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 18px;
           margin-bottom: 24px;
         }
@@ -1251,6 +1300,11 @@ export default function PurchaseOrdersPage() {
           border-radius: 14px;
           padding: 20px;
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+        }
+
+        .stat-card-warning {
+          border-color: #fecaca;
+          background: #fffafa;
         }
 
         .stat-label {
@@ -1265,6 +1319,10 @@ export default function PurchaseOrdersPage() {
           font-size: 25px;
           font-weight: 800;
           letter-spacing: -0.5px;
+        }
+
+        .stat-card-warning .stat-value {
+          color: #dc2626;
         }
 
         .stat-description {

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -199,6 +200,7 @@ function Icon({
 }
 
 export default function NewTransferPage() {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
@@ -443,7 +445,9 @@ export default function NewTransferPage() {
   }, [supabase]);
 
   useEffect(() => {
-    void loadData();
+    queueMicrotask(() => {
+      void loadData();
+    });
   }, [loadData]);
 
   const sourceLocations = useMemo(() => {
@@ -853,8 +857,9 @@ export default function NewTransferPage() {
         );
       }
 
-      window.location.href =
-        `/warehouses/transfers/${transferId}`;
+      router.push(
+        `/warehouses/transfers/${transferId}`
+      );
     } catch (error) {
       console.error(
         "Create transfer error:",

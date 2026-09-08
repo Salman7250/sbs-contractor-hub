@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import Link from "next/link";
 
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -244,7 +245,7 @@ export default function TransfersPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [successMessage] = useState("");
 
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -334,9 +335,7 @@ export default function TransfersPage() {
 
           supabase
             .from("warehouses")
-            .select(
-              "id, name, code"
-            )
+            .select("id, name, code")
             .eq("company_id", companyId)
             .order("name", {
               ascending: true,
@@ -344,9 +343,7 @@ export default function TransfersPage() {
 
           supabase
             .from("warehouse_locations")
-            .select(
-              "id, warehouse_id, name, code"
-            )
+            .select("id, warehouse_id, name, code")
             .eq("company_id", companyId)
             .order("name", {
               ascending: true,
@@ -397,9 +394,9 @@ export default function TransfersPage() {
   );
 
   useEffect(() => {
-    // Initial transfer data load.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadTransfers();
+    queueMicrotask(() => {
+      void loadTransfers();
+    });
   }, [loadTransfers]);
 
   /* ------------------------------------------------------------------------ */
@@ -612,7 +609,7 @@ export default function TransfersPage() {
                   : "Refresh"}
               </button>
 
-              <a
+              <Link
                 href="/warehouses/transfers/new"
                 className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
               >
@@ -622,7 +619,7 @@ export default function TransfersPage() {
                 />
 
                 New Transfer
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -637,7 +634,7 @@ export default function TransfersPage() {
           >
             <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
 
-              <a
+              <Link
                 href="/warehouses"
                 className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
               >
@@ -655,9 +652,9 @@ export default function TransfersPage() {
                     Manage warehouses
                   </div>
                 </div>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/warehouses/locations"
                 className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
               >
@@ -675,9 +672,9 @@ export default function TransfersPage() {
                     Zones, racks & bins
                   </div>
                 </div>
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/warehouses/transfers"
                 className="flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-white"
               >
@@ -695,7 +692,7 @@ export default function TransfersPage() {
                     Move stock between locations
                   </div>
                 </div>
-              </a>
+              </Link>
 
             </div>
           </div>
@@ -983,7 +980,7 @@ export default function TransfersPage() {
               </p>
 
               {transfers.length === 0 ? (
-                <a
+                <Link
                   href="/warehouses/transfers/new"
                   className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
@@ -993,7 +990,7 @@ export default function TransfersPage() {
                   />
 
                   New Transfer
-                </a>
+                </Link>
               ) : null}
             </div>
           ) : (
@@ -1074,14 +1071,14 @@ export default function TransfersPage() {
                             }}
                           >
                             <td className="px-5 py-4">
-                              <a
+                              <Link
                                 href={`/warehouses/transfers/${transfer.id}`}
                                 className="font-semibold text-slate-950 hover:underline"
                               >
                                 {
                                   transfer.transfer_number
                                 }
-                              </a>
+                              </Link>
 
                               <div className="mt-1 text-xs text-slate-400">
                                 {formatDate(

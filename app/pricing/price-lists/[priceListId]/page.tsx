@@ -348,10 +348,12 @@ export default function PriceListDetailPage() {
   );
 
   useEffect(() => {
-    if (priceListId) {
+  if (priceListId) {
+    queueMicrotask(() => {
       void loadPage();
-    }
-  }, [loadPage, priceListId]);
+    });
+  }
+}, [loadPage, priceListId]);
 
   const itemMap = useMemo(() => {
     const map: Record<string, PriceListItem> = {};
