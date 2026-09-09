@@ -234,7 +234,7 @@ function getWorkspaceSections(): NavSection[] {
           label: "Employees",
           href: "/employees",
           icon: "employees",
-          available: false,
+          available: true,
         },
         {
           label: "Documents",
