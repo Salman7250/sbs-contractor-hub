@@ -10,6 +10,7 @@ import {
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import NotificationCenter from "@/app/components/notification-center";
 
 type AppShellProps = {
   children: ReactNode;
@@ -43,16 +44,15 @@ type IconName =
   | "settings"
   | "search"
   | "menu"
-  | "close"
   | "logout"
-  | "chevron"
-  | "bell";
+  | "chevron";
 
 type NavItem = {
   label: string;
   href: string;
   icon: IconName;
   available: boolean;
+  children?: NavItem[];
 };
 
 type NavSection = {
@@ -174,7 +174,21 @@ function getWorkspaceSections(): NavSection[] {
           label: "Expenses",
           href: "/expenses",
           icon: "expenses",
-          available: false,
+          available: true,
+          children: [
+            {
+              label: "Categories",
+              href: "/expenses/categories",
+              icon: "chevron",
+              available: true,
+            },
+            {
+              label: "Closings",
+              href: "/expenses/closings",
+              icon: "chevron",
+              available: true,
+            },
+          ],
         },
       ],
     },
@@ -273,6 +287,7 @@ function Icon({
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
       );
+
     case "customers":
       return (
         <svg {...common}>
@@ -282,6 +297,7 @@ function Icon({
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       );
+
     case "quotes":
       return (
         <svg {...common}>
@@ -292,6 +308,7 @@ function Icon({
           <line x1="8" y1="9" x2="10" y2="9" />
         </svg>
       );
+
     case "orders":
       return (
         <svg {...common}>
@@ -302,6 +319,7 @@ function Icon({
           <path d="M8 9h2" />
         </svg>
       );
+
     case "invoices":
       return (
         <svg {...common}>
@@ -311,6 +329,7 @@ function Icon({
           <line x1="8" y1="16" x2="16" y2="16" />
         </svg>
       );
+
     case "payments":
       return (
         <svg {...common}>
@@ -319,6 +338,7 @@ function Icon({
           <line x1="6" y1="15" x2="10" y2="15" />
         </svg>
       );
+
     case "products":
       return (
         <svg {...common}>
@@ -328,6 +348,7 @@ function Icon({
           <path d="M12 13v8" />
         </svg>
       );
+
     case "serials":
       return (
         <svg {...common}>
@@ -338,6 +359,7 @@ function Icon({
           <line x1="17" y1="8" x2="17" y2="16" />
         </svg>
       );
+
     case "inventory":
       return (
         <svg {...common}>
@@ -348,6 +370,7 @@ function Icon({
           <path d="M17 4v16" />
         </svg>
       );
+
     case "warehouses":
       return (
         <svg {...common}>
@@ -355,6 +378,7 @@ function Icon({
           <path d="M8 21v-6h8v6" />
         </svg>
       );
+
     case "pricing":
       return (
         <svg {...common}>
@@ -362,6 +386,7 @@ function Icon({
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H7" />
         </svg>
       );
+
     case "suppliers":
       return (
         <svg {...common}>
@@ -373,6 +398,7 @@ function Icon({
           <line x1="8" y1="15" x2="10" y2="15" />
         </svg>
       );
+
     case "purchases":
       return (
         <svg {...common}>
@@ -382,6 +408,7 @@ function Icon({
           <path d="M8 17h5" />
         </svg>
       );
+
     case "expenses":
       return (
         <svg {...common}>
@@ -390,6 +417,7 @@ function Icon({
           <line x1="12" y1="6" x2="12" y2="18" />
         </svg>
       );
+
     case "warranty":
       return (
         <svg {...common}>
@@ -397,12 +425,14 @@ function Icon({
           <path d="m9 12 2 2 4-4" />
         </svg>
       );
+
     case "repairs":
       return (
         <svg {...common}>
           <path d="M14.7 6.3a4 4 0 0 0-5.7 5.7l-6 6a2 2 0 0 0 2.8 2.8l6-6a4 4 0 0 0 5.7-5.7l-2.2 2.2-2.8-2.8 2.2-2.2Z" />
         </svg>
       );
+
     case "rma":
       return (
         <svg {...common}>
@@ -412,6 +442,7 @@ function Icon({
           <path d="M3 21v-5h5" />
         </svg>
       );
+
     case "portal":
       return (
         <svg {...common}>
@@ -421,6 +452,7 @@ function Icon({
           <circle cx="10" cy="6.5" r=".5" />
         </svg>
       );
+
     case "reports":
       return (
         <svg {...common}>
@@ -430,6 +462,7 @@ function Icon({
           <line x1="22" y1="20" x2="22" y2="7" />
         </svg>
       );
+
     case "employees":
       return (
         <svg {...common}>
@@ -439,6 +472,7 @@ function Icon({
           <path d="M16 11h6" />
         </svg>
       );
+
     case "documents":
       return (
         <svg {...common}>
@@ -448,6 +482,7 @@ function Icon({
           <line x1="8" y1="17" x2="14" y2="17" />
         </svg>
       );
+
     case "settings":
       return (
         <svg {...common}>
@@ -455,6 +490,7 @@ function Icon({
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V22h-2.6v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.6h.4A1.7 1.7 0 0 0 8 10.4a1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h2.6v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.4V13h-.4a1.7 1.7 0 0 0-1.6 1Z" />
         </svg>
       );
+
     case "search":
       return (
         <svg {...common}>
@@ -462,6 +498,7 @@ function Icon({
           <line x1="16.5" y1="16.5" x2="21" y2="21" />
         </svg>
       );
+
     case "menu":
       return (
         <svg {...common}>
@@ -470,13 +507,7 @@ function Icon({
           <line x1="4" y1="18" x2="20" y2="18" />
         </svg>
       );
-    case "close":
-      return (
-        <svg {...common}>
-          <line x1="6" y1="6" x2="18" y2="18" />
-          <line x1="18" y1="6" x2="6" y2="18" />
-        </svg>
-      );
+
     case "logout":
       return (
         <svg {...common}>
@@ -485,19 +516,14 @@ function Icon({
           <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
         </svg>
       );
+
     case "chevron":
       return (
         <svg {...common}>
           <polyline points="9 18 15 12 9 6" />
         </svg>
       );
-    case "bell":
-      return (
-        <svg {...common}>
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-          <path d="M10 21h4" />
-        </svg>
-      );
+
     default:
       return null;
   }
@@ -520,11 +546,16 @@ export default function AppShell({
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-  const [company, setCompany] = useState<WorkspaceCompany | null>(null);
-  const [profile, setProfile] = useState<WorkspaceProfile | null>(null);
+  const [company, setCompany] =
+    useState<WorkspaceCompany | null>(null);
+  const [profile, setProfile] =
+    useState<WorkspaceProfile | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const sections = useMemo(() => getWorkspaceSections(), []);
+  const sections = useMemo(
+    () => getWorkspaceSections(),
+    []
+  );
 
   const allNavItems = useMemo(() => {
     return sections.flatMap((section) => section.items);
@@ -550,12 +581,16 @@ export default function AppShell({
       if (membership?.company_id) {
         const { data: companyData } = await supabase
           .from("companies")
-          .select("id, name, currency, timezone, business_type")
+          .select(
+            "id, name, currency, timezone, business_type"
+          )
           .eq("id", membership.company_id)
           .maybeSingle();
 
         if (companyData) {
-          setCompany(companyData as WorkspaceCompany);
+          setCompany(
+            companyData as WorkspaceCompany
+          );
         }
       }
 
@@ -566,20 +601,24 @@ export default function AppShell({
         .maybeSingle();
 
       if (profileData) {
-        setProfile(profileData as WorkspaceProfile);
+        setProfile(
+          profileData as WorkspaceProfile
+        );
       }
     } catch (error) {
-      console.error("Failed to load workspace:", error);
-    } finally {
+      console.error(
+        "Failed to load workspace:",
+        error
+      );
     }
   }, [supabase]);
 
   useEffect(() => {
-  queueMicrotask(() => {
-    void loadWorkspace();
-  });
+    queueMicrotask(() => {
+      void loadWorkspace();
+    });
 
-  const channel = supabase
+    const channel = supabase
       .channel("sbs-company-updates")
       .on(
         "postgres_changes",
@@ -600,17 +639,28 @@ export default function AppShell({
   }, [loadWorkspace, supabase]);
 
   useEffect(() => {
-  queueMicrotask(() => {
-    setMobileSidebarOpen(false);
-  });
-}, [pathname]);
+    queueMicrotask(() => {
+      setMobileSidebarOpen(false);
+    });
+  }, [pathname]);
 
   function isActive(item: NavItem) {
     if (item.href === "/") {
       return pathname === "/";
     }
 
-    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+    return (
+      pathname === item.href ||
+      pathname.startsWith(`${item.href}/`)
+    );
+  }
+
+  function hasActiveChild(item: NavItem) {
+    return (
+      item.children?.some((child) =>
+        isActive(child)
+      ) ?? false
+    );
   }
 
   function handleNavigation(item: NavItem) {
@@ -623,10 +673,14 @@ export default function AppShell({
     router.push(item.href);
   }
 
-  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSearchSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
-    const query = normalizeSearchText(searchValue);
+    const query = normalizeSearchText(
+      searchValue
+    );
 
     if (!query) {
       return;
@@ -646,7 +700,9 @@ export default function AppShell({
     const partialMatch = allNavItems.find(
       (item) =>
         item.available &&
-        normalizeSearchText(item.label).includes(query)
+        normalizeSearchText(item.label).includes(
+          query
+        )
     );
 
     if (partialMatch) {
@@ -680,10 +736,14 @@ export default function AppShell({
       .filter(Boolean);
 
     if (parts.length === 1) {
-      return parts[0].slice(0, 2).toUpperCase();
+      return parts[0]
+        .slice(0, 2)
+        .toUpperCase();
     }
 
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    return `${parts[0][0]}${
+      parts[parts.length - 1][0]
+    }`.toUpperCase();
   }, [profile?.full_name, company?.name]);
 
   return (
@@ -693,12 +753,21 @@ export default function AppShell({
           min-height: 100vh;
           background: #f8fafc;
           color: #0f172a;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-            Helvetica, Arial, sans-serif;
+          font-family:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif;
           -webkit-font-smoothing: antialiased;
         }
 
-        /* Sidebar Styling */
+        /* ================================
+           SIDEBAR
+        ================================= */
+
         .sbs-sidebar {
           position: fixed;
           inset: 0 auto 0 0;
@@ -710,7 +779,9 @@ export default function AppShell({
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transition:
+            transform 0.25s
+            cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .sbs-sidebar-header {
@@ -740,7 +811,11 @@ export default function AppShell({
           width: 36px;
           height: 36px;
           border-radius: 8px;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          background: linear-gradient(
+            135deg,
+            #0f172a 0%,
+            #1e293b 100%
+          );
           color: #ffffff;
           display: flex;
           align-items: center;
@@ -749,7 +824,9 @@ export default function AppShell({
           font-weight: 800;
           letter-spacing: -0.03em;
           flex-shrink: 0;
-          box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+          box-shadow:
+            0 2px 4px
+            rgba(15, 23, 42, 0.08);
           overflow: hidden;
         }
 
@@ -788,7 +865,7 @@ export default function AppShell({
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          padding: 20px 12px 20px;
+          padding: 20px 12px;
         }
 
         .sbs-sidebar-scroll::-webkit-scrollbar {
@@ -889,6 +966,80 @@ export default function AppShell({
           flex-shrink: 0;
         }
 
+        /* ================================
+           NESTED NAVIGATION
+        ================================= */
+
+        .sbs-nav-sub-list {
+          margin: 2px 0 6px;
+          padding-left: 34px;
+        }
+
+        .sbs-nav-sub-button {
+          position: relative;
+          width: 100%;
+          min-height: 36px;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 7px 10px 7px 12px;
+          border: 0;
+          border-radius: 8px;
+          background: transparent;
+          color: #64748b;
+          font: inherit;
+          font-size: 13px;
+          font-weight: 500;
+          text-align: left;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            color 0.15s ease;
+        }
+
+        .sbs-nav-sub-button:hover:not(.disabled) {
+          background: #f8fafc;
+          color: #0f172a;
+        }
+
+        .sbs-nav-sub-button.active {
+          background: #f1f5f9;
+          color: #0f172a;
+          font-weight: 600;
+        }
+
+        .sbs-nav-sub-button.disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+
+        .sbs-nav-sub-icon {
+          width: 14px;
+          height: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          color: inherit;
+        }
+
+        .sbs-nav-sub-button.active
+          .sbs-nav-sub-icon {
+          color: #2563eb;
+        }
+
+        .sbs-nav-sub-label {
+          min-width: 0;
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* ================================
+           SIDEBAR FOOTER
+        ================================= */
+
         .sbs-sidebar-footer {
           padding: 14px 12px;
           border-top: 1px solid #f1f5f9;
@@ -972,7 +1123,10 @@ export default function AppShell({
           cursor: wait;
         }
 
-        /* Layout & Topbar */
+        /* ================================
+           MAIN AREA
+        ================================= */
+
         .sbs-main-area {
           min-height: 100vh;
           margin-left: 270px;
@@ -981,12 +1135,21 @@ export default function AppShell({
           flex-direction: column;
         }
 
+        /* ================================
+           TOPBAR
+        ================================= */
+
         .sbs-topbar {
           height: 70px;
           position: sticky;
           top: 0;
           z-index: 50;
-          background: rgba(255, 255, 255, 0.85);
+          background: rgba(
+            255,
+            255,
+            255,
+            0.85
+          );
           backdrop-filter: blur(12px);
           border-bottom: 1px solid #e2e8f0;
           display: flex;
@@ -1007,6 +1170,10 @@ export default function AppShell({
           cursor: pointer;
           color: #334155;
           flex-shrink: 0;
+        }
+
+        .sbs-mobile-menu:hover {
+          background: #f8fafc;
         }
 
         .sbs-topbar-search {
@@ -1040,6 +1207,7 @@ export default function AppShell({
           font-size: 13px;
           color: #0f172a;
           transition: all 0.15s ease;
+          box-sizing: border-box;
         }
 
         .sbs-search-input::placeholder {
@@ -1049,7 +1217,9 @@ export default function AppShell({
         .sbs-search-input:focus {
           background: #ffffff;
           border-color: #2563eb;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+          box-shadow:
+            0 0 0 3px
+            rgba(37, 99, 235, 0.1);
         }
 
         .sbs-topbar-spacer {
@@ -1077,36 +1247,31 @@ export default function AppShell({
           text-overflow: ellipsis;
         }
 
-        .sbs-notification-button {
-          width: 36px;
-          height: 36px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          color: #475569;
-          border-radius: 7px;
+        /*
+         * Notification Center styling intentionally does NOT live here.
+         *
+         * NotificationCenter owns:
+         * - bell
+         * - unread badge
+         * - dropdown
+         * - read/unread state
+         * - realtime updates
+         *
+         * This prevents AppShell CSS from fighting
+         * with NotificationCenter CSS.
+         */
+
+        .sbs-notification-wrapper {
+          position: relative;
+          flex-shrink: 0;
+          z-index: 200;
           display: flex;
           align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          position: relative;
-          transition: all 0.15s ease;
         }
 
-        .sbs-notification-button:hover {
-          background: #f8fafc;
-          color: #0f172a;
-        }
-
-        .sbs-notification-dot {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #2563eb;
-          border: 1px solid #ffffff;
-        }
+        /* ================================
+           PROFILE
+        ================================= */
 
         .sbs-profile {
           display: flex;
@@ -1141,7 +1306,10 @@ export default function AppShell({
           text-overflow: ellipsis;
         }
 
-        /* Content Area */
+        /* ================================
+           CONTENT
+        ================================= */
+
         .sbs-content {
           padding: 32px 32px 48px;
           max-width: 1600px;
@@ -1185,11 +1353,18 @@ export default function AppShell({
           gap: 10px;
         }
 
+        /* ================================
+           MOBILE OVERLAY
+        ================================= */
+
         .sbs-mobile-overlay {
           display: none;
         }
 
-        /* Responsive Styles */
+        /* ================================
+           TABLET
+        ================================= */
+
         @media (max-width: 1024px) {
           .sbs-sidebar {
             width: 250px;
@@ -1208,6 +1383,10 @@ export default function AppShell({
           }
         }
 
+        /* ================================
+           MOBILE
+        ================================= */
+
         @media (max-width: 868px) {
           .sbs-sidebar {
             width: 270px;
@@ -1217,7 +1396,9 @@ export default function AppShell({
 
           .sbs-sidebar.mobile-open {
             transform: translateX(0);
-            box-shadow: 12px 0 30px rgba(15, 23, 42, 0.15);
+            box-shadow:
+              12px 0 30px
+              rgba(15, 23, 42, 0.15);
           }
 
           .sbs-main-area {
@@ -1232,7 +1413,12 @@ export default function AppShell({
             position: fixed;
             inset: 0;
             display: block;
-            background: rgba(15, 23, 42, 0.4);
+            background: rgba(
+              15,
+              23,
+              42,
+              0.4
+            );
             backdrop-filter: blur(2px);
             z-index: 90;
             border: none;
@@ -1247,6 +1433,7 @@ export default function AppShell({
 
           .sbs-topbar-search {
             flex: 1;
+            min-width: 0;
           }
 
           .sbs-topbar-company,
@@ -1262,7 +1449,19 @@ export default function AppShell({
           .sbs-content {
             padding: 20px 16px 32px;
           }
+
+          /*
+           * The notification component handles
+           * its own mobile dropdown positioning.
+           */
+          .sbs-notification-wrapper {
+            z-index: 300;
+          }
         }
+
+        /* ================================
+           SMALL MOBILE
+        ================================= */
 
         @media (max-width: 640px) {
           .sbs-topbar {
@@ -1295,13 +1494,21 @@ export default function AppShell({
           type="button"
           className="sbs-mobile-overlay"
           aria-label="Close navigation"
-          onClick={() => setMobileSidebarOpen(false)}
+          onClick={() =>
+            setMobileSidebarOpen(false)
+          }
         />
       )}
 
+      {/* ================================
+          SIDEBAR
+      ================================= */}
+
       <aside
         className={`sbs-sidebar ${
-          mobileSidebarOpen ? "mobile-open" : ""
+          mobileSidebarOpen
+            ? "mobile-open"
+            : ""
         }`}
       >
         <div className="sbs-sidebar-header">
@@ -1346,37 +1553,121 @@ export default function AppShell({
 
               <div className="sbs-nav-list">
                 {section.items.map((item) => {
-                  const active = isActive(item);
+                  const active =
+                    isActive(item);
+
+                  const childActive =
+                    hasActiveChild(item);
+
+                  const hasChildren =
+                    Boolean(
+                      item.children?.length
+                    );
+
+                  const showChildren =
+                    hasChildren &&
+                    (active || childActive);
 
                   return (
-                    <button
-                      key={item.href}
-                      type="button"
-                      className={`sbs-nav-button ${
-                        active ? "active" : ""
-                      } ${!item.available ? "disabled" : ""}`}
-                      onClick={() => handleNavigation(item)}
-                      disabled={!item.available}
-                      title={
-                        item.available
-                          ? item.label
-                          : `${item.label} — Coming soon`
-                      }
-                    >
-                      <span className="sbs-nav-icon">
-                        <Icon name={item.icon} size={18} />
-                      </span>
-
-                      <span className="sbs-nav-label">
-                        {item.label}
-                      </span>
-
-                      {!item.available && (
-                        <span className="sbs-coming-soon">
-                          Soon
+                    <div key={item.href}>
+                      <button
+                        type="button"
+                        className={`sbs-nav-button ${
+                          active
+                            ? "active"
+                            : ""
+                        } ${
+                          !item.available
+                            ? "disabled"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          handleNavigation(item)
+                        }
+                        disabled={
+                          !item.available
+                        }
+                        title={
+                          item.available
+                            ? item.label
+                            : `${item.label} — Coming soon`
+                        }
+                      >
+                        <span className="sbs-nav-icon">
+                          <Icon
+                            name={item.icon}
+                            size={18}
+                          />
                         </span>
+
+                        <span className="sbs-nav-label">
+                          {item.label}
+                        </span>
+
+                        {!item.available && (
+                          <span className="sbs-coming-soon">
+                            Soon
+                          </span>
+                        )}
+                      </button>
+
+                      {showChildren && (
+                        <div className="sbs-nav-sub-list">
+                          {item.children?.map(
+                            (child) => {
+                              const childIsActive =
+                                isActive(child);
+
+                              return (
+                                <button
+                                  key={
+                                    child.href
+                                  }
+                                  type="button"
+                                  className={`sbs-nav-sub-button ${
+                                    childIsActive
+                                      ? "active"
+                                      : ""
+                                  } ${
+                                    !child.available
+                                      ? "disabled"
+                                      : ""
+                                  }`}
+                                  onClick={() =>
+                                    handleNavigation(
+                                      child
+                                    )
+                                  }
+                                  disabled={
+                                    !child.available
+                                  }
+                                  title={
+                                    child.available
+                                      ? child.label
+                                      : `${child.label} — Coming soon`
+                                  }
+                                >
+                                  <span className="sbs-nav-sub-icon">
+                                    <Icon
+                                      name={
+                                        child.icon
+                                      }
+                                      size={13}
+                                    />
+                                  </span>
+
+                                  <span className="sbs-nav-sub-label">
+                                    {
+                                      child.label
+                                    }
+                                  </span>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1384,19 +1675,29 @@ export default function AppShell({
           ))}
         </div>
 
+        {/* ================================
+            SIDEBAR FOOTER
+        ================================= */}
+
         <div className="sbs-sidebar-footer">
           {company && (
             <div className="sbs-company-card">
               <div className="sbs-company-avatar">
-                {company.name.slice(0, 2).toUpperCase()}
+                {company.name
+                  .slice(0, 2)
+                  .toUpperCase()}
               </div>
+
               <div className="sbs-company-info">
                 <div className="sbs-company-name">
                   {company.name}
                 </div>
+
                 {company.business_type && (
                   <div className="sbs-company-type">
-                    {company.business_type}
+                    {
+                      company.business_type
+                    }
                   </div>
                 )}
               </div>
@@ -1409,39 +1710,77 @@ export default function AppShell({
             onClick={handleLogout}
             disabled={loggingOut}
           >
-            <Icon name="logout" size={14} />
-            <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
+            <Icon
+              name="logout"
+              size={14}
+            />
+
+            <span>
+              {loggingOut
+                ? "Signing out..."
+                : "Sign out"}
+            </span>
           </button>
         </div>
       </aside>
+
+      {/* ================================
+          MAIN AREA
+      ================================= */}
 
       <div className="sbs-main-area">
         <header className="sbs-topbar">
           <button
             type="button"
             className="sbs-mobile-menu"
-            onClick={() => setMobileSidebarOpen(true)}
+            onClick={() =>
+              setMobileSidebarOpen(true)
+            }
             aria-label="Open navigation menu"
           >
-            <Icon name="menu" size={20} />
+            <Icon
+              name="menu"
+              size={20}
+            />
           </button>
 
+          {/* ================================
+              GLOBAL SEARCH
+          ================================= */}
+
           <div className="sbs-topbar-search">
-            <form onSubmit={handleSearchSubmit} className="sbs-search-form">
+            <form
+              onSubmit={
+                handleSearchSubmit
+              }
+              className="sbs-search-form"
+            >
               <span className="sbs-search-icon">
-                <Icon name="search" size={16} />
+                <Icon
+                  name="search"
+                  size={16}
+                />
               </span>
+
               <input
                 type="text"
                 className="sbs-search-input"
                 placeholder="Search module..."
                 value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
+                onChange={(event) =>
+                  setSearchValue(
+                    event.target.value
+                  )
+                }
               />
             </form>
           </div>
 
           <div className="sbs-topbar-spacer" />
+
+          {/* ================================
+              COMPANY
+          ================================= */}
 
           {company && (
             <div className="sbs-topbar-company">
@@ -1451,35 +1790,58 @@ export default function AppShell({
             </div>
           )}
 
-          <button
-            type="button"
-            className="sbs-notification-button"
-            aria-label="Notifications"
-          >
-            <Icon name="bell" size={18} />
-            <span className="sbs-notification-dot" />
-          </button>
+          {/* ================================
+              UNIVERSAL NOTIFICATION CENTER
+          ================================= */}
+
+          <div className="sbs-notification-wrapper">
+            <NotificationCenter
+            />
+          </div>
+
+          {/* ================================
+              PROFILE
+          ================================= */}
 
           <div className="sbs-profile">
-            <div className="sbs-profile-avatar">{initials}</div>
+            <div className="sbs-profile-avatar">
+              {initials}
+            </div>
+
             <span className="sbs-profile-name">
-              {profile?.full_name || "Account"}
+              {profile?.full_name ||
+                "Account"}
             </span>
           </div>
         </header>
 
+        {/* ================================
+            PAGE CONTENT
+        ================================= */}
+
         <main className="sbs-content">
-          {(title || description || actions) && (
+          {(title ||
+            description ||
+            actions) && (
             <div className="sbs-page-header">
               <div className="sbs-page-header-copy">
-                {title && <h1 className="sbs-page-title">{title}</h1>}
+                {title && (
+                  <h1 className="sbs-page-title">
+                    {title}
+                  </h1>
+                )}
+
                 {description && (
-                  <p className="sbs-page-description">{description}</p>
+                  <p className="sbs-page-description">
+                    {description}
+                  </p>
                 )}
               </div>
 
               {actions && (
-                <div className="sbs-page-actions">{actions}</div>
+                <div className="sbs-page-actions">
+                  {actions}
+                </div>
               )}
             </div>
           )}
