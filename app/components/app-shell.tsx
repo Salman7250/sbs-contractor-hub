@@ -317,6 +317,19 @@ function getWorkspaceSections(): NavSection[] {
                 "financial closing",
               ],
             },
+            {
+              label: "Reports",
+              href: "/expenses/reports",
+              icon: "chevron",
+              available: true,
+              keywords: [
+                "expense reports",
+                "expense report",
+                "expense analytics",
+                "expense analysis",
+                "spending report",
+              ],
+            },
           ],
         },
       ],
@@ -339,7 +352,7 @@ function getWorkspaceSections(): NavSection[] {
           label: "Repairs",
           href: "/repairs",
           icon: "repairs",
-          available: false,
+          available: true,
           keywords: [
             "repair",
             "repairs",
@@ -352,13 +365,43 @@ function getWorkspaceSections(): NavSection[] {
           label: "RMA",
           href: "/rma",
           icon: "rma",
-          available: false,
+          available: true,
           keywords: [
             "rma",
             "return",
             "returns",
             "replacement",
             "refund",
+          ],
+        },
+        {
+          label: "Service Providers",
+          href: "/service-providers",
+          icon: "suppliers",
+          available: true,
+          keywords: [
+            "service provider",
+            "service providers",
+            "subcontractor",
+            "subcontractors",
+            "repair provider",
+            "refurbisher",
+            "external service",
+          ],
+        },
+        {
+          label: "Service Jobs",
+          href: "/service-jobs",
+          icon: "repairs",
+          available: true,
+          keywords: [
+            "service job",
+            "service jobs",
+            "subcontracting",
+            "outsourced service",
+            "provider jobs",
+            "job dispatch",
+            "job returns",
           ],
         },
       ],
@@ -412,7 +455,7 @@ function getWorkspaceSections(): NavSection[] {
           label: "Documents",
           href: "/documents",
           icon: "documents",
-          available: false,
+          available: true,
           keywords: [
             "document",
             "documents",
@@ -1659,10 +1702,10 @@ export default function AppShell({
           align-items: center;
           gap: 10px;
           background: transparent;
-          color: #c4cec7;
+          color: #e0e7e2;
           font: inherit;
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 14px;
+          font-weight: 600;
           text-align: left;
           cursor: pointer;
           transition:
@@ -1672,9 +1715,9 @@ export default function AppShell({
         }
 
         .sbs-nav-button:hover:not(.disabled) {
-          background: #152019;
-          color: #6ee7a0;
-          border-color: #203229;
+          background: #1b2821;
+          color: #f0f5f2;
+          border-color: #2b3d32;
         }
 
         .sbs-nav-button.active {
@@ -1754,10 +1797,10 @@ export default function AppShell({
           border: 1px solid transparent;
           border-radius: 7px;
           background: transparent;
-          color: #89958e;
+          color: #cbd5cf;
           font: inherit;
-          font-size: 12.5px;
-          font-weight: 500;
+          font-size: 13.5px;
+          font-weight: 600;
           text-align: left;
           cursor: pointer;
           transition:
@@ -1767,8 +1810,9 @@ export default function AppShell({
         }
 
         .sbs-nav-sub-button:hover:not(.disabled) {
-          background: #152019;
-          color: #6ee7a0;
+          background: #1b2821;
+          color: #f0f5f2;
+          border-color: #2b3d32;
         }
 
         .sbs-nav-sub-button.active {
