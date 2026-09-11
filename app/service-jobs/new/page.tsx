@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -132,7 +133,7 @@ const getErrorMessage = (
   return fallback;
 };
 
-export default function NewServiceJobPage() {
+function NewServiceJobPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -3633,5 +3634,58 @@ export default function NewServiceJobPage() {
         }
       `}</style>
     </AppShell>
+    );
+}
+
+function ServiceJobPageLoading() {
+  return (
+    <AppShell>
+      <div className="page-content">
+        <div className="loading-state">
+          <div className="loading-spinner" />
+          <p>Loading service job form...</p>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .page-content {
+          padding: 28px;
+        }
+
+        .loading-state {
+          min-height: 500px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+          gap: 12px;
+          color: #6b7280;
+          font-size: 13px;
+        }
+
+        .loading-spinner {
+          width: 28px;
+          height: 28px;
+          border: 3px solid #e5e7eb;
+          border-top-color: #111827;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
+    </AppShell>
+  );
+}
+
+export default function NewServiceJobPage() {
+  return (
+    <Suspense fallback={<ServiceJobPageLoading />}>
+      <NewServiceJobPageContent />
+    </Suspense>
   );
 }
