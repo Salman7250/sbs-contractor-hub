@@ -37,15 +37,17 @@ export async function POST(request: NextRequest) {
 
     const companyId = String(body.companyId || "").trim();
     const customerId = String(body.customerId || "").trim();
+
     const email = String(body.email || "")
       .trim()
       .toLowerCase();
+
     const role = String(body.role || "viewer")
       .trim()
       .toLowerCase();
 
     // ---------------------------------------------------------
-    // Validate input
+    // Validate request
     // ---------------------------------------------------------
 
     if (!companyId) {
@@ -106,13 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------------------------------------------------------
-    // Supabase SSR client
+    // Supabase server client
     // ---------------------------------------------------------
 
     const supabase = await createClient();
 
     // ---------------------------------------------------------
-    // Authenticate current company user
+    // Verify current logged-in user
     // ---------------------------------------------------------
 
     const {
@@ -147,10 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------------------------------------------------------
-    // Get current access token
-    //
-    // The Edge Function needs the authenticated user's token
-    // so it can verify the company administrator.
+    // Get current session
     // ---------------------------------------------------------
 
     const {
@@ -185,15 +184,19 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------------------------------------------------------
-    // Get Supabase URL
+    // Supabase configuration
     // ---------------------------------------------------------
 
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-    if (!supabaseUrl) {
+    const publishableKey =
+      process.env
+        .NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+    if (!supabaseUrl || !publishableKey) {
       console.error(
-        "NEXT_PUBLIC_SUPABASE_URL is not configured.",
+        "Supabase public configuration is missing.",
       );
 
       return jsonResponse(
@@ -207,14 +210,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------------------------------------------------------
-    // Send request to the existing production Edge Function
-    //
-    // The Edge Function handles:
-    // - admin authorization
-    // - customer validation
-    // - Supabase Auth invitation
-    // - portal user creation
-    // - Resend email delivery
+    // Build portal redirect URL
     // ---------------------------------------------------------
 
     const origin =
@@ -223,16 +219,42 @@ export async function POST(request: NextRequest) {
 
     const redirectTo = `${origin}/portal`;
 
+    // ---------------------------------------------------------
+    // Call Supabase Edge Function
+    //
+    // The Edge Function is responsible for:
+    //
+    // 1. Verifying the authenticated user
+    // 2. Verifying company membership
+    // 3. Verifying administrator permissions
+    // 4. Verifying customer ownership
+    // 5. Generating Supabase Auth invitation
+    // 6. Creating/updating customer_portal_users
+    // 7. Sending invitation email through Resend
+    //
+    // IMPORTANT:
+    // The user's JWT is passed in Authorization.
+    // The publishable key is passed as apikey.
+    // ---------------------------------------------------------
+
+    const functionUrl =
+      `${supabaseUrl}/functions/v1/b2b-portal-invite`;
+
     const functionResponse = await fetch(
-      `${supabaseUrl}/functions/v1/b2b-portal-invite`,
+      functionUrl,
       {
         method: "POST",
+
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey:
-            process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "",
-          "Content-Type": "application/json",
+          Authorization:
+            `Bearer ${session.access_token}`,
+
+          apikey: publishableKey,
+
+          "Content-Type":
+            "application/json",
         },
+
         body: JSON.stringify({
           companyId,
           customerId,
@@ -240,12 +262,13 @@ export async function POST(request: NextRequest) {
           role,
           redirectTo,
         }),
+
         cache: "no-store",
       },
     );
 
     // ---------------------------------------------------------
-    // Parse Edge Function response safely
+    // Read Edge Function response
     // ---------------------------------------------------------
 
     const responseText =
@@ -272,7 +295,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------------------------------------------------------
-    // Forward Edge Function response
+    // Handle Edge Function errors
     // ---------------------------------------------------------
 
     if (!functionResponse.ok) {
@@ -292,6 +315,10 @@ export async function POST(request: NextRequest) {
         functionResponse.status,
       );
     }
+
+    // ---------------------------------------------------------
+    // Successful invitation
+    // ---------------------------------------------------------
 
     return jsonResponse(result);
   } catch (error) {
