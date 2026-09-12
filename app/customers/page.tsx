@@ -61,11 +61,17 @@ const emptyForm: CustomerForm = {
 function formatDate(value: string) {
   if (!value) return "—";
 
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function getInitials(name: string) {
@@ -280,6 +286,10 @@ export default function CustomersPage() {
     setForm(emptyForm);
   };
 
+  const openCustomer360 = (customerId: string) => {
+    router.push(`/customers/${customerId}`);
+  };
+
   const handleFieldChange = (
     field: keyof CustomerForm,
     value: string,
@@ -415,7 +425,9 @@ export default function CustomersPage() {
       <div className="customers-page">
         <header className="customers-header">
           <div>
-            <div className="customers-eyebrow">CUSTOMER MANAGEMENT</div>
+            <div className="customers-eyebrow">
+              CUSTOMER MANAGEMENT
+            </div>
 
             <h1>Customers</h1>
 
@@ -512,6 +524,7 @@ export default function CustomersPage() {
           <div className="customers-toolbar">
             <div>
               <h2>Customer Accounts</h2>
+
               <p>
                 {search
                   ? `${filteredCustomers.length} matching customer${
@@ -629,7 +642,23 @@ export default function CustomersPage() {
 
                 <tbody>
                   {filteredCustomers.map((customer) => (
-                    <tr key={customer.id}>
+                    <tr
+                      key={customer.id}
+                      className="customer-row-clickable"
+                      onClick={() => openCustomer360(customer.id)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter" ||
+                          event.key === " "
+                        ) {
+                          event.preventDefault();
+                          openCustomer360(customer.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Open Customer 360 for ${customer.name}`}
+                    >
                       <td>
                         <div className="customer-identity">
                           <div className="customer-avatar">
@@ -638,6 +667,10 @@ export default function CustomersPage() {
 
                           <div className="customer-name-block">
                             <strong>{customer.name}</strong>
+
+                            <span className="customer-open-hint">
+                              View Customer 360 →
+                            </span>
 
                             {customer.notes ? (
                               <span className="customer-note-preview">
@@ -674,7 +707,8 @@ export default function CustomersPage() {
 
                       <td>
                         <span className="customer-location">
-                          {getCustomerLocation(customer) || "No location"}
+                          {getCustomerLocation(customer) ||
+                            "No location"}
                         </span>
                       </td>
 
@@ -685,7 +719,25 @@ export default function CustomersPage() {
                       </td>
 
                       <td>
-                        <div className="customer-row-actions">
+                        <div
+                          className="customer-row-actions"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="customer-view-button"
+                            onClick={() =>
+                              openCustomer360(customer.id)
+                            }
+                          >
+                            View
+                          </button>
+
                           <button
                             type="button"
                             className="customer-action-button"
@@ -1325,12 +1377,21 @@ export default function CustomersPage() {
           border-bottom: 0;
         }
 
-        .customers-table tbody tr {
-          transition: background 0.12s ease;
+        .customer-row-clickable {
+          cursor: pointer;
+          transition:
+            background 0.12s ease,
+            box-shadow 0.12s ease;
         }
 
-        .customers-table tbody tr:hover {
+        .customer-row-clickable:hover {
           background: #fafafa;
+        }
+
+        .customer-row-clickable:focus {
+          outline: none;
+          background: #f8fafc;
+          box-shadow: inset 3px 0 0 #111827;
         }
 
         .customer-identity {
@@ -1369,6 +1430,25 @@ export default function CustomersPage() {
           font-weight: 700;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .customer-open-hint {
+          display: block;
+          color: #6b7280;
+          font-size: 9px;
+          font-weight: 700;
+          line-height: 14px;
+          opacity: 0;
+          transform: translateY(-2px);
+          transition:
+            opacity 0.12s ease,
+            transform 0.12s ease;
+        }
+
+        .customer-row-clickable:hover .customer-open-hint,
+        .customer-row-clickable:focus .customer-open-hint {
+          opacity: 1;
+          transform: translateY(0);
         }
 
         .customer-note-preview,
@@ -1430,13 +1510,11 @@ export default function CustomersPage() {
           gap: 6px;
         }
 
+        .customer-view-button,
         .customer-action-button {
           min-height: 29px;
           padding: 0 9px;
-          border: 1px solid #e5e7eb;
           border-radius: 6px;
-          background: #ffffff;
-          color: #374151;
           font-family: inherit;
           font-size: 9px;
           font-weight: 650;
@@ -1445,6 +1523,23 @@ export default function CustomersPage() {
             background 0.12s ease,
             border-color 0.12s ease,
             color 0.12s ease;
+        }
+
+        .customer-view-button {
+          border: 1px solid #111827;
+          background: #111827;
+          color: #ffffff;
+        }
+
+        .customer-view-button:hover {
+          background: #1f2937;
+          border-color: #1f2937;
+        }
+
+        .customer-action-button {
+          border: 1px solid #e5e7eb;
+          background: #ffffff;
+          color: #374151;
         }
 
         .customer-action-button:hover {
@@ -1463,6 +1558,7 @@ export default function CustomersPage() {
           color: #b91c1c;
         }
 
+        .customer-view-button:disabled,
         .customer-action-button:disabled {
           opacity: 0.5;
           cursor: not-allowed;
@@ -1530,6 +1626,7 @@ export default function CustomersPage() {
           line-height: 17px;
         }
 
+        .customers-secondary-button,
         .customer-secondary-button {
           min-height: 39px;
           padding: 0 14px;
@@ -1543,6 +1640,7 @@ export default function CustomersPage() {
           cursor: pointer;
         }
 
+        .customers-secondary-button:hover,
         .customer-secondary-button:hover {
           border-color: #d1d5db;
           background: #f9fafb;
