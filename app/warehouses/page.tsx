@@ -1,20 +1,32 @@
 "use client";
 
 import {
-  FormEvent,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Archive,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleOff,
+  Edit3,
+  FolderTree,
+  MapPin,
+  MoreHorizontal,
+  Package,
+  Plus,
+  Search,
+  Star,
+  Warehouse as WarehouseIcon,
+  X,
+} from "lucide-react";
 
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
-import { Link } from "lucide-react";
-
-/* -------------------------------------------------------------------------- */
-/* Types                                                                      */
-/* -------------------------------------------------------------------------- */
 
 type Warehouse = {
   id: string;
@@ -36,361 +48,229 @@ type Warehouse = {
   updated_at: string;
 };
 
-type WarehouseForm = {
+type WarehouseLocation = {
+  id: string;
+  company_id: string;
+  warehouse_id: string;
+  parent_location_id: string | null;
   name: string;
   code: string;
-  address_line1: string;
-  address_line2: string;
-  city: string;
-  state: string;
-  postal_code: string;
-  country: string;
-  phone: string;
-  email: string;
+  location_type: LocationType;
   is_active: boolean;
-  is_default: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LocationType =
+  | "zone"
+  | "aisle"
+  | "rack"
+  | "shelf"
+  | "bin"
+  | "staging"
+  | "receiving"
+  | "shipping"
+  | "returns"
+  | "quarantine"
+  | "other";
+
+type LocationForm = {
+  name: string;
+  code: string;
+  location_type: LocationType;
+  parent_location_id: string;
+  is_active: boolean;
   notes: string;
 };
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
-
-function emptyForm(): WarehouseForm {
-  return {
-    name: "",
-    code: "",
-    address_line1: "",
-    address_line2: "",
-    city: "",
-    state: "",
-    postal_code: "",
-    country: "",
-    phone: "",
-    email: "",
-    is_active: true,
-    is_default: false,
-    notes: "",
-  };
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-/* -------------------------------------------------------------------------- */
-/* Icon                                                                       */
-/* -------------------------------------------------------------------------- */
-
-type IconName =
-  | "warehouse"
-  | "plus"
-  | "search"
-  | "edit"
-  | "check"
-  | "close"
-  | "refresh"
-  | "location"
-  | "phone"
-  | "mail"
-  | "trash"
-  | "layers";
-
-function Icon({
-  name,
-  size = 18,
-}: {
-  name: IconName;
-  size?: number;
-}) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    className: "shrink-0",
-  };
-
-  switch (name) {
-    case "warehouse":
-      return (
-        <svg {...common}>
-          <path d="M3 10 12 4l9 6" />
-          <path d="M5 9v10h14V9" />
-          <path d="M9 19v-5h6v5" />
-          <path d="M8 11h.01M12 11h.01M16 11h.01" />
-        </svg>
-      );
-
-    case "plus":
-      return (
-        <svg {...common}>
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
-      );
-
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
-        </svg>
-      );
-
-    case "edit":
-      return (
-        <svg {...common}>
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-        </svg>
-      );
-
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="m5 12 4 4L19 6" />
-        </svg>
-      );
-
-    case "close":
-      return (
-        <svg {...common}>
-          <path d="m6 6 12 12" />
-          <path d="m18 6-12 12" />
-        </svg>
-      );
-
-    case "refresh":
-      return (
-        <svg {...common}>
-          <path d="M20 11a8 8 0 0 0-14.7-4L4 9" />
-          <path d="M4 4v5h5" />
-          <path d="M4 13a8 8 0 0 0 14.7 4L20 15" />
-          <path d="M20 20v-5h-5" />
-        </svg>
-      );
-
-    case "location":
-      return (
-        <svg {...common}>
-          <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
-          <circle cx="12" cy="10" r="2.5" />
-        </svg>
-      );
-
-    case "phone":
-      return (
-        <svg {...common}>
-          <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.8 2Z" />
-        </svg>
-      );
-
-    case "mail":
-      return (
-        <svg {...common}>
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="m3 7 9 6 9-6" />
-        </svg>
-      );
-
-    case "trash":
-      return (
-        <svg {...common}>
-          <path d="M4 7h16" />
-          <path d="M10 11v6M14 11v6" />
-          <path d="m6 7 1 14h10l1-14" />
-          <path d="M9 7V4h6v3" />
-        </svg>
-      );
-
-    case "layers":
-      return (
-        <svg {...common}>
-          <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-          <path d="m3 12 9 5 9-5" />
-          <path d="m3 16 9 5 9-5" />
-        </svg>
-      );
-
-    default:
-      return null;
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Input                                                                      */
-/* -------------------------------------------------------------------------- */
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  required = false,
-  type = "text",
-}: {
+const LOCATION_TYPES: {
+  value: LocationType;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  required?: boolean;
-  type?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-slate-700">
-        {label}
-        {required ? (
-          <span className="ml-1 text-red-500">*</span>
-        ) : null}
-      </span>
+}[] = [
+  { value: "zone", label: "Zone" },
+  { value: "aisle", label: "Aisle" },
+  { value: "rack", label: "Rack" },
+  { value: "shelf", label: "Shelf" },
+  { value: "bin", label: "Bin" },
+  { value: "staging", label: "Staging" },
+  { value: "receiving", label: "Receiving" },
+  { value: "shipping", label: "Shipping" },
+  { value: "returns", label: "Returns" },
+  { value: "quarantine", label: "Quarantine" },
+  { value: "other", label: "Other" },
+];
 
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        required={required}
-        className="w-full rounded-lg bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-2 focus:ring-slate-200"
-        style={{
-          border: "1px solid #e2e8f0",
-        }}
-      />
-    </label>
+const EMPTY_LOCATION_FORM: LocationForm = {
+  name: "",
+  code: "",
+  location_type: "bin",
+  parent_location_id: "",
+  is_active: true,
+  notes: "",
+};
+
+function locationTypeLabel(type: LocationType) {
+  return (
+    LOCATION_TYPES.find((item) => item.value === type)?.label ?? type
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Page                                                                       */
-/* -------------------------------------------------------------------------- */
+function normalizeCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function formatAddress(warehouse: Warehouse) {
+  return [
+    warehouse.address_line1,
+    warehouse.address_line2,
+    warehouse.city,
+    warehouse.state,
+    warehouse.postal_code,
+    warehouse.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
 
 export default function WarehousesPage() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   const [companyId, setCompanyId] = useState<string | null>(null);
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
 
   const [search, setSearch] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingWarehouse, setEditingWarehouse] =
+  const [expandedWarehouses, setExpandedWarehouses] = useState<
+    Record<string, boolean>
+  >({});
+
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [selectedWarehouse, setSelectedWarehouse] =
     useState<Warehouse | null>(null);
+  const [editingLocation, setEditingLocation] =
+    useState<WarehouseLocation | null>(null);
+  const [locationForm, setLocationForm] =
+    useState<LocationForm>(EMPTY_LOCATION_FORM);
 
-  const [form, setForm] = useState<WarehouseForm>(emptyForm());
+  const [warehouseMenuId, setWarehouseMenuId] = useState<string | null>(
+    null
+  );
 
-  /* ------------------------------------------------------------------------ */
-  /* Load                                                                     */
-  /* ------------------------------------------------------------------------ */
+  const getCompanyId = useCallback(async () => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-  const loadWarehouses = useCallback(
-    async (showRefresh = false) => {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
+    if (userError || !user) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    const { data: membership, error: membershipError } = await supabase
+      .from("company_members")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (membershipError) {
+      throw new Error(membershipError.message);
+    }
+
+    if (!membership?.company_id) {
+      throw new Error("No company workspace is available for your account.");
+    }
+
+    return membership.company_id;
+  }, [supabase]);
+
+  const loadData = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) {
         setLoading(true);
       }
 
       setErrorMessage("");
 
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          throw new Error(
-            "You must be signed in to manage warehouses."
-          );
-        }
-
-        const {
-          data: membership,
-          error: membershipError,
-        } = await supabase
-          .from("company_members")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (membershipError) {
-          throw membershipError;
-        }
-
-        if (!membership?.company_id) {
-          throw new Error(
-            "No company membership was found for this account."
-          );
-        }
-
-        const currentCompanyId = membership.company_id;
-
+        const currentCompanyId = await getCompanyId();
         setCompanyId(currentCompanyId);
 
-        const { data, error } = await supabase
-          .from("warehouses")
-          .select(
-            `
-              id,
-              company_id,
-              name,
-              code,
-              address_line1,
-              address_line2,
-              city,
-              state,
-              postal_code,
-              country,
-              phone,
-              email,
-              is_active,
-              is_default,
-              notes,
-              created_at,
-              updated_at
-            `
-          )
-          .eq("company_id", currentCompanyId)
-          .order("is_default", {
-            ascending: false,
-          })
-          .order("name", {
-            ascending: true,
-          });
+        const [
+          { data: warehouseData, error: warehouseError },
+          { data: locationData, error: locationError },
+        ] = await Promise.all([
+          supabase
+            .from("warehouses")
+            .select(
+              `
+                id,
+                company_id,
+                name,
+                code,
+                address_line1,
+                address_line2,
+                city,
+                state,
+                postal_code,
+                country,
+                phone,
+                email,
+                is_active,
+                is_default,
+                notes,
+                created_at,
+                updated_at
+              `
+            )
+            .eq("company_id", currentCompanyId)
+            .order("is_default", { ascending: false })
+            .order("name", { ascending: true }),
 
-        if (error) {
-          throw error;
+          supabase
+            .from("warehouse_locations")
+            .select(
+              `
+                id,
+                company_id,
+                warehouse_id,
+                parent_location_id,
+                name,
+                code,
+                location_type,
+                is_active,
+                notes,
+                created_at,
+                updated_at
+              `
+            )
+            .eq("company_id", currentCompanyId)
+            .order("name", { ascending: true }),
+        ]);
+
+        if (warehouseError) {
+          throw new Error(warehouseError.message);
         }
 
-        setWarehouses((data ?? []) as Warehouse[]);
-      } catch (error) {
-        console.error("Warehouse load error:", error);
+        if (locationError) {
+          throw new Error(locationError.message);
+        }
 
+        setWarehouses((warehouseData ?? []) as Warehouse[]);
+        setLocations((locationData ?? []) as WarehouseLocation[]);
+      } catch (error) {
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -398,125 +278,259 @@ export default function WarehousesPage() {
         );
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
-    [supabase]
+    [getCompanyId, supabase]
   );
 
   useEffect(() => {
-    // Initial warehouse data load.
-    // The function performs async Supabase requests and updates local state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadWarehouses();
-  }, [loadWarehouses]);
+    void loadData();
+  }, [loadData]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Derived                                                                  */
-  /* ------------------------------------------------------------------------ */
+  useEffect(() => {
+    if (!successMessage) return;
+
+    const timer = window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [successMessage]);
 
   const filteredWarehouses = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
 
     return warehouses.filter((warehouse) => {
       const matchesSearch =
-        !normalizedSearch ||
-        warehouse.name.toLowerCase().includes(normalizedSearch) ||
-        warehouse.code.toLowerCase().includes(normalizedSearch) ||
-        warehouse.city
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-        warehouse.country
-          ?.toLowerCase()
-          .includes(normalizedSearch);
+        !query ||
+        warehouse.name.toLowerCase().includes(query) ||
+        warehouse.code.toLowerCase().includes(query) ||
+        (warehouse.city ?? "").toLowerCase().includes(query) ||
+        (warehouse.country ?? "").toLowerCase().includes(query);
 
-      const matchesStatus = showInactive || warehouse.is_active;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && warehouse.is_active) ||
+        (statusFilter === "inactive" && !warehouse.is_active);
 
       return matchesSearch && matchesStatus;
     });
-  }, [warehouses, search, showInactive]);
+  }, [warehouses, search, statusFilter]);
 
-  const activeCount = useMemo(
-    () =>
-      warehouses.filter(
-        (warehouse) => warehouse.is_active
-      ).length,
-    [warehouses]
-  );
+  const activeWarehouses = warehouses.filter(
+    (warehouse) => warehouse.is_active
+  ).length;
 
-  const inactiveCount = warehouses.length - activeCount;
+  const defaultWarehouses = warehouses.filter(
+    (warehouse) => warehouse.is_default
+  ).length;
 
-  /* ------------------------------------------------------------------------ */
-  /* Modal                                                                    */
-  /* ------------------------------------------------------------------------ */
+  const activeLocations = locations.filter(
+    (location) => location.is_active
+  ).length;
 
-  function openCreateModal() {
-    setEditingWarehouse(null);
-    setForm(emptyForm());
-    setErrorMessage("");
-    setSuccessMessage("");
-    setModalOpen(true);
+  const warehousesWithLocations = warehouses.filter((warehouse) =>
+    locations.some((location) => location.warehouse_id === warehouse.id)
+  ).length;
+
+  function getWarehouseLocations(warehouseId: string) {
+    return locations.filter(
+      (location) => location.warehouse_id === warehouseId
+    );
   }
 
-  function openEditModal(warehouse: Warehouse) {
-    setEditingWarehouse(warehouse);
-
-    setForm({
-      name: warehouse.name,
-      code: warehouse.code,
-      address_line1: warehouse.address_line1 ?? "",
-      address_line2: warehouse.address_line2 ?? "",
-      city: warehouse.city ?? "",
-      state: warehouse.state ?? "",
-      postal_code: warehouse.postal_code ?? "",
-      country: warehouse.country ?? "",
-      phone: warehouse.phone ?? "",
-      email: warehouse.email ?? "",
-      is_active: warehouse.is_active,
-      is_default: warehouse.is_default,
-      notes: warehouse.notes ?? "",
-    });
-
-    setErrorMessage("");
-    setSuccessMessage("");
-    setModalOpen(true);
+  function toggleWarehouseExpanded(warehouseId: string) {
+    setExpandedWarehouses((current) => ({
+      ...current,
+      [warehouseId]: !current[warehouseId],
+    }));
   }
 
-  function closeModal() {
+  function openLocationManager(warehouse: Warehouse) {
+    setSelectedWarehouse(warehouse);
+    setEditingLocation(null);
+    setLocationForm(EMPTY_LOCATION_FORM);
+    setLocationModalOpen(true);
+    setWarehouseMenuId(null);
+  }
+
+  function closeLocationManager() {
     if (saving) return;
 
-    setModalOpen(false);
-    setEditingWarehouse(null);
-    setForm(emptyForm());
+    setLocationModalOpen(false);
+    setSelectedWarehouse(null);
+    setEditingLocation(null);
+    setLocationForm(EMPTY_LOCATION_FORM);
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Save                                                                     */
-  /* ------------------------------------------------------------------------ */
+  function openNewLocation() {
+    setEditingLocation(null);
+    setLocationForm(EMPTY_LOCATION_FORM);
+  }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
+  function openEditLocation(location: WarehouseLocation) {
+    setEditingLocation(location);
 
-    if (!companyId) {
-      setErrorMessage(
-        "Company information is unavailable."
+    setLocationForm({
+      name: location.name,
+      code: location.code,
+      location_type: location.location_type,
+      parent_location_id: location.parent_location_id ?? "",
+      is_active: location.is_active,
+      notes: location.notes ?? "",
+    });
+  }
+
+  function getDescendantIds(locationId: string) {
+    const descendantIds = new Set<string>();
+
+    function walk(parentId: string) {
+      locations
+        .filter(
+          (location) => location.parent_location_id === parentId
+        )
+        .forEach((child) => {
+          descendantIds.add(child.id);
+          walk(child.id);
+        });
+    }
+
+    walk(locationId);
+
+    return descendantIds;
+  }
+
+  const availableParentLocations = useMemo(() => {
+    if (!selectedWarehouse) return [];
+
+    const warehouseLocations = getWarehouseLocations(
+      selectedWarehouse.id
+    );
+
+    if (!editingLocation) {
+      return warehouseLocations;
+    }
+
+    const excludedIds = new Set([
+      editingLocation.id,
+      ...getDescendantIds(editingLocation.id),
+    ]);
+
+    return warehouseLocations.filter(
+      (location) => !excludedIds.has(location.id)
+    );
+  }, [selectedWarehouse, editingLocation, locations]);
+
+  function buildLocationTree(
+    parentId: string | null,
+    warehouseLocations: WarehouseLocation[]
+  ): WarehouseLocation[] {
+    return warehouseLocations
+      .filter(
+        (location) =>
+          location.parent_location_id === parentId
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function renderLocationTree(
+    parentId: string | null,
+    warehouseLocations: WarehouseLocation[],
+    depth = 0
+  ): React.ReactNode {
+    const nodes = buildLocationTree(parentId, warehouseLocations);
+
+    if (!nodes.length) return null;
+
+    return nodes.map((location) => {
+      const children = warehouseLocations.filter(
+        (child) =>
+          child.parent_location_id === location.id
       );
+
+      return (
+        <div key={location.id}>
+          <div
+            className="location-tree-row"
+            style={{ paddingLeft: `${16 + depth * 28}px` }}
+          >
+            <div className="location-tree-main">
+              <div className="location-tree-icon">
+                <FolderTree size={16} />
+              </div>
+
+              <div className="location-tree-content">
+                <div className="location-tree-name">
+                  {location.name}
+                </div>
+
+                <div className="location-tree-meta">
+                  <span>{location.code}</span>
+                  <span>•</span>
+                  <span>
+                    {locationTypeLabel(location.location_type)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="location-tree-actions">
+              <span
+                className={`status-pill ${
+                  location.is_active
+                    ? "status-active"
+                    : "status-inactive"
+                }`}
+              >
+                {location.is_active ? "Active" : "Inactive"}
+              </span>
+
+              <button
+                type="button"
+                className="icon-button"
+                title="Edit location"
+                onClick={() => openEditLocation(location)}
+              >
+                <Edit3 size={15} />
+              </button>
+            </div>
+          </div>
+
+          {children.length > 0 &&
+            renderLocationTree(
+              location.id,
+              warehouseLocations,
+              depth + 1
+            )}
+        </div>
+      );
+    });
+  }
+
+  async function saveLocation() {
+    if (!companyId || !selectedWarehouse) {
+      setErrorMessage("Unable to determine the active company.");
       return;
     }
 
-    if (!form.name.trim()) {
-      setErrorMessage(
-        "Warehouse name is required."
-      );
+    const name = locationForm.name.trim();
+    const code = normalizeCode(locationForm.code);
+
+    if (!name) {
+      setErrorMessage("Location name is required.");
       return;
     }
 
-    if (!form.code.trim()) {
-      setErrorMessage(
-        "Warehouse code is required."
-      );
+    if (!code) {
+      setErrorMessage("Location code is required.");
+      return;
+    }
+
+    if (
+      locationForm.parent_location_id ===
+      editingLocation?.id
+    ) {
+      setErrorMessage("A location cannot be its own parent.");
       return;
     }
 
@@ -525,88 +539,82 @@ export default function WarehousesPage() {
     setSuccessMessage("");
 
     try {
-      const normalizedCode =
-        form.code.trim().toUpperCase();
+      const duplicate = locations.find(
+        (location) =>
+          location.warehouse_id === selectedWarehouse.id &&
+          location.code.toUpperCase() === code &&
+          location.id !== editingLocation?.id
+      );
 
-      const payload = {
-        company_id: companyId,
-        name: form.name.trim(),
-        code: normalizedCode,
-        address_line1:
-          form.address_line1.trim() || null,
-        address_line2:
-          form.address_line2.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim() || null,
-        postal_code:
-          form.postal_code.trim() || null,
-        country:
-          form.country.trim() || null,
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        is_active: form.is_active,
-        is_default: form.is_default,
-        notes: form.notes.trim() || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (editingWarehouse) {
-        const { error } = await supabase
-          .from("warehouses")
-          .update(payload)
-          .eq("id", editingWarehouse.id)
-          .eq("company_id", companyId);
-
-        if (error) {
-          throw error;
-        }
-
-        setSuccessMessage(
-          "Warehouse updated successfully."
-        );
-      } else {
-        const { error } = await supabase
-          .from("warehouses")
-          .insert(payload);
-
-        if (error) {
-          throw error;
-        }
-
-        setSuccessMessage(
-          "Warehouse created successfully."
+      if (duplicate) {
+        throw new Error(
+          `Location code "${code}" is already used in this warehouse.`
         );
       }
 
-      setModalOpen(false);
-      setEditingWarehouse(null);
-      setForm(emptyForm());
+      if (editingLocation) {
+        const { error } = await supabase
+          .from("warehouse_locations")
+          .update({
+            name,
+            code,
+            location_type: locationForm.location_type,
+            parent_location_id:
+              locationForm.parent_location_id || null,
+            is_active: locationForm.is_active,
+            notes: locationForm.notes.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingLocation.id)
+          .eq("warehouse_id", selectedWarehouse.id)
+          .eq("company_id", companyId);
 
-      await loadWarehouses(true);
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setSuccessMessage("Location updated successfully.");
+      } else {
+        const { error } = await supabase
+          .from("warehouse_locations")
+          .insert({
+            company_id: companyId,
+            warehouse_id: selectedWarehouse.id,
+            name,
+            code,
+            location_type: locationForm.location_type,
+            parent_location_id:
+              locationForm.parent_location_id || null,
+            is_active: locationForm.is_active,
+            notes: locationForm.notes.trim() || null,
+          });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setSuccessMessage("Location created successfully.");
+      }
+
+      setEditingLocation(null);
+      setLocationForm(EMPTY_LOCATION_FORM);
+
+      await loadData(false);
     } catch (error) {
-      console.error("Warehouse save error:", error);
-
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Unable to save warehouse."
+          : "Unable to save location."
       );
     } finally {
       setSaving(false);
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Toggle active                                                            */
-  /* ------------------------------------------------------------------------ */
-
-  async function toggleWarehouse(
-    warehouse: Warehouse
-  ) {
+  async function toggleWarehouseStatus(warehouse: Warehouse) {
     if (!companyId) return;
 
-    const nextActive = !warehouse.is_active;
-
+    setSaving(true);
     setErrorMessage("");
     setSuccessMessage("");
 
@@ -614,1065 +622,1819 @@ export default function WarehousesPage() {
       const { error } = await supabase
         .from("warehouses")
         .update({
-          is_active: nextActive,
+          is_active: !warehouse.is_active,
           updated_at: new Date().toISOString(),
         })
         .eq("id", warehouse.id)
         .eq("company_id", companyId);
 
       if (error) {
-        throw error;
+        throw new Error(error.message);
       }
 
-      setWarehouses((current) =>
-        current.map((item) =>
-          item.id === warehouse.id
-            ? {
-                ...item,
-                is_active: nextActive,
-              }
-            : item
-        )
-      );
-
       setSuccessMessage(
-        nextActive
-          ? `${warehouse.name} is now active.`
-          : `${warehouse.name} has been deactivated.`
-      );
-    } catch (error) {
-      console.error(
-        "Warehouse status update error:",
-        error
+        warehouse.is_active
+          ? "Warehouse deactivated."
+          : "Warehouse activated."
       );
 
+      await loadData(false);
+    } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Unable to update warehouse status."
       );
+    } finally {
+      setSaving(false);
+      setWarehouseMenuId(null);
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Delete                                                                   */
-  /* ------------------------------------------------------------------------ */
-
-  async function deleteWarehouse(
-    warehouse: Warehouse
-  ) {
+  async function setDefaultWarehouse(warehouse: Warehouse) {
     if (!companyId) return;
 
-    const confirmed = window.confirm(
-      `Delete "${warehouse.name}"? This should only be used if the warehouse has no inventory or transaction records.`
-    );
+    if (!warehouse.is_active) {
+      setErrorMessage(
+        "Only an active warehouse can be made the default."
+      );
+      setWarehouseMenuId(null);
+      return;
+    }
 
-    if (!confirmed) return;
+    if (warehouse.is_default) {
+      setWarehouseMenuId(null);
+      return;
+    }
 
+    setSaving(true);
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
-      const { error } = await supabase
+      const { error: clearError } = await supabase
         .from("warehouses")
-        .delete()
+        .update({
+          is_default: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("company_id", companyId)
+        .eq("is_default", true);
+
+      if (clearError) {
+        throw new Error(clearError.message);
+      }
+
+      const { error: setError } = await supabase
+        .from("warehouses")
+        .update({
+          is_default: true,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", warehouse.id)
         .eq("company_id", companyId);
 
-      if (error) {
-        throw error;
+      if (setError) {
+        throw new Error(setError.message);
       }
 
-      setWarehouses((current) =>
-        current.filter(
-          (item) => item.id !== warehouse.id
-        )
-      );
-
       setSuccessMessage(
-        "Warehouse deleted successfully."
-      );
-    } catch (error) {
-      console.error(
-        "Warehouse delete error:",
-        error
+        `${warehouse.name} is now the default warehouse.`
       );
 
+      await loadData(false);
+    } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Unable to delete warehouse. If it contains inventory or transaction history, deactivate it instead."
+          : "Unable to set the default warehouse."
       );
+    } finally {
+      setSaving(false);
+      setWarehouseMenuId(null);
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Loading                                                                  */
-  /* ------------------------------------------------------------------------ */
+  return (
+    <AppShell>
+      <div className="page-content warehouses-page">
+        <div className="page-header">
+          <div>
+            <div className="eyebrow">
+              <span className="eyebrow-dot" />
+              Inventory Infrastructure
+            </div>
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div className="min-h-screen bg-slate-50">
-          <div className="mx-auto max-w-[1500px] px-6 py-8">
-            <div className="animate-pulse">
-              <div className="h-8 w-56 rounded bg-slate-200" />
-              <div className="mt-3 h-4 w-96 rounded bg-slate-200" />
+            <h1 className="page-title">Warehouses</h1>
 
-              <div className="mt-8 grid gap-4 md:grid-cols-3">
-                {Array.from({
-                  length: 3,
-                }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-28 rounded-xl bg-white"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  />
-                ))}
+            <p className="page-subtitle">
+              Manage physical warehouses and their internal
+              storage hierarchy.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => router.push("/warehouses/new")}
+          >
+            <Plus size={17} />
+            New Warehouse
+          </button>
+        </div>
+
+        {successMessage && (
+          <div className="alert success-alert">
+            <Check size={17} />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="alert error-alert">
+            <X size={17} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon">
+              <WarehouseIcon size={19} />
+            </div>
+            <div>
+              <div className="stat-label">Total Warehouses</div>
+              <div className="stat-value">{warehouses.length}</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">
+              <Check size={19} />
+            </div>
+            <div>
+              <div className="stat-label">Active</div>
+              <div className="stat-value">
+                {activeWarehouses}
               </div>
+            </div>
+          </div>
 
-              <div
-                className="mt-6 h-96 rounded-xl bg-white"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              />
+          <div className="stat-card">
+            <div className="stat-icon">
+              <Star size={19} />
+            </div>
+            <div>
+              <div className="stat-label">Default</div>
+              <div className="stat-value">
+                {defaultWarehouses}
+              </div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">
+              <MapPin size={19} />
+            </div>
+            <div>
+              <div className="stat-label">Total Locations</div>
+              <div className="stat-value">{locations.length}</div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">
+              <FolderTree size={19} />
+            </div>
+            <div>
+              <div className="stat-label">Active Locations</div>
+              <div className="stat-value">
+                {activeLocations}
+              </div>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">
+              <Package size={19} />
+            </div>
+            <div>
+              <div className="stat-label">
+                Warehouses with Locations
+              </div>
+              <div className="stat-value">
+                {warehousesWithLocations}
+              </div>
             </div>
           </div>
         </div>
-      </AppShell>
-    );
-  }
 
-  /* ------------------------------------------------------------------------ */
-  /* Render                                                                   */
-  /* ------------------------------------------------------------------------ */
-
-  return (
-    <AppShell>
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-[1500px] px-6 py-8">
-          {/* Header --------------------------------------------------------- */}
-
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-slate-900 p-2.5 text-white">
-                <Icon name="warehouse" size={22} />
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-                  Warehouses
-                </h1>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Manage warehouses and the physical
-                  locations where your inventory is stored.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
+        <div className="toolbar-card">
+          <div className="search-box">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search warehouses..."
+            />
+            {search && (
               <button
                 type="button"
-                onClick={() =>
-                  void loadWarehouses(true)
-                }
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
+                className="clear-search"
+                onClick={() => setSearch("")}
               >
-                <Icon name="refresh" size={16} />
-
-                {refreshing
-                  ? "Refreshing..."
-                  : "Refresh"}
+                <X size={15} />
               </button>
-
-              <button
-                type="button"
-                onClick={openCreateModal}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                <Icon name="plus" size={16} />
-
-                Add Warehouse
-              </button>
-            </div>
+            )}
           </div>
 
-          {/* Module Navigation --------------------------------------------- */}
-
-          <div
-            className="mt-6 rounded-xl bg-white p-2"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
+          <select
+            className="filter-select"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(
+                event.target.value as
+                  | "all"
+                  | "active"
+                  | "inactive"
+              )
+            }
           >
-            <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-              {/* Warehouses - Active */}
-              <a
-                href="/warehouses"
-                className="flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-white transition"
-              >
-                <Icon
-                  name="warehouse"
-                  size={18}
-                />
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
 
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    Warehouses
-                  </div>
+          <div className="toolbar-spacer" />
 
-                  <div className="mt-0.5 text-xs text-slate-300">
-                    Manage warehouses
-                  </div>
-                </div>
-              </a>
-
-              {/* Locations */}
-              <a
-                href="/warehouses/locations"
-                className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
-              >
-                <Icon
-                  name="location"
-                  size={18}
-                />
-
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">
-                    Locations
-                  </div>
-
-                  <div className="mt-0.5 text-xs text-slate-400">
-                    Zones, racks & bins
-                  </div>
-                </div>
-              </a>
-
-              {/* Transfers */}
-              <Link
-  href="/warehouses/transfers"
-  className="flex items-center gap-3 rounded-lg px-4 py-3 text-slate-700 transition hover:bg-slate-50"
->
-  <Icon
-    name="layers"
-    size={18}
-  />
-
-  <div className="min-w-0">
-    <div className="text-sm font-medium">
-      Transfers
-    </div>
-
-                  <div className="mt-0.5 text-xs text-slate-400">
-                    Move stock between locations
-                  </div>
-                </div>
-              </Link>
-            </div>
+          <div className="result-count">
+            {filteredWarehouses.length} warehouse
+            {filteredWarehouses.length === 1 ? "" : "s"}
           </div>
+        </div>
 
-          {/* Messages ------------------------------------------------------- */}
-
-          {errorMessage ? (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {errorMessage}
+        <div className="content-card">
+          {loading ? (
+            <div className="loading-state">
+              <div className="spinner" />
+              <span>Loading warehouses...</span>
             </div>
-          ) : null}
-
-          {successMessage ? (
-            <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              {successMessage}
-            </div>
-          ) : null}
-
-          {/* Stats ---------------------------------------------------------- */}
-
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div
-              className="rounded-xl bg-white p-5"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="text-sm font-medium text-slate-500">
-                Total Warehouses
+          ) : filteredWarehouses.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">
+                <WarehouseIcon size={26} />
               </div>
 
-              <div className="mt-2 text-2xl font-semibold text-slate-950">
-                {warehouses.length}
-              </div>
-
-              <div className="mt-1 text-xs text-slate-400">
-                All warehouse records
-              </div>
-            </div>
-
-            <div
-              className="rounded-xl bg-white p-5"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="text-sm font-medium text-slate-500">
-                Active
-              </div>
-
-              <div className="mt-2 text-2xl font-semibold text-slate-950">
-                {activeCount}
-              </div>
-
-              <div className="mt-1 text-xs text-slate-400">
-                Available for warehouse operations
-              </div>
-            </div>
-
-            <div
-              className="rounded-xl bg-white p-5"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="text-sm font-medium text-slate-500">
-                Inactive
-              </div>
-
-              <div className="mt-2 text-2xl font-semibold text-slate-950">
-                {inactiveCount}
-              </div>
-
-              <div className="mt-1 text-xs text-slate-400">
-                Retained for historical records
-              </div>
-            </div>
-          </div>
-
-          {/* Toolbar -------------------------------------------------------- */}
-
-          <div
-            className="mt-6 rounded-xl bg-white p-5"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
-          >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">
-                  Warehouse Directory
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  {filteredWarehouses.length}{" "}
-                  {filteredWarehouses.length === 1
-                    ? "warehouse"
-                    : "warehouses"}{" "}
-                  shown
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="relative min-w-[280px]">
-                  <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-                    <Icon
-                      name="search"
-                      size={17}
-                    />
-                  </div>
-
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(event) =>
-                      setSearch(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Search warehouses..."
-                    className="w-full rounded-lg bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-slate-200"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  />
-                </div>
-
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={showInactive}
-                    onChange={(event) =>
-                      setShowInactive(
-                        event.target.checked
-                      )
-                    }
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-
-                  Show inactive
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Empty ---------------------------------------------------------- */}
-
-          {filteredWarehouses.length === 0 ? (
-            <div
-              className="mt-6 rounded-xl bg-white p-12 text-center"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                <Icon
-                  name="warehouse"
-                  size={25}
-                />
-              </div>
-
-              <h3 className="mt-4 text-sm font-semibold text-slate-900">
+              <h3>
                 {warehouses.length === 0
                   ? "No warehouses yet"
                   : "No warehouses found"}
               </h3>
 
-              <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+              <p>
                 {warehouses.length === 0
-                  ? "Create your first warehouse to start organizing inventory across physical locations."
+                  ? "Create your first warehouse to start managing physical inventory locations."
                   : "Try changing your search or status filter."}
               </p>
 
-              {warehouses.length === 0 ? (
+              {warehouses.length === 0 && (
                 <button
                   type="button"
-                  onClick={openCreateModal}
-                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                  className="primary-button"
+                  onClick={() =>
+                    router.push("/warehouses/new")
+                  }
                 >
-                  <Icon
-                    name="plus"
-                    size={16}
-                  />
-
-                  Add Warehouse
+                  <Plus size={17} />
+                  Create Warehouse
                 </button>
-              ) : null}
-            </div>
-          ) : (
-            /* Warehouse cards ---------------------------------------------- */
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredWarehouses.map(
-                (warehouse) => (
-                  <div
-                    key={warehouse.id}
-                    className="rounded-xl bg-white p-5"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex min-w-0 items-start gap-3">
-                        <div className="rounded-lg bg-slate-100 p-2.5 text-slate-600">
-                          <Icon
-                            name="warehouse"
-                            size={19}
-                          />
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="truncate text-base font-semibold text-slate-950">
-                              {warehouse.name}
-                            </h3>
-
-                            {warehouse.is_default ? (
-                              <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                                Default
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-                            {warehouse.code}
-                          </div>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                          warehouse.is_active
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {warehouse.is_active
-                          ? "Active"
-                          : "Inactive"}
-                      </span>
-                    </div>
-
-                    {/* Address ------------------------------------------------ */}
-
-                    {(warehouse.address_line1 ||
-                      warehouse.city ||
-                      warehouse.state ||
-                      warehouse.country) && (
-                      <div className="mt-5 flex items-start gap-2 text-sm text-slate-500">
-                        <Icon
-                          name="location"
-                          size={16}
-                        />
-
-                        <div>
-                          {warehouse.address_line1 ? (
-                            <div>
-                              {
-                                warehouse.address_line1
-                              }
-                            </div>
-                          ) : null}
-
-                          {warehouse.address_line2 ? (
-                            <div>
-                              {
-                                warehouse.address_line2
-                              }
-                            </div>
-                          ) : null}
-
-                          <div>
-                            {[
-                              warehouse.city,
-                              warehouse.state,
-                              warehouse.postal_code,
-                            ]
-                              .filter(Boolean)
-                              .join(
-                                ", "
-                              )}
-                          </div>
-
-                          {warehouse.country ? (
-                            <div>
-                              {
-                                warehouse.country
-                              }
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Contact ------------------------------------------------ */}
-
-                    {(warehouse.phone ||
-                      warehouse.email) && (
-                      <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                        {warehouse.phone ? (
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <Icon
-                              name="phone"
-                              size={14}
-                            />
-
-                            {
-                              warehouse.phone
-                            }
-                          </div>
-                        ) : null}
-
-                        {warehouse.email ? (
-                          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
-                            <Icon
-                              name="mail"
-                              size={14}
-                            />
-
-                            <span className="truncate">
-                              {
-                                warehouse.email
-                              }
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {/* Footer ------------------------------------------------- */}
-
-                    <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-                      <div className="text-xs text-slate-400">
-                        Created{" "}
-                        {formatDate(
-                          warehouse.created_at
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openEditModal(
-                              warehouse
-                            )
-                          }
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-                          style={{
-                            border:
-                              "1px solid #e2e8f0",
-                          }}
-                        >
-                          <Icon
-                            name="edit"
-                            size={14}
-                          />
-
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void toggleWarehouse(
-                              warehouse
-                            )
-                          }
-                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition ${
-                            warehouse.is_active
-                              ? "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                          }`}
-                        >
-                          <Icon
-                            name="check"
-                            size={14}
-                          />
-
-                          {warehouse.is_active
-                            ? "Deactivate"
-                            : "Activate"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void deleteWarehouse(
-                              warehouse
-                            )
-                          }
-                          className="inline-flex items-center justify-center rounded-lg px-2.5 py-2 text-red-500 transition hover:bg-red-50"
-                          title="Delete warehouse"
-                        >
-                          <Icon
-                            name="trash"
-                            size={14}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )
               )}
             </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Warehouse</th>
+                    <th>Code</th>
+                    <th>Location</th>
+                    <th>Storage Locations</th>
+                    <th>Status</th>
+                    <th>Default</th>
+                    <th className="actions-column">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredWarehouses.map((warehouse) => {
+                    const warehouseLocations =
+                      getWarehouseLocations(warehouse.id);
+
+                    const isExpanded =
+                      !!expandedWarehouses[warehouse.id];
+
+                    return (
+                      <tr key={warehouse.id}>
+                        <td>
+                          <div className="warehouse-name-cell">
+                            <button
+                              type="button"
+                              className="expand-button"
+                              onClick={() =>
+                                toggleWarehouseExpanded(
+                                  warehouse.id
+                                )
+                              }
+                              title={
+                                isExpanded
+                                  ? "Collapse locations"
+                                  : "Show locations"
+                              }
+                            >
+                              {isExpanded ? (
+                                <ChevronDown size={16} />
+                              ) : (
+                                <ChevronRight size={16} />
+                              )}
+                            </button>
+
+                            <div className="warehouse-avatar">
+                              <WarehouseIcon size={18} />
+                            </div>
+
+                            <div>
+                              <div className="warehouse-name">
+                                {warehouse.name}
+                              </div>
+
+                              {formatAddress(warehouse) && (
+                                <div className="warehouse-address">
+                                  {formatAddress(warehouse)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="inline-location-panel">
+                              {warehouseLocations.length ===
+                              0 ? (
+                                <div className="inline-empty">
+                                  <MapPin size={15} />
+                                  <span>
+                                    No storage locations
+                                    configured.
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openLocationManager(
+                                        warehouse
+                                      )
+                                    }
+                                  >
+                                    Add location
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="inline-location-list">
+                                  {renderLocationTree(
+                                    null,
+                                    warehouseLocations
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <span className="code-badge">
+                            {warehouse.code}
+                          </span>
+                        </td>
+
+                        <td>
+                          <div className="location-cell">
+                            <MapPin size={15} />
+                            <span>
+                              {warehouse.city ||
+                              warehouse.country ||
+                              "—"}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="location-count">
+                            <FolderTree size={15} />
+                            <span>
+                              {warehouseLocations.length}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <span
+                            className={`status-pill ${
+                              warehouse.is_active
+                                ? "status-active"
+                                : "status-inactive"
+                            }`}
+                          >
+                            {warehouse.is_active
+                              ? "Active"
+                              : "Inactive"}
+                          </span>
+                        </td>
+
+                        <td>
+                          {warehouse.is_default ? (
+                            <span className="default-badge">
+                              <Star size={13} />
+                              Default
+                            </span>
+                          ) : (
+                            <span className="muted-text">
+                              —
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="actions-column">
+                          <div className="action-menu-wrap">
+                            <button
+                              type="button"
+                              className="icon-button"
+                              title="Warehouse actions"
+                              onClick={() =>
+                                setWarehouseMenuId(
+                                  warehouseMenuId ===
+                                    warehouse.id
+                                    ? null
+                                    : warehouse.id
+                                )
+                              }
+                            >
+                              <MoreHorizontal size={17} />
+                            </button>
+
+                            {warehouseMenuId ===
+                              warehouse.id && (
+                              <div className="action-menu">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setWarehouseMenuId(
+                                      null
+                                    );
+                                    openLocationManager(
+                                      warehouse
+                                    );
+                                  }}
+                                >
+                                  <FolderTree size={15} />
+                                  Manage Locations
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setWarehouseMenuId(
+                                      null
+                                    );
+                                    router.push(
+                                      `/warehouses/${warehouse.id}/edit`
+                                    );
+                                  }}
+                                >
+                                  <Edit3 size={15} />
+                                  Edit Warehouse
+                                </button>
+
+                                {!warehouse.is_default && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void setDefaultWarehouse(
+                                        warehouse
+                                      )
+                                    }
+                                  >
+                                    <Star size={15} />
+                                    Make Default
+                                  </button>
+                                )}
+
+                                <div className="menu-divider" />
+
+                                <button
+                                  type="button"
+                                  className={
+                                    warehouse.is_active
+                                      ? "danger-menu-item"
+                                      : ""
+                                  }
+                                  onClick={() =>
+                                    void toggleWarehouseStatus(
+                                      warehouse
+                                    )
+                                  }
+                                >
+                                  {warehouse.is_active ? (
+                                    <>
+                                      <CircleOff
+                                        size={15}
+                                      />
+                                      Deactivate
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check size={15} />
+                                      Activate
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
+        </div>
 
-          {/* Modal ---------------------------------------------------------- */}
-
-          {modalOpen ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4">
-              <div
-                className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="warehouse-modal-title"
-              >
-                <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-                  <div>
-                    <h2
-                      id="warehouse-modal-title"
-                      className="text-lg font-semibold text-slate-950"
-                    >
-                      {editingWarehouse
-                        ? "Edit Warehouse"
-                        : "Add Warehouse"}
-                    </h2>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Configure the warehouse used for
-                      physical inventory operations.
-                    </p>
+        {locationModalOpen && selectedWarehouse && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeLocationManager();
+              }
+            }}
+          >
+            <div className="location-modal">
+              <div className="modal-header">
+                <div>
+                  <div className="modal-eyebrow">
+                    Warehouse Locations
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    disabled={saving}
-                    className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-                  >
-                    <Icon
-                      name="close"
-                      size={19}
-                    />
-                  </button>
+                  <h2>{selectedWarehouse.name}</h2>
+
+                  <p>
+                    Build and maintain the internal storage
+                    hierarchy for this warehouse.
+                  </p>
                 </div>
 
-                <form
-                  onSubmit={handleSubmit}
-                  className="max-h-[75vh] overflow-y-auto"
+                <button
+                  type="button"
+                  className="icon-button modal-close"
+                  onClick={closeLocationManager}
+                  disabled={saving}
                 >
-                  <div className="space-y-6 px-6 py-6">
-                    {/* Basic ----------------------------------------------- */}
+                  <X size={19} />
+                </button>
+              </div>
 
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Basic Information
-                      </h3>
-
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <Field
-                          label="Warehouse Name"
-                          value={form.name}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                name: value,
-                              })
-                            )
-                          }
-                          placeholder="Main Warehouse"
-                          required
-                        />
-
-                        <Field
-                          label="Warehouse Code"
-                          value={form.code}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                code: value,
-                              })
-                            )
-                          }
-                          placeholder="MAIN"
-                          required
-                        />
+              <div className="modal-body">
+                <div className="location-manager-grid">
+                  <div className="location-tree-card">
+                    <div className="section-header">
+                      <div>
+                        <h3>Location Hierarchy</h3>
+                        <p>
+                          Warehouse storage structure
+                        </p>
                       </div>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={openNewLocation}
+                      >
+                        <Plus size={15} />
+                        Add Location
+                      </button>
                     </div>
 
-                    {/* Address ---------------------------------------------- */}
-
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Address
-                      </h3>
-
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div className="sm:col-span-2">
-                          <Field
-                            label="Address Line 1"
-                            value={
-                              form.address_line1
-                            }
-                            onChange={(value) =>
-                              setForm(
-                                (current) => ({
-                                  ...current,
-                                  address_line1:
-                                    value,
-                                })
-                              )
-                            }
-                            placeholder="Street address"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-2">
-                          <Field
-                            label="Address Line 2"
-                            value={
-                              form.address_line2
-                            }
-                            onChange={(value) =>
-                              setForm(
-                                (current) => ({
-                                  ...current,
-                                  address_line2:
-                                    value,
-                                })
-                              )
-                            }
-                            placeholder="Suite, building, floor..."
-                          />
-                        </div>
-
-                        <Field
-                          label="City"
-                          value={form.city}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                city: value,
-                              })
-                            )
-                          }
-                          placeholder="Dubai"
-                        />
-
-                        <Field
-                          label="State / Province"
-                          value={form.state}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                state: value,
-                              })
-                            )
-                          }
-                          placeholder="State or province"
-                        />
-
-                        <Field
-                          label="Postal Code"
-                          value={
-                            form.postal_code
-                          }
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                postal_code:
-                                  value,
-                              })
-                            )
-                          }
-                          placeholder="00000"
-                        />
-
-                        <Field
-                          label="Country"
-                          value={form.country}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                country: value,
-                              })
-                            )
-                          }
-                          placeholder="United Arab Emirates"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Contact ---------------------------------------------- */}
-
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Contact
-                      </h3>
-
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <Field
-                          label="Phone"
-                          value={form.phone}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                phone: value,
-                              })
-                            )
-                          }
-                          placeholder="+971..."
-                          type="tel"
-                        />
-
-                        <Field
-                          label="Email"
-                          value={form.email}
-                          onChange={(value) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                email: value,
-                              })
-                            )
-                          }
-                          placeholder="warehouse@example.com"
-                          type="email"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Settings --------------------------------------------- */}
-
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Warehouse Settings
-                      </h3>
-
-                      <div className="mt-4 space-y-3">
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-4">
-                          <input
-                            type="checkbox"
-                            checked={
-                              form.is_active
-                            }
-                            onChange={(event) =>
-                              setForm(
-                                (current) => ({
-                                  ...current,
-                                  is_active:
-                                    event.target
-                                      .checked,
-                                })
-                              )
-                            }
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                          />
-
+                    <div className="location-tree-container">
+                      {getWarehouseLocations(
+                        selectedWarehouse.id
+                      ).length === 0 ? (
+                        <div className="tree-empty">
+                          <FolderTree size={25} />
+                          <strong>
+                            No locations configured
+                          </strong>
                           <span>
-                            <span className="block text-sm font-medium text-slate-800">
-                              Active warehouse
-                            </span>
-
-                            <span className="mt-1 block text-xs leading-5 text-slate-500">
-                              Active warehouses can be
-                              selected for receiving,
-                              stock adjustments, and
-                              transfers.
-                            </span>
+                            Add a zone, receiving area,
+                            bin, rack, or another storage
+                            location.
                           </span>
-                        </label>
+                        </div>
+                      ) : (
+                        renderLocationTree(
+                          null,
+                          getWarehouseLocations(
+                            selectedWarehouse.id
+                          )
+                        )
+                      )}
+                    </div>
+                  </div>
 
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-4">
-                          <input
-                            type="checkbox"
-                            checked={
-                              form.is_default
-                            }
-                            onChange={(event) =>
-                              setForm(
-                                (current) => ({
-                                  ...current,
-                                  is_default:
-                                    event.target
-                                      .checked,
-                                })
-                              )
-                            }
-                            className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                          />
+                  <div className="location-form-card">
+                    <div className="section-header">
+                      <div>
+                        <h3>
+                          {editingLocation
+                            ? "Edit Location"
+                            : "New Location"}
+                        </h3>
 
-                          <span>
-                            <span className="block text-sm font-medium text-slate-800">
-                              Default warehouse
-                            </span>
-
-                            <span className="mt-1 block text-xs leading-5 text-slate-500">
-                              Mark this warehouse as the
-                              preferred default for
-                              warehouse workflows.
-                            </span>
-                          </span>
-                        </label>
+                        <p>
+                          {editingLocation
+                            ? "Update this storage location."
+                            : "Add a location to the hierarchy."}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Notes ------------------------------------------------ */}
-
-                    <div>
-                      <label className="block">
-                        <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                          Notes
-                        </span>
-
-                        <textarea
-                          value={form.notes}
+                    <div className="form-grid">
+                      <div className="field full-width">
+                        <label>Location Name *</label>
+                        <input
+                          value={locationForm.name}
                           onChange={(event) =>
-                            setForm(
+                            setLocationForm(
                               (current) => ({
                                 ...current,
-                                notes:
-                                  event.target
-                                    .value,
+                                name: event.target.value,
+                              })
+                            )
+                          }
+                          placeholder="e.g. Rack A"
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>Location Code *</label>
+                        <input
+                          value={locationForm.code}
+                          onChange={(event) =>
+                            setLocationForm(
+                              (current) => ({
+                                ...current,
+                                code: event.target.value.toUpperCase(),
+                              })
+                            )
+                          }
+                          placeholder="e.g. RACK-A"
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label>Location Type *</label>
+                        <select
+                          value={locationForm.location_type}
+                          onChange={(event) =>
+                            setLocationForm(
+                              (current) => ({
+                                ...current,
+                                location_type:
+                                  event.target.value as LocationType,
+                              })
+                            )
+                          }
+                        >
+                          {LOCATION_TYPES.map((type) => (
+                            <option
+                              key={type.value}
+                              value={type.value}
+                            >
+                              {type.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="field full-width">
+                        <label>Parent Location</label>
+                        <select
+                          value={
+                            locationForm.parent_location_id
+                          }
+                          onChange={(event) =>
+                            setLocationForm(
+                              (current) => ({
+                                ...current,
+                                parent_location_id:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                        >
+                          <option value="">
+                            Top Level Location
+                          </option>
+
+                          {availableParentLocations.map(
+                            (location) => (
+                              <option
+                                key={location.id}
+                                value={location.id}
+                              >
+                                {location.name} (
+                                {location.code})
+                              </option>
+                            )
+                          )}
+                        </select>
+
+                        <span className="field-help">
+                          Leave empty for a top-level
+                          location.
+                        </span>
+                      </div>
+
+                      <div className="field full-width">
+                        <label>Notes</label>
+                        <textarea
+                          value={locationForm.notes}
+                          onChange={(event) =>
+                            setLocationForm(
+                              (current) => ({
+                                ...current,
+                                notes: event.target.value,
                               })
                             )
                           }
                           rows={4}
-                          placeholder="Internal notes about this warehouse..."
-                          className="w-full resize-none rounded-lg bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-slate-200"
-                          style={{
-                            border:
-                              "1px solid #e2e8f0",
-                          }}
+                          placeholder="Optional notes about this location..."
                         />
-                      </label>
+                      </div>
+
+                      <div className="checkbox-field full-width">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={locationForm.is_active}
+                            onChange={(event) =>
+                              setLocationForm(
+                                (current) => ({
+                                  ...current,
+                                  is_active:
+                                    event.target.checked,
+                                })
+                              )
+                            }
+                          />
+                          <span>
+                            <strong>Active location</strong>
+                            <small>
+                              Inventory can use this
+                              location when it is active.
+                            </small>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="form-actions">
+                      {editingLocation && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={openNewLocation}
+                          disabled={saving}
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => void saveLocation()}
+                        disabled={saving}
+                      >
+                        {saving ? (
+                          <>
+                            <span className="button-spinner" />
+                            Saving...
+                          </>
+                        ) : editingLocation ? (
+                          <>
+                            <Check size={16} />
+                            Save Changes
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={16} />
+                            Create Location
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  {/* Modal footer ------------------------------------------ */}
+              <div className="modal-footer">
+                <div className="footer-info">
+                  <Archive size={15} />
+                  Locations are managed inside the warehouse
+                  and remain available to Inventory V2.
+                </div>
 
-                  <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      disabled={saving}
-                      className="rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {saving ? (
-                        "Saving..."
-                      ) : (
-                        <>
-                          <Icon
-                            name="check"
-                            size={16}
-                          />
-
-                          {editingWarehouse
-                            ? "Save Changes"
-                            : "Create Warehouse"}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={closeLocationManager}
+                  disabled={saving}
+                >
+                  Close
+                </button>
               </div>
             </div>
-          ) : null}
-        </div>
+          </div>
+        )}
+
+        <style jsx>{`
+          .warehouses-page {
+            width: 100%;
+          }
+
+          .page-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 22px;
+          }
+
+          .eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+
+          .eyebrow-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #166534;
+          }
+
+          .page-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 30px;
+            line-height: 1.15;
+            font-weight: 750;
+            letter-spacing: -0.03em;
+          }
+
+          .page-subtitle {
+            margin: 7px 0 0;
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
+          .primary-button,
+          .secondary-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 40px;
+            padding: 0 15px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition:
+              background 0.15s ease,
+              border-color 0.15s ease,
+              opacity 0.15s ease;
+          }
+
+          .primary-button {
+            border: 1px solid #166534;
+            background: #166534;
+            color: white;
+          }
+
+          .primary-button:hover {
+            background: #14532d;
+            border-color: #14532d;
+          }
+
+          .primary-button:disabled,
+          .secondary-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .secondary-button {
+            border: 1px solid #d1d5db;
+            background: white;
+            color: #334155;
+          }
+
+          .secondary-button:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+          }
+
+          .alert {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 11px 14px;
+            margin-bottom: 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+          }
+
+          .success-alert {
+            border: 1px solid #bbf7d0;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .error-alert {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #b91c1c;
+          }
+
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+          }
+
+          .stat-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 86px;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+          }
+
+          .stat-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            border: 1px solid #dcfce7;
+            border-radius: 10px;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .stat-label {
+            margin-bottom: 4px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.3;
+          }
+
+          .stat-value {
+            color: #0f172a;
+            font-size: 22px;
+            line-height: 1;
+            font-weight: 750;
+          }
+
+          .toolbar-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+          }
+
+          .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: min(430px, 100%);
+            height: 40px;
+            padding: 0 11px;
+            gap: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
+            background: white;
+            color: #94a3b8;
+          }
+
+          .search-box:focus-within {
+            border-color: #86a68f;
+            box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+          }
+
+          .search-box input {
+            width: 100%;
+            border: 0;
+            outline: 0;
+            color: #0f172a;
+            background: transparent;
+            font-size: 13px;
+          }
+
+          .search-box input::placeholder {
+            color: #94a3b8;
+          }
+
+          .clear-search {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            padding: 3px;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+          }
+
+          .filter-select,
+          .field select,
+          .field input,
+          .field textarea {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
+            outline: none;
+            background: white;
+            color: #0f172a;
+            font-size: 13px;
+          }
+
+          .filter-select {
+            width: auto;
+            min-width: 150px;
+            height: 40px;
+            padding: 0 11px;
+          }
+
+          .filter-select:focus,
+          .field select:focus,
+          .field input:focus,
+          .field textarea:focus {
+            border-color: #86a68f;
+            box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+          }
+
+          .toolbar-spacer {
+            flex: 1;
+          }
+
+          .result-count {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+          }
+
+          .content-card {
+            overflow: visible;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+          }
+
+          .table-wrap {
+            overflow-x: auto;
+          }
+
+          table {
+            width: 100%;
+            min-width: 1100px;
+            border-collapse: separate;
+            border-spacing: 0;
+          }
+
+          th {
+            padding: 13px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 750;
+            letter-spacing: 0.04em;
+            text-align: left;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          th:first-child {
+            border-top-left-radius: 14px;
+          }
+
+          th:last-child {
+            border-top-right-radius: 14px;
+          }
+
+          td {
+            position: relative;
+            padding: 15px 16px;
+            border-bottom: 1px solid #eef2f7;
+            color: #334155;
+            font-size: 13px;
+            vertical-align: middle;
+          }
+
+          tbody tr:last-child td {
+            border-bottom: 0;
+          }
+
+          tbody tr:hover {
+            background: #fafdfb;
+          }
+
+          .warehouse-name-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 260px;
+          }
+
+          .expand-button,
+          .icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            color: #64748b;
+            cursor: pointer;
+          }
+
+          .expand-button {
+            width: 28px;
+            height: 28px;
+            flex: 0 0 28px;
+          }
+
+          .icon-button {
+            width: 34px;
+            height: 34px;
+          }
+
+          .expand-button:hover,
+          .icon-button:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+          }
+
+          .warehouse-avatar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            border-radius: 10px;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .warehouse-name {
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 750;
+          }
+
+          .warehouse-address {
+            max-width: 270px;
+            margin-top: 3px;
+            overflow: hidden;
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.4;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .code-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 0 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #f8fafc;
+            color: #334155;
+            font-family: ui-monospace, SFMono-Regular, Menlo,
+              Monaco, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+          }
+
+          .location-cell,
+          .location-count {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #64748b;
+          }
+
+          .status-pill,
+          .default-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 25px;
+            padding: 0 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+          }
+
+          .status-active {
+            border: 1px solid #bbf7d0;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .status-inactive {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            color: #64748b;
+          }
+
+          .default-badge {
+            border: 1px solid #fde68a;
+            background: #fffbeb;
+            color: #92400e;
+          }
+
+          .muted-text {
+            color: #cbd5e1;
+          }
+
+          .actions-column {
+            width: 70px;
+            text-align: right;
+          }
+
+          .action-menu-wrap {
+            position: relative;
+            display: flex;
+            justify-content: flex-end;
+          }
+
+          .action-menu {
+            position: absolute;
+            z-index: 20;
+            top: calc(100% + 7px);
+            right: 0;
+            width: 190px;
+            padding: 6px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: white;
+            box-shadow:
+              0 12px 30px rgba(15, 23, 42, 0.12),
+              0 2px 8px rgba(15, 23, 42, 0.06);
+          }
+
+          .action-menu button {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 9px;
+            padding: 9px 10px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+          }
+
+          .action-menu button:hover {
+            background: #f8fafc;
+          }
+
+          .action-menu .danger-menu-item {
+            color: #b91c1c;
+          }
+
+          .menu-divider {
+            height: 1px;
+            margin: 5px 0;
+            background: #eef2f7;
+          }
+
+          .inline-location-panel {
+            margin: 13px 0 0 38px;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #f8fafc;
+          }
+
+          .inline-empty {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .inline-empty button {
+            margin-left: auto;
+            border: 0;
+            background: transparent;
+            color: #166534;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+          }
+
+          .inline-location-list {
+            overflow: hidden;
+            border-radius: 7px;
+            background: white;
+          }
+
+          .location-tree-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 48px;
+            padding-top: 6px;
+            padding-right: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #eef2f7;
+            gap: 12px;
+          }
+
+          .location-tree-row:last-child {
+            border-bottom: 0;
+          }
+
+          .location-tree-main {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-width: 0;
+          }
+
+          .location-tree-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            flex: 0 0 28px;
+            border-radius: 7px;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .location-tree-content {
+            min-width: 0;
+          }
+
+          .location-tree-name {
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+          }
+
+          .location-tree-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 2px;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .location-tree-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 360px;
+            gap: 10px;
+            color: #64748b;
+            font-size: 13px;
+          }
+
+          .spinner,
+          .button-spinner {
+            border: 2px solid #dcfce7;
+            border-top-color: #166534;
+            border-radius: 999px;
+            animation: spin 0.75s linear infinite;
+          }
+
+          .spinner {
+            width: 18px;
+            height: 18px;
+          }
+
+          .button-spinner {
+            width: 14px;
+            height: 14px;
+          }
+
+          @keyframes spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+
+          .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 390px;
+            padding: 40px;
+            text-align: center;
+          }
+
+          .empty-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            margin-bottom: 14px;
+            border-radius: 14px;
+            background: #f0fdf4;
+            color: #166534;
+          }
+
+          .empty-state h3 {
+            margin: 0 0 6px;
+            color: #0f172a;
+            font-size: 16px;
+          }
+
+          .empty-state p {
+            max-width: 430px;
+            margin: 0 0 18px;
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.6;
+          }
+
+          .modal-backdrop {
+            position: fixed;
+            z-index: 100;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(15, 23, 42, 0.42);
+          }
+
+          .location-modal {
+            display: flex;
+            flex-direction: column;
+            width: min(1120px, 100%);
+            max-height: calc(100vh - 48px);
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            background: white;
+            box-shadow:
+              0 25px 70px rgba(15, 23, 42, 0.2),
+              0 5px 20px rgba(15, 23, 42, 0.08);
+          }
+
+          .modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 22px 24px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+
+          .modal-eyebrow {
+            margin-bottom: 5px;
+            color: #166534;
+            font-size: 11px;
+            font-weight: 750;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+
+          .modal-header h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 21px;
+            letter-spacing: -0.02em;
+          }
+
+          .modal-header p {
+            margin: 5px 0 0;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .modal-close {
+            flex: 0 0 34px;
+          }
+
+          .modal-body {
+            min-height: 0;
+            overflow-y: auto;
+            padding: 20px 24px;
+          }
+
+          .location-manager-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+            gap: 16px;
+          }
+
+          .location-tree-card,
+          .location-form-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 13px;
+            background: white;
+          }
+
+          .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            padding: 16px;
+            border-bottom: 1px solid #eef2f7;
+          }
+
+          .section-header h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 14px;
+          }
+
+          .section-header p {
+            margin: 3px 0 0;
+            color: #94a3b8;
+            font-size: 11px;
+          }
+
+          .location-tree-container {
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 8px;
+          }
+
+          .tree-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 270px;
+            padding: 30px;
+            color: #94a3b8;
+            text-align: center;
+          }
+
+          .tree-empty strong {
+            margin-top: 12px;
+            color: #334155;
+            font-size: 13px;
+          }
+
+          .tree-empty span {
+            max-width: 300px;
+            margin-top: 5px;
+            font-size: 11px;
+            line-height: 1.5;
+          }
+
+          .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            padding: 17px;
+          }
+
+          .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .field.full-width {
+            grid-column: 1 / -1;
+          }
+
+          .field label {
+            color: #334155;
+            font-size: 11px;
+            font-weight: 750;
+          }
+
+          .field input,
+          .field select {
+            height: 40px;
+            padding: 0 11px;
+          }
+
+          .field textarea {
+            padding: 10px 11px;
+            resize: vertical;
+          }
+
+          .field-help {
+            color: #94a3b8;
+            font-size: 10px;
+            line-height: 1.4;
+          }
+
+          .checkbox-field {
+            padding-top: 2px;
+          }
+
+          .checkbox-field label {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            cursor: pointer;
+          }
+
+          .checkbox-field input {
+            width: 16px;
+            height: 16px;
+            margin: 1px 0 0;
+            accent-color: #166534;
+          }
+
+          .checkbox-field span {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+          }
+
+          .checkbox-field strong {
+            color: #334155;
+            font-size: 12px;
+          }
+
+          .checkbox-field small {
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 15px 17px;
+            border-top: 1px solid #eef2f7;
+          }
+
+          .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            padding: 13px 24px;
+            border-top: 1px solid #e5e7eb;
+            background: #f8fafc;
+          }
+
+          .footer-info {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: #64748b;
+            font-size: 11px;
+          }
+
+          @media (max-width: 1200px) {
+            .stats-grid {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+
+          @media (max-width: 900px) {
+            .page-header {
+              align-items: flex-start;
+              flex-direction: column;
+            }
+
+            .location-manager-grid {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          @media (max-width: 700px) {
+            .stats-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .toolbar-card {
+              align-items: stretch;
+              flex-direction: column;
+            }
+
+            .search-box,
+            .filter-select {
+              width: 100%;
+            }
+
+            .toolbar-spacer {
+              display: none;
+            }
+
+            .result-count {
+              align-self: flex-start;
+            }
+
+            .modal-backdrop {
+              padding: 10px;
+            }
+
+            .location-modal {
+              max-height: calc(100vh - 20px);
+            }
+
+            .modal-header,
+            .modal-body,
+            .modal-footer {
+              padding-left: 15px;
+              padding-right: 15px;
+            }
+
+            .form-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .field.full-width {
+              grid-column: auto;
+            }
+
+            .modal-footer {
+              align-items: flex-start;
+              flex-direction: column;
+            }
+          }
+
+          @media (max-width: 480px) {
+            .stats-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .page-title {
+              font-size: 26px;
+            }
+          }
+        `}</style>
       </div>
     </AppShell>
   );

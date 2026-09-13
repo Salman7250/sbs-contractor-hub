@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +13,9 @@ import { createClient } from "@/lib/supabase/client";
 type Product = {
   id: string;
   name: string;
-  tracking_mode: string;
+  brand: string | null;
+  category: string | null;
+  tracking_mode: string | null;
 };
 
 type Variant = {
@@ -19,44 +25,60 @@ type Variant = {
   sku: string | null;
 };
 
+type Batch = {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  lot_number: string;
+  received_at: string | null;
+};
+
 type Warehouse = {
   id: string;
   name: string;
-  code: string;
+  code: string | null;
 };
 
-type WarehouseLocation = {
+type Location = {
   id: string;
   warehouse_id: string;
   name: string;
-  code: string;
-};
-
-type Customer = {
-  id: string;
-  name: string;
+  code: string | null;
 };
 
 type SerializedUnit = {
   id: string;
+  company_id: string;
   product_id: string;
   variant_id: string | null;
   serial_number: string;
   barcode: string | null;
-  status: string;
+  status: string | null;
   warehouse_id: string | null;
   location_id: string | null;
   customer_id: string | null;
+  order_id: string | null;
+  order_item_id: string | null;
+  invoice_id: string | null;
+  purchase_order_id: string | null;
+  purchase_order_item_id: string | null;
   cost_price: number | null;
   warranty_start: string | null;
   warranty_end: string | null;
   received_at: string | null;
   sold_at: string | null;
-  notes: string | null;
-  created_at: string;
+  batch_id: string | null;
+  allocated_at: string | null;
+  returned_at: string | null;
+  disposed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
+type WarrantyFilter = "all" | "active" | "expired" | "none";
+
 const STATUS_OPTIONS = [
+  "all",
   "available",
   "reserved",
   "sold",
@@ -71,1058 +93,2050 @@ const STATUS_OPTIONS = [
 function formatDate(value: string | null) {
   if (!value) return "—";
 
-  return new Date(value).toLocaleDateString(undefined, {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 }
 
-function formatCurrency(value: number | null, currency: string) {
-  if (value === null || Number.isNaN(value)) return "—";
+function formatCurrency(value: number | null) {
+  if (value === null || value === undefined) return "—";
 
   return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency,
+    currency: "AED",
     maximumFractionDigits: 2,
   }).format(value);
 }
 
-function getStatusClass(status: string) {
-  switch (status) {
+function normalize(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().trim();
+}
+
+function getWarrantyState(
+  warrantyStart: string | null,
+  warrantyEnd: string | null,
+): "active" | "expired" | "none" {
+  if (!warrantyStart && !warrantyEnd) {
+    return "none";
+  }
+
+  const now = new Date();
+
+  if (warrantyEnd) {
+    const end = new Date(warrantyEnd);
+
+    if (!Number.isNaN(end.getTime())) {
+      if (end >= now) {
+        return "active";
+      }
+
+      return "expired";
+    }
+  }
+
+  if (warrantyStart) {
+    const start = new Date(warrantyStart);
+
+    if (
+      !Number.isNaN(start.getTime()) &&
+      start <= now
+    ) {
+      return "active";
+    }
+  }
+
+  return "none";
+}
+
+function titleCase(value: string | null) {
+  if (!value) return "Unknown";
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function statusClass(status: string | null) {
+  switch (normalize(status)) {
     case "available":
-      return "status available";
+      return "status status-available";
+
     case "reserved":
-      return "status reserved";
+      return "status status-reserved";
+
     case "sold":
-      return "status sold";
+      return "status status-sold";
+
     case "returned":
-      return "status returned";
+      return "status status-returned";
+
     case "repair":
-      return "status repair";
     case "rma":
-      return "status rma";
+      return "status status-warning";
+
     case "damaged":
-      return "status damaged";
     case "lost":
-      return "status lost";
     case "disposed":
-      return "status disposed";
+      return "status status-danger";
+
     default:
-      return "status";
+      return "status status-neutral";
   }
 }
 
-function getStatusLabel(status: string) {
-  return status
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 export default function SerialNumbersPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [currency, setCurrency] = useState("USD");
-
-  const [serialUnits, setSerialUnits] = useState<SerializedUnit[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [serializedUnits, setSerializedUnits] = useState<
+    SerializedUnit[]
+  >([]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [warehouseFilter, setWarehouseFilter] = useState("all");
+  const [productFilter, setProductFilter] = useState("all");
+  const [warehouseFilter, setWarehouseFilter] =
+    useState("all");
+  const [batchFilter, setBatchFilter] = useState("all");
+  const [warrantyFilter, setWarrantyFilter] =
+    useState<WarrantyFilter>("all");
+
+  const [page, setPage] = useState(1);
+
+  const PAGE_SIZE = 20;
 
   const loadData = useCallback(
     async (showRefresh = false) => {
       try {
-        setError("");
-
         if (showRefresh) {
           setRefreshing(true);
         } else {
           setLoading(true);
         }
 
+        setErrorMessage("");
+
         const {
           data: { user },
+          error: userError,
         } = await supabase.auth.getUser();
 
-        if (!user) {
-          router.push("/login");
-          return;
+        if (userError) {
+          throw new Error(userError.message);
         }
 
-        const { data: membership, error: membershipError } = await supabase
-          .from("company_members")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
+        if (!user) {
+          throw new Error("You must be signed in.");
+        }
+
+        const { data: membership, error: membershipError } =
+          await supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
 
         if (membershipError) {
-          throw membershipError;
+          throw new Error(membershipError.message);
         }
 
         if (!membership?.company_id) {
-          throw new Error("No company is associated with your account.");
+          throw new Error(
+            "No company membership found.",
+          );
         }
 
-        const currentCompanyId = membership.company_id;
+        const currentCompanyId =
+          membership.company_id;
 
         const [
-          companyResult,
-          serialResult,
-          productResult,
-          variantResult,
-          warehouseResult,
-          locationResult,
+          productsResult,
+          variantsResult,
+          batchesResult,
+          warehousesResult,
+          locationsResult,
+          serializedResult,
         ] = await Promise.all([
           supabase
-            .from("companies")
-            .select("currency")
-            .eq("id", currentCompanyId)
-            .maybeSingle(),
-
-          supabase
-            .from("serialized_units")
+            .from("products")
             .select(
-              `
-                id,
-                product_id,
-                variant_id,
-                serial_number,
-                barcode,
-                status,
-                warehouse_id,
-                location_id,
-                customer_id,
-                cost_price,
-                warranty_start,
-                warranty_end,
-                received_at,
-                sold_at,
-                notes,
-                created_at
-              `,
+              "id,name,brand,category,tracking_mode",
             )
             .eq("company_id", currentCompanyId)
-            .order("created_at", { ascending: false }),
-
-          supabase
-            .from("products")
-            .select("id, name, tracking_mode")
-            .eq("company_id", currentCompanyId)
-            .eq("tracking_mode", "serial")
             .order("name"),
 
           supabase
             .from("product_variants")
-            .select("id, product_id, name, sku")
+            .select(
+              "id,product_id,name,sku",
+            )
             .eq("company_id", currentCompanyId)
             .order("name"),
 
           supabase
-            .from("warehouses")
-            .select("id, name, code")
+            .from("inventory_batches")
+            .select(
+              "id,product_id,variant_id,lot_number,received_at",
+            )
             .eq("company_id", currentCompanyId)
+            .neq("status", "cancelled")
+            .order("received_at", {
+              ascending: false,
+            }),
+
+          supabase
+            .from("warehouses")
+            .select("id,name,code")
+            .eq("company_id", currentCompanyId)
+            .eq("is_active", true)
             .order("name"),
 
           supabase
             .from("warehouse_locations")
-            .select("id, warehouse_id, name, code")
+            .select(
+              "id,warehouse_id,name,code",
+            )
             .eq("company_id", currentCompanyId)
+            .eq("is_active", true)
             .order("name"),
+
+          supabase
+            .from("serialized_units")
+            .select(
+              [
+                "id",
+                "company_id",
+                "product_id",
+                "variant_id",
+                "serial_number",
+                "barcode",
+                "status",
+                "warehouse_id",
+                "location_id",
+                "customer_id",
+                "order_id",
+                "order_item_id",
+                "invoice_id",
+                "purchase_order_id",
+                "purchase_order_item_id",
+                "cost_price",
+                "warranty_start",
+                "warranty_end",
+                "received_at",
+                "sold_at",
+                "batch_id",
+                "allocated_at",
+                "returned_at",
+                "disposed_at",
+                "created_at",
+                "updated_at",
+              ].join(","),
+            )
+            .eq("company_id", currentCompanyId)
+            .order("created_at", {
+              ascending: false,
+            }),
         ]);
 
-        if (companyResult.error) throw companyResult.error;
-        if (serialResult.error) throw serialResult.error;
-        if (productResult.error) throw productResult.error;
-        if (variantResult.error) throw variantResult.error;
-        if (warehouseResult.error) throw warehouseResult.error;
-        if (locationResult.error) throw locationResult.error;
+        if (productsResult.error) {
+          throw new Error(
+            productsResult.error.message,
+          );
+        }
 
-        setCurrency(companyResult.data?.currency || "USD");
-        setSerialUnits((serialResult.data || []) as SerializedUnit[]);
-        setProducts((productResult.data || []) as Product[]);
-        setVariants((variantResult.data || []) as Variant[]);
-        setWarehouses((warehouseResult.data || []) as Warehouse[]);
-        setLocations((locationResult.data || []) as WarehouseLocation[]);
+        if (variantsResult.error) {
+          throw new Error(
+            variantsResult.error.message,
+          );
+        }
 
-        const customerIds = Array.from(
-          new Set(
-            ((serialResult.data || []) as SerializedUnit[])
-              .map((unit) => unit.customer_id)
-              .filter((id): id is string => Boolean(id)),
-          ),
+        if (batchesResult.error) {
+          throw new Error(
+            batchesResult.error.message,
+          );
+        }
+
+        if (warehousesResult.error) {
+          throw new Error(
+            warehousesResult.error.message,
+          );
+        }
+
+        if (locationsResult.error) {
+          throw new Error(
+            locationsResult.error.message,
+          );
+        }
+
+        if (serializedResult.error) {
+          throw new Error(
+            serializedResult.error.message,
+          );
+        }
+
+        setProducts(
+          (productsResult.data ?? []) as Product[],
         );
 
-        if (customerIds.length > 0) {
-          const { data: customerData, error: customerError } = await supabase
-            .from("customers")
-            .select("id, name")
-            .eq("company_id", currentCompanyId)
-            .in("id", customerIds);
+        setVariants(
+          (variantsResult.data ?? []) as Variant[],
+        );
 
-          if (customerError) {
-            throw customerError;
-          }
+        setBatches(
+          (batchesResult.data ?? []) as Batch[],
+        );
 
-          setCustomers((customerData || []) as Customer[]);
-        } else {
-          setCustomers([]);
-        }
-      } catch (loadError) {
-        console.error("Failed to load serial numbers:", loadError);
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Failed to load serial numbers.",
+        setWarehouses(
+          (warehousesResult.data ?? []) as Warehouse[],
+        );
+
+        setLocations(
+          (locationsResult.data ?? []) as Location[],
+        );
+
+        setSerializedUnits(
+          (serializedResult.data ??
+            []) as unknown as SerializedUnit[],
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load serial numbers.",
         );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [router, supabase],
+    [supabase],
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadData();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+    loadData();
   }, [loadData]);
 
-  const productMap = useMemo(
-    () => new Map(products.map((product) => [product.id, product])),
-    [products],
-  );
+  useEffect(() => {
+    setPage(1);
+  }, [
+    search,
+    statusFilter,
+    productFilter,
+    warehouseFilter,
+    batchFilter,
+    warrantyFilter,
+  ]);
 
-  const variantMap = useMemo(
-    () => new Map(variants.map((variant) => [variant.id, variant])),
-    [variants],
-  );
+  const productMap = useMemo(() => {
+    return new Map(
+      products.map((product) => [
+        product.id,
+        product,
+      ]),
+    );
+  }, [products]);
 
-  const warehouseMap = useMemo(
-    () => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse])),
-    [warehouses],
-  );
+  const variantMap = useMemo(() => {
+    return new Map(
+      variants.map((variant) => [
+        variant.id,
+        variant,
+      ]),
+    );
+  }, [variants]);
 
-  const locationMap = useMemo(
-    () => new Map(locations.map((location) => [location.id, location])),
-    [locations],
-  );
+  const batchMap = useMemo(() => {
+    return new Map(
+      batches.map((batch) => [
+        batch.id,
+        batch,
+      ]),
+    );
+  }, [batches]);
 
-  const customerMap = useMemo(
-    () => new Map(customers.map((customer) => [customer.id, customer])),
-    [customers],
-  );
+  const warehouseMap = useMemo(() => {
+    return new Map(
+      warehouses.map((warehouse) => [
+        warehouse.id,
+        warehouse,
+      ]),
+    );
+  }, [warehouses]);
+
+  const locationMap = useMemo(() => {
+    return new Map(
+      locations.map((location) => [
+        location.id,
+        location,
+      ]),
+    );
+  }, [locations]);
 
   const filteredUnits = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const q = normalize(search);
 
-    return serialUnits.filter((unit) => {
-      const product = productMap.get(unit.product_id);
+    return serializedUnits.filter((unit) => {
+      const product =
+        productMap.get(unit.product_id);
+
       const variant = unit.variant_id
         ? variantMap.get(unit.variant_id)
-        : undefined;
-      const warehouse = unit.warehouse_id
-        ? warehouseMap.get(unit.warehouse_id)
-        : undefined;
-      const location = unit.location_id
-        ? locationMap.get(unit.location_id)
-        : undefined;
-      const customer = unit.customer_id
-        ? customerMap.get(unit.customer_id)
-        : undefined;
+        : null;
+
+      const batch = unit.batch_id
+        ? batchMap.get(unit.batch_id)
+        : null;
 
       const matchesSearch =
-        !query ||
-        unit.serial_number.toLowerCase().includes(query) ||
-        Boolean(unit.barcode?.toLowerCase().includes(query)) ||
-        Boolean(product?.name.toLowerCase().includes(query)) ||
-        Boolean(variant?.name?.toLowerCase().includes(query)) ||
-        Boolean(variant?.sku?.toLowerCase().includes(query)) ||
-        Boolean(warehouse?.name.toLowerCase().includes(query)) ||
-        Boolean(location?.name.toLowerCase().includes(query)) ||
-        Boolean(customer?.name.toLowerCase().includes(query));
+        !q ||
+        normalize(unit.serial_number).includes(q) ||
+        normalize(unit.barcode).includes(q) ||
+        normalize(product?.name).includes(q) ||
+        normalize(product?.brand).includes(q) ||
+        normalize(variant?.name).includes(q) ||
+        normalize(variant?.sku).includes(q) ||
+        normalize(batch?.lot_number).includes(q);
 
       const matchesStatus =
-        statusFilter === "all" || unit.status === statusFilter;
+        statusFilter === "all" ||
+        normalize(unit.status) ===
+          normalize(statusFilter);
+
+      const matchesProduct =
+        productFilter === "all" ||
+        unit.product_id === productFilter;
 
       const matchesWarehouse =
         warehouseFilter === "all" ||
         unit.warehouse_id === warehouseFilter;
 
-      return matchesSearch && matchesStatus && matchesWarehouse;
+      const matchesBatch =
+        batchFilter === "all" ||
+        unit.batch_id === batchFilter;
+
+      const warrantyState = getWarrantyState(
+        unit.warranty_start,
+        unit.warranty_end,
+      );
+
+      const matchesWarranty =
+        warrantyFilter === "all" ||
+        warrantyState === warrantyFilter;
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesProduct &&
+        matchesWarehouse &&
+        matchesBatch &&
+        matchesWarranty
+      );
     });
   }, [
-    serialUnits,
+    serializedUnits,
     productMap,
     variantMap,
-    warehouseMap,
-    locationMap,
-    customerMap,
+    batchMap,
     search,
     statusFilter,
+    productFilter,
     warehouseFilter,
+    batchFilter,
+    warrantyFilter,
   ]);
 
-  const stats = useMemo(() => {
-    const total = serialUnits.length;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      filteredUnits.length / PAGE_SIZE,
+    ),
+  );
 
-    const available = serialUnits.filter(
-      (unit) => unit.status === "available",
-    ).length;
+  const paginatedUnits = useMemo(() => {
+    const start =
+      (page - 1) * PAGE_SIZE;
 
-    const reserved = serialUnits.filter(
-      (unit) => unit.status === "reserved",
-    ).length;
-
-    const sold = serialUnits.filter((unit) => unit.status === "sold").length;
-
-    const service = serialUnits.filter((unit) =>
-      ["repair", "rma"].includes(unit.status),
-    ).length;
-
-    const totalCost = serialUnits.reduce(
-      (sum, unit) => sum + Number(unit.cost_price || 0),
-      0,
+    return filteredUnits.slice(
+      start,
+      start + PAGE_SIZE,
     );
+  }, [filteredUnits, page]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const stats = useMemo(() => {
+    const total = serializedUnits.length;
+
+    const available = serializedUnits.filter(
+      (unit) =>
+        normalize(unit.status) === "available",
+    ).length;
+
+    const reserved = serializedUnits.filter(
+      (unit) =>
+        normalize(unit.status) === "reserved",
+    ).length;
+
+    const sold = serializedUnits.filter(
+      (unit) =>
+        normalize(unit.status) === "sold",
+    ).length;
+
+    const repairRma = serializedUnits.filter(
+      (unit) => {
+        const status = normalize(unit.status);
+
+        return (
+          status === "repair" ||
+          status === "rma"
+        );
+      },
+    ).length;
+
+    const problem = serializedUnits.filter(
+      (unit) => {
+        const status = normalize(unit.status);
+
+        return (
+          status === "damaged" ||
+          status === "lost" ||
+          status === "disposed"
+        );
+      },
+    ).length;
 
     return {
       total,
       available,
       reserved,
       sold,
-      service,
-      totalCost,
+      repairRma,
+      problem,
     };
-  }, [serialUnits]);
+  }, [serializedUnits]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+
+    if (statusFilter !== "all") count++;
+    if (productFilter !== "all") count++;
+    if (warehouseFilter !== "all") count++;
+    if (batchFilter !== "all") count++;
+    if (warrantyFilter !== "all") count++;
+
+    return count;
+  }, [
+    statusFilter,
+    productFilter,
+    warehouseFilter,
+    batchFilter,
+    warrantyFilter,
+  ]);
 
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
+    setProductFilter("all");
     setWarehouseFilter("all");
+    setBatchFilter("all");
+    setWarrantyFilter("all");
   };
 
   return (
     <AppShell>
-      <div className="serial-page">
-        <style jsx global>{`
-          .serial-page {
-            min-height: 100%;
-            padding: 28px;
-            background: #f7f8fa;
-          }
-
-          .serial-page *,
-          .serial-page *::before,
-          .serial-page *::after {
-            box-sizing: border-box;
-          }
-
-          .serial-page button {
-            font-family: inherit;
-          }
-
-          .serial-page .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 20px;
-            margin-bottom: 24px;
-          }
-
-          .serial-page .eyebrow {
-            margin: 0 0 6px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #6b7280;
-          }
-
-          .serial-page h1 {
-            margin: 0;
-            font-size: 30px;
-            line-height: 1.15;
-            color: #111827;
-          }
-
-          .serial-page .subtitle {
-            margin: 8px 0 0;
-            color: #6b7280;
-            font-size: 14px;
-          }
-
-          .serial-page .header-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-          }
-
-          .serial-page .button {
-            min-height: 42px !important;
-            height: 42px;
-            border: 1px solid #d1d5db !important;
-            border-radius: 10px !important;
-            padding: 0 15px !important;
-            background: #ffffff !important;
-            color: #111827 !important;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none !important;
-            display: inline-flex !important;
-            align-items: center;
-            justify-content: center;
-            white-space: nowrap;
-            appearance: none;
-            -webkit-appearance: none;
-          }
-
-          .serial-page .button:hover {
-            background: #f9fafb !important;
-            border-color: #9ca3af !important;
-            color: #111827 !important;
-          }
-
-          .serial-page .button.primary {
-            border: 1px solid #111827 !important;
-            background: #111827 !important;
-            color: #ffffff !important;
-          }
-
-          .serial-page .button.primary:hover {
-            border-color: #1f2937 !important;
-            background: #1f2937 !important;
-            color: #ffffff !important;
-          }
-
-          .serial-page .button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-          }
-
-          .serial-page .stats {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
-          }
-
-          .serial-page .stat {
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            background: #ffffff;
-            padding: 16px;
-            min-width: 0;
-          }
-
-          .serial-page .stat-label {
-            color: #6b7280;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 8px;
-          }
-
-          .serial-page .stat-value {
-            color: #111827;
-            font-size: 24px;
-            font-weight: 750;
-            line-height: 1;
-          }
-
-          .serial-page .filters {
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            background: #ffffff;
-            padding: 16px;
-            margin-bottom: 16px;
-          }
-
-          .serial-page .filter-grid {
-            display: grid;
-            grid-template-columns: minmax(240px, 1fr) 180px 200px auto;
-            gap: 10px;
-            align-items: end;
-          }
-
-          .serial-page .field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-          }
-
-          .serial-page .field label {
-            font-size: 12px;
-            font-weight: 700;
-            color: #4b5563;
-          }
-
-          .serial-page .input,
-          .serial-page .select {
-            width: 100% !important;
-            min-height: 42px !important;
-            height: 42px;
-            border: 1px solid #d1d5db !important;
-            border-radius: 9px !important;
-            padding: 0 12px !important;
-            background: #ffffff !important;
-            color: #111827 !important;
-            outline: none;
-            font-size: 14px;
-            box-shadow: none !important;
-          }
-
-          .serial-page .input:focus,
-          .serial-page .select:focus {
-            border-color: #111827 !important;
-            box-shadow: 0 0 0 1px #111827 !important;
-          }
-
-          .serial-page .table-card {
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            background: #ffffff;
-          }
-
-          .serial-page .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            padding: 16px 18px;
-            border-bottom: 1px solid #e5e7eb;
-          }
-
-          .serial-page .table-title {
-            font-size: 15px;
-            font-weight: 750;
-            color: #111827;
-          }
-
-          .serial-page .table-count {
-            color: #6b7280;
-            font-size: 13px;
-          }
-
-          .serial-page .table-wrap {
-            width: 100%;
-            overflow-x: auto;
-          }
-
-          .serial-page table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 1180px;
-          }
-
-          .serial-page th {
-            padding: 12px 16px;
-            background: #f9fafb;
-            border-bottom: 1px solid #e5e7eb;
-            text-align: left;
-            color: #6b7280;
-            font-size: 11px;
-            font-weight: 750;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            white-space: nowrap;
-          }
-
-          .serial-page td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #f0f1f3;
-            color: #374151;
-            font-size: 13px;
-            vertical-align: middle;
-          }
-
-          .serial-page tbody tr:hover {
-            background: #fafafa;
-          }
-
-          .serial-page tbody tr:last-child td {
-            border-bottom: 0;
-          }
-
-          .serial-page .serial-link {
-            display: inline-flex;
-            flex-direction: column;
-            gap: 4px;
-            color: #111827 !important;
-            text-decoration: none !important;
-            font-weight: 700;
-          }
-
-          .serial-page .serial-link:hover {
-            text-decoration: underline !important;
-          }
-
-          .serial-page .barcode {
-            color: #9ca3af;
-            font-size: 11px;
-            font-weight: 500;
-          }
-
-          .serial-page .product-name {
-            color: #111827;
-            font-weight: 650;
-          }
-
-          .serial-page .secondary {
-            margin-top: 3px;
-            color: #9ca3af;
-            font-size: 11px;
-          }
-
-          .serial-page .location {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-          }
-
-          .serial-page .location-main {
-            color: #111827;
-            font-weight: 600;
-          }
-
-          .serial-page .location-sub {
-            color: #6b7280;
-            font-size: 11px;
-          }
-
-          .serial-page .status {
-            display: inline-flex;
-            align-items: center;
-            width: fit-content;
-            border-radius: 999px;
-            padding: 5px 9px;
-            background: #f3f4f6;
-            color: #4b5563;
-            font-size: 11px;
-            font-weight: 750;
-          }
-
-          .serial-page .status.available {
-            background: #ecfdf5;
-            color: #047857;
-          }
-
-          .serial-page .status.reserved {
-            background: #fffbeb;
-            color: #b45309;
-          }
-
-          .serial-page .status.sold {
-            background: #eff6ff;
-            color: #1d4ed8;
-          }
-
-          .serial-page .status.returned {
-            background: #f5f3ff;
-            color: #6d28d9;
-          }
-
-          .serial-page .status.repair,
-          .serial-page .status.rma {
-            background: #fff7ed;
-            color: #c2410c;
-          }
-
-          .serial-page .status.damaged,
-          .serial-page .status.lost,
-          .serial-page .status.disposed {
-            background: #fef2f2;
-            color: #b91c1c;
-          }
-
-          .serial-page .empty {
-            padding: 60px 20px;
-            text-align: center;
-          }
-
-          .serial-page .empty-title {
-            margin: 0 0 8px;
-            color: #111827;
-            font-size: 16px;
-            font-weight: 750;
-          }
-
-          .serial-page .empty-text {
-            margin: 0;
-            color: #6b7280;
-            font-size: 13px;
-          }
-
-          .serial-page .error {
-            margin-bottom: 16px;
-            border: 1px solid #fecaca;
-            border-radius: 10px;
-            background: #fef2f2;
-            color: #b91c1c;
-            padding: 12px 14px;
-            font-size: 13px;
-          }
-
-          .serial-page .loading {
-            padding: 60px 20px;
-            text-align: center;
-            color: #6b7280;
-            font-size: 14px;
-          }
-
-          @media (max-width: 1200px) {
-            .serial-page .stats {
-              grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
-            .serial-page .filter-grid {
-              grid-template-columns: 1fr 1fr;
-            }
-          }
-
-          @media (max-width: 760px) {
-            .serial-page {
-              padding: 18px;
-            }
-
-            .serial-page .header {
-              flex-direction: column;
-            }
-
-            .serial-page h1 {
-              font-size: 26px;
-            }
-
-            .serial-page .header-actions {
-              width: 100%;
-            }
-
-            .serial-page .header-actions .button {
-              flex: 1;
-            }
-
-            .serial-page .stats {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .serial-page .filter-grid {
-              grid-template-columns: 1fr;
-            }
-
-            .serial-page .table-header {
-              align-items: flex-start;
-              flex-direction: column;
-            }
-          }
-        `}</style>
-
-        <div className="header">
+      <div className="page-content serial-page">
+        <div className="page-header">
           <div>
-            <p className="eyebrow">Inventory</p>
-            <h1>Serial Numbers</h1>
-            <p className="subtitle">
-              Track every serialized asset across your inventory, warehouses,
-              customers, and lifecycle statuses.
+            <div className="eyebrow">
+              <span className="eyebrow-dot" />
+              Asset Registry
+            </div>
+
+            <h1 className="page-title">
+              Serial Numbers
+            </h1>
+
+            <p className="page-subtitle">
+              Manage and trace individual serialized
+              assets across products, batches, locations,
+              warranties, and lifecycle status.
             </p>
           </div>
 
           <div className="header-actions">
             <button
               type="button"
-              className="button"
+              className="secondary-button"
               onClick={() => loadData(true)}
               disabled={refreshing}
             >
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
             </button>
-
-            <Link href="/inventory" className="button">
-              Inventory
-            </Link>
-
-            <Link href="/serial-numbers/new" className="button primary">
-              Add Serial Number
-            </Link>
           </div>
         </div>
 
-        {error ? <div className="error">{error}</div> : null}
+        {errorMessage && (
+          <div className="error-card">
+            <div>
+              <strong>
+                Unable to load serial numbers
+              </strong>
 
-        <div className="stats">
-          <div className="stat">
-            <div className="stat-label">Total Serialized Units</div>
-            <div className="stat-value">{stats.total}</div>
-          </div>
-
-          <div className="stat">
-            <div className="stat-label">Available</div>
-            <div className="stat-value">{stats.available}</div>
-          </div>
-
-          <div className="stat">
-            <div className="stat-label">Reserved</div>
-            <div className="stat-value">{stats.reserved}</div>
-          </div>
-
-          <div className="stat">
-            <div className="stat-label">Sold</div>
-            <div className="stat-value">{stats.sold}</div>
-          </div>
-
-          <div className="stat">
-            <div className="stat-label">Repair / RMA</div>
-            <div className="stat-value">{stats.service}</div>
-          </div>
-
-          <div className="stat">
-            <div className="stat-label">Inventory Cost</div>
-            <div className="stat-value">
-              {formatCurrency(stats.totalCost, currency)}
-            </div>
-          </div>
-        </div>
-
-        <div className="filters">
-          <div className="filter-grid">
-            <div className="field">
-              <label htmlFor="serial-search">Search</label>
-              <input
-                id="serial-search"
-                className="input"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Serial, barcode, product, SKU, warehouse..."
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="serial-status">Status</label>
-              <select
-                id="serial-status"
-                className="select"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="all">All statuses</option>
-
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {getStatusLabel(status)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="field">
-              <label htmlFor="serial-warehouse">Warehouse</label>
-              <select
-                id="serial-warehouse"
-                className="select"
-                value={warehouseFilter}
-                onChange={(event) => setWarehouseFilter(event.target.value)}
-              >
-                <option value="all">All warehouses</option>
-
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name} ({warehouse.code})
-                  </option>
-                ))}
-              </select>
+              <p>{errorMessage}</p>
             </div>
 
             <button
               type="button"
-              className="button"
-              onClick={clearFilters}
+              onClick={() => loadData()}
             >
-              Clear
+              Retry
             </button>
+          </div>
+        )}
+
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">
+              Total Serial Assets
+            </div>
+
+            <div className="stat-value">
+              {stats.total.toLocaleString()}
+            </div>
+
+            <div className="stat-meta">
+              Serialized units
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Available
+            </div>
+
+            <div className="stat-value">
+              {stats.available.toLocaleString()}
+            </div>
+
+            <div className="stat-meta positive">
+              Ready for allocation
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Reserved
+            </div>
+
+            <div className="stat-value">
+              {stats.reserved.toLocaleString()}
+            </div>
+
+            <div className="stat-meta">
+              Allocated but not sold
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Sold
+            </div>
+
+            <div className="stat-value">
+              {stats.sold.toLocaleString()}
+            </div>
+
+            <div className="stat-meta">
+              Completed assets
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Repair / RMA
+            </div>
+
+            <div className="stat-value">
+              {stats.repairRma.toLocaleString()}
+            </div>
+
+            <div className="stat-meta warning-text">
+              Requires attention
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Problem Assets
+            </div>
+
+            <div className="stat-value">
+              {stats.problem.toLocaleString()}
+            </div>
+
+            <div className="stat-meta danger-text">
+              Damaged, lost or disposed
+            </div>
           </div>
         </div>
 
-        <div className="table-card">
-          <div className="table-header">
-            <div className="table-title">Serialized Inventory</div>
+        <div className="toolbar-card">
+          <div className="toolbar-main">
+            <div className="search-wrap">
+              <span className="search-icon">
+                ⌕
+              </span>
 
-            <div className="table-count">
-              Showing {filteredUnits.length} of {serialUnits.length}
+              <input
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search serial, barcode, product, SKU or batch..."
+              />
+
+              {search && (
+                <button
+                  type="button"
+                  className="clear-search"
+                  onClick={() => setSearch("")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value,
+                )
+              }
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                >
+                  {status === "all"
+                    ? "All statuses"
+                    : titleCase(status)}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={productFilter}
+              onChange={(event) =>
+                setProductFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All products
+              </option>
+
+              {products.map((product) => (
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={warehouseFilter}
+              onChange={(event) =>
+                setWarehouseFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All warehouses
+              </option>
+
+              {warehouses.map((warehouse) => (
+                <option
+                  key={warehouse.id}
+                  value={warehouse.id}
+                >
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={batchFilter}
+              onChange={(event) =>
+                setBatchFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All batches
+              </option>
+
+              {batches.map((batch) => {
+                const product =
+                  productMap.get(
+                    batch.product_id,
+                  );
+
+                return (
+                  <option
+                    key={batch.id}
+                    value={batch.id}
+                  >
+                    {batch.lot_number}
+                    {product
+                      ? ` · ${product.name}`
+                      : ""}
+                  </option>
+                );
+              })}
+            </select>
+
+            <select
+              value={warrantyFilter}
+              onChange={(event) =>
+                setWarrantyFilter(
+                  event.target
+                    .value as WarrantyFilter,
+                )
+              }
+            >
+              <option value="all">
+                All warranty states
+              </option>
+
+              <option value="active">
+                Warranty active
+              </option>
+
+              <option value="expired">
+                Warranty expired
+              </option>
+
+              <option value="none">
+                No warranty
+              </option>
+            </select>
+          </div>
+
+          <div className="toolbar-footer">
+            <div className="result-summary">
+              <strong>
+                {filteredUnits.length.toLocaleString()}
+              </strong>{" "}
+              assets
+              {activeFilterCount > 0 && (
+                <>
+                  {" "}
+                  · {activeFilterCount} filter
+                  {activeFilterCount === 1
+                    ? ""
+                    : "s"}{" "}
+                  active
+                </>
+              )}
+            </div>
+
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                className="clear-filters"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="content-card">
+          <div className="content-card-header">
+            <div>
+              <h2>
+                Serialized Asset Registry
+              </h2>
+
+              <p>
+                Individual serialized units linked to
+                their batch and current inventory
+                location.
+              </p>
+            </div>
+
+            <div className="header-count">
+              {filteredUnits.length.toLocaleString()}
             </div>
           </div>
 
           {loading ? (
-            <div className="loading">Loading serial numbers...</div>
-          ) : filteredUnits.length === 0 ? (
-            <div className="empty">
-              <p className="empty-title">
-                {serialUnits.length === 0
-                  ? "No serial numbers yet"
-                  : "No matching serial numbers"}
-              </p>
+            <div className="loading-state">
+              <div className="spinner" />
 
-              <p className="empty-text">
-                {serialUnits.length === 0
-                  ? "Create your first serialized inventory unit to start tracking assets."
+              <span>
+                Loading serialized assets...
+              </span>
+            </div>
+          ) : filteredUnits.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">
+                #
+              </div>
+
+              <h3>
+                {serializedUnits.length === 0
+                  ? "No serial assets yet"
+                  : "No matching serial assets"}
+              </h3>
+
+              <p>
+                {serializedUnits.length === 0
+                  ? "Serialized units will appear here when serialized inventory is received."
                   : "Try changing your search or filters."}
               </p>
 
-              {serialUnits.length === 0 ? (
-                <div style={{ marginTop: 16 }}>
-                  <Link
-                    href="/serial-numbers/new"
-                    className="button primary"
-                  >
-                    Add Serial Number
-                  </Link>
-                </div>
-              ) : null}
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Serial Number</th>
-                    <th>Product</th>
-                    <th>Status</th>
-                    <th>Warehouse / Location</th>
-                    <th>Customer</th>
-                    <th>Cost</th>
-                    <th>Warranty</th>
-                    <th>Received</th>
-                    <th>Sold</th>
-                  </tr>
-                </thead>
+            <>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Serial Number</th>
+                      <th>Product</th>
+                      <th>Batch / Lot</th>
+                      <th>Status</th>
+                      <th>Warehouse</th>
+                      <th>Location</th>
+                      <th>Cost</th>
+                      <th>Warranty</th>
+                      <th>Received</th>
+                    </tr>
+                  </thead>
 
-                <tbody>
-                  {filteredUnits.map((unit) => {
-                    const product = productMap.get(unit.product_id);
-                    const variant = unit.variant_id
-                      ? variantMap.get(unit.variant_id)
-                      : undefined;
-                    const warehouse = unit.warehouse_id
-                      ? warehouseMap.get(unit.warehouse_id)
-                      : undefined;
-                    const location = unit.location_id
-                      ? locationMap.get(unit.location_id)
-                      : undefined;
-                    const customer = unit.customer_id
-                      ? customerMap.get(unit.customer_id)
-                      : undefined;
+                  <tbody>
+                    {paginatedUnits.map(
+                      (unit) => {
+                        const product =
+                          productMap.get(
+                            unit.product_id,
+                          );
 
-                    return (
-                      <tr key={unit.id}>
-                        <td>
-                          <Link
-                            href={`/serial-numbers/${unit.id}`}
-                            className="serial-link"
+                        const variant =
+                          unit.variant_id
+                            ? variantMap.get(
+                                unit.variant_id,
+                              )
+                            : null;
+
+                        const batch =
+                          unit.batch_id
+                            ? batchMap.get(
+                                unit.batch_id,
+                              )
+                            : null;
+
+                        const warehouse =
+                          unit.warehouse_id
+                            ? warehouseMap.get(
+                                unit.warehouse_id,
+                              )
+                            : null;
+
+                        const location =
+                          unit.location_id
+                            ? locationMap.get(
+                                unit.location_id,
+                              )
+                            : null;
+
+                        const warrantyState =
+                          getWarrantyState(
+                            unit.warranty_start,
+                            unit.warranty_end,
+                          );
+
+                        return (
+                          <tr
+                            key={unit.id}
                           >
-                            <span>{unit.serial_number}</span>
+                            <td>
+                              <button
+                                type="button"
+                                className="serial-link"
+                                onClick={() =>
+                                  router.push(
+                                    `/serial-numbers/${unit.id}`,
+                                  )
+                                }
+                              >
+                                <span className="serial-main">
+                                  {
+                                    unit.serial_number
+                                  }
+                                </span>
 
-                            {unit.barcode ? (
-                              <span className="barcode">
-                                Barcode: {unit.barcode}
+                                {unit.barcode && (
+                                  <span className="serial-barcode">
+                                    Barcode:{" "}
+                                    {
+                                      unit.barcode
+                                    }
+                                  </span>
+                                )}
+                              </button>
+                            </td>
+
+                            <td>
+                              <div className="product-cell">
+                                <span className="product-name">
+                                  {product?.name ??
+                                    "Unknown product"}
+                                </span>
+
+                                <span className="product-meta">
+                                  {[
+                                    product?.brand,
+                                    variant?.name,
+                                    variant?.sku
+                                      ? `SKU ${variant.sku}`
+                                      : null,
+                                  ]
+                                    .filter(
+                                      Boolean,
+                                    )
+                                    .join(
+                                      " · ",
+                                    ) ||
+                                    "—"}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td>
+                              {batch ? (
+                                <button
+                                  type="button"
+                                  className="batch-link"
+                                  onClick={() =>
+                                    router.push(
+                                      `/inventory/batches/${batch.id}`,
+                                    )
+                                  }
+                                >
+                                  <span>
+                                    {
+                                      batch.lot_number
+                                    }
+                                  </span>
+
+                                  <small>
+                                    {formatDate(
+                                      batch.received_at,
+                                    )}
+                                  </small>
+                                </button>
+                              ) : (
+                                <span className="muted">
+                                  No batch
+                                </span>
+                              )}
+                            </td>
+
+                            <td>
+                              <span
+                                className={statusClass(
+                                  unit.status,
+                                )}
+                              >
+                                <span className="status-dot" />
+
+                                {titleCase(
+                                  unit.status,
+                                )}
                               </span>
-                            ) : null}
-                          </Link>
-                        </td>
+                            </td>
 
-                        <td>
-                          <div className="product-name">
-                            {product?.name || "Unknown product"}
-                          </div>
+                            <td>
+                              <div className="location-cell">
+                                <span>
+                                  {warehouse?.name ??
+                                    "—"}
+                                </span>
 
-                          {variant?.name || variant?.sku ? (
-                            <div className="secondary">
-                              {variant?.name || ""}
-                              {variant?.name && variant?.sku ? " · " : ""}
-                              {variant?.sku || ""}
-                            </div>
-                          ) : null}
-                        </td>
+                                {warehouse?.code && (
+                                  <small>
+                                    {
+                                      warehouse.code
+                                    }
+                                  </small>
+                                )}
+                              </div>
+                            </td>
 
-                        <td>
-                          <span className={getStatusClass(unit.status)}>
-                            {getStatusLabel(unit.status)}
-                          </span>
-                        </td>
+                            <td>
+                              <div className="location-cell">
+                                <span>
+                                  {location?.name ??
+                                    "—"}
+                                </span>
 
-                        <td>
-                          {warehouse || location ? (
-                            <div className="location">
-                              <span className="location-main">
-                                {warehouse?.name || "No warehouse"}
-                              </span>
-
-                              <span className="location-sub">
-                                {location
-                                  ? `${location.name}${
+                                {location?.code && (
+                                  <small>
+                                    {
                                       location.code
-                                        ? ` (${location.code})`
-                                        : ""
-                                    }`
-                                  : "No location"}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="secondary">Unassigned</span>
-                          )}
-                        </td>
+                                    }
+                                  </small>
+                                )}
+                              </div>
+                            </td>
 
-                        <td>
-                          {customer?.name || (
-                            <span className="secondary">
-                              Not assigned
-                            </span>
-                          )}
-                        </td>
+                            <td className="cost-cell">
+                              {formatCurrency(
+                                unit.cost_price,
+                              )}
+                            </td>
 
-                        <td>
-                          {formatCurrency(unit.cost_price, currency)}
-                        </td>
+                            <td>
+                              {warrantyState ===
+                              "active" ? (
+                                <div className="warranty-cell warranty-active">
+                                  <span>
+                                    Active
+                                  </span>
 
-                        <td>
-                          {unit.warranty_start || unit.warranty_end ? (
-                            <div className="location">
-                              <span className="location-main">
-                                {formatDate(unit.warranty_end)}
-                              </span>
+                                  <small>
+                                    Until{" "}
+                                    {formatDate(
+                                      unit.warranty_end,
+                                    )}
+                                  </small>
+                                </div>
+                              ) : warrantyState ===
+                                "expired" ? (
+                                <div className="warranty-cell warranty-expired">
+                                  <span>
+                                    Expired
+                                  </span>
 
-                              <span className="location-sub">
-                                Started {formatDate(unit.warranty_start)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="secondary">No warranty</span>
-                          )}
-                        </td>
+                                  <small>
+                                    {formatDate(
+                                      unit.warranty_end,
+                                    )}
+                                  </small>
+                                </div>
+                              ) : (
+                                <span className="muted">
+                                  No warranty
+                                </span>
+                              )}
+                            </td>
 
-                        <td>{formatDate(unit.received_at)}</td>
+                            <td className="date-cell">
+                              {formatDate(
+                                unit.received_at,
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                        <td>{formatDate(unit.sold_at)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              <div className="pagination">
+                <div className="pagination-info">
+                  Showing{" "}
+                  <strong>
+                    {Math.min(
+                      (page - 1) *
+                        PAGE_SIZE +
+                        1,
+                      filteredUnits.length,
+                    )}
+                  </strong>{" "}
+                  –{" "}
+                  <strong>
+                    {Math.min(
+                      page * PAGE_SIZE,
+                      filteredUnits.length,
+                    )}
+                  </strong>{" "}
+                  of{" "}
+                  <strong>
+                    {filteredUnits.length}
+                  </strong>
+                </div>
+
+                <div className="pagination-actions">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() =>
+                      setPage(
+                        (current) =>
+                          Math.max(
+                            1,
+                            current - 1,
+                          ),
+                      )
+                    }
+                  >
+                    Previous
+                  </button>
+
+                  <span>
+                    Page {page} of{" "}
+                    {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={
+                      page >= totalPages
+                    }
+                    onClick={() =>
+                      setPage(
+                        (current) =>
+                          Math.min(
+                            totalPages,
+                            current + 1,
+                          ),
+                      )
+                    }
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        .serial-page {
+          padding-bottom: 40px;
+        }
+
+        .page-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 24px;
+        }
+
+        .eyebrow {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 7px;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #64748b;
+        }
+
+        .eyebrow-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: #16a34a;
+          box-shadow: 0 0 0 3px #dcfce7;
+        }
+
+        .page-title {
+          margin: 0;
+          font-size: 30px;
+          line-height: 1.15;
+          font-weight: 750;
+          letter-spacing: -0.025em;
+          color: #0f172a;
+        }
+
+        .page-subtitle {
+          margin: 7px 0 0;
+          font-size: 14px;
+          line-height: 1.5;
+          color: #64748b;
+        }
+
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .primary-button,
+        .secondary-button {
+          height: 40px;
+          padding: 0 15px;
+          border-radius: 9px;
+          font-size: 13px;
+          font-weight: 650;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+        }
+
+        .secondary-button {
+          border: 1px solid #d1d5db;
+          background: white;
+          color: #334155;
+        }
+
+        .secondary-button:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+        }
+
+        .secondary-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .error-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 18px;
+          padding: 14px 16px;
+          border: 1px solid #fecaca;
+          border-radius: 12px;
+          background: #fef2f2;
+          color: #991b1b;
+        }
+
+        .error-card strong {
+          display: block;
+          font-size: 13px;
+        }
+
+        .error-card p {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: #b91c1c;
+        }
+
+        .error-card button {
+          border: 1px solid #fecaca;
+          background: white;
+          color: #991b1b;
+          border-radius: 8px;
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            6,
+            minmax(0, 1fr)
+          );
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .stat-card {
+          min-width: 0;
+          padding: 17px 18px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .stat-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 12px;
+          font-weight: 650;
+          color: #64748b;
+        }
+
+        .stat-value {
+          margin-top: 8px;
+          font-size: 25px;
+          line-height: 1;
+          font-weight: 750;
+          letter-spacing: -0.02em;
+          color: #0f172a;
+        }
+
+        .stat-meta {
+          margin-top: 9px;
+          font-size: 11px;
+          color: #94a3b8;
+        }
+
+        .stat-meta.positive {
+          color: #15803d;
+        }
+
+        .stat-meta.warning-text {
+          color: #b45309;
+        }
+
+        .stat-meta.danger-text {
+          color: #dc2626;
+        }
+
+        .toolbar-card {
+          margin-bottom: 18px;
+          padding: 14px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .toolbar-main {
+          display: grid;
+          grid-template-columns:
+            minmax(280px, 1.8fr)
+            minmax(145px, 0.8fr)
+            minmax(155px, 0.9fr)
+            minmax(155px, 0.9fr)
+            minmax(175px, 1fr)
+            minmax(165px, 0.9fr);
+          gap: 9px;
+        }
+
+        .search-wrap {
+          position: relative;
+          min-width: 0;
+        }
+
+        .search-wrap input,
+        .toolbar-main select {
+          width: 100%;
+          height: 40px;
+          border: 1px solid #dbe1e8;
+          border-radius: 9px;
+          background: white;
+          color: #334155;
+          font-size: 13px;
+          outline: none;
+          transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease;
+        }
+
+        .search-wrap input {
+          padding: 0 38px 0 37px;
+        }
+
+        .toolbar-main select {
+          padding: 0 30px 0 11px;
+        }
+
+        .search-wrap input:focus,
+        .toolbar-main select:focus {
+          border-color: #86a98f;
+          box-shadow: 0 0 0 3px
+            rgba(22, 101, 52, 0.08);
+        }
+
+        .search-icon {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-52%);
+          font-size: 18px;
+          color: #94a3b8;
+          pointer-events: none;
+        }
+
+        .clear-search {
+          position: absolute;
+          right: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 25px;
+          height: 25px;
+          border: 0;
+          border-radius: 6px;
+          background: #f1f5f9;
+          color: #64748b;
+          cursor: pointer;
+          font-size: 17px;
+          line-height: 1;
+        }
+
+        .toolbar-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-top: 11px;
+          padding: 0 2px;
+        }
+
+        .result-summary {
+          font-size: 12px;
+          color: #94a3b8;
+        }
+
+        .result-summary strong {
+          color: #475569;
+        }
+
+        .clear-filters {
+          border: 0;
+          background: transparent;
+          color: #166534;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .content-card {
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .content-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 17px 18px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .content-card-header h2 {
+          margin: 0;
+          font-size: 15px;
+          font-weight: 700;
+          color: #1e293b;
+        }
+
+        .content-card-header p {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: #94a3b8;
+        }
+
+        .header-count {
+          min-width: 36px;
+          height: 30px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 10px;
+          border-radius: 8px;
+          background: #f1f5f9;
+          color: #475569;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .table-wrap {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        table {
+          width: 100%;
+          min-width: 1380px;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+
+        th {
+          height: 42px;
+          padding: 0 13px;
+          border-bottom: 1px solid #e5e7eb;
+          background: #f8fafc;
+          color: #64748b;
+          font-size: 10.5px;
+          font-weight: 750;
+          letter-spacing: 0.045em;
+          text-align: left;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        td {
+          height: 72px;
+          padding: 10px 13px;
+          border-bottom: 1px solid #eef2f7;
+          color: #334155;
+          font-size: 12px;
+          vertical-align: middle;
+        }
+
+        tbody tr:hover {
+          background: #fafcfb;
+        }
+
+        tbody tr:last-child td {
+          border-bottom: 0;
+        }
+
+        th:nth-child(1) {
+          width: 205px;
+        }
+
+        th:nth-child(2) {
+          width: 235px;
+        }
+
+        th:nth-child(3) {
+          width: 165px;
+        }
+
+        th:nth-child(4) {
+          width: 125px;
+        }
+
+        th:nth-child(5) {
+          width: 145px;
+        }
+
+        th:nth-child(6) {
+          width: 135px;
+        }
+
+        th:nth-child(7) {
+          width: 105px;
+        }
+
+        th:nth-child(8) {
+          width: 150px;
+        }
+
+        th:nth-child(9) {
+          width: 115px;
+        }
+
+        .serial-link,
+        .batch-link {
+          display: inline-flex;
+          flex-direction: column;
+          align-items: flex-start;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .serial-main {
+          color: #166534;
+          font-size: 13px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .serial-link:hover .serial-main {
+          text-decoration: underline;
+        }
+
+        .serial-barcode {
+          margin-top: 4px;
+          color: #94a3b8;
+          font-size: 10.5px;
+          white-space: nowrap;
+        }
+
+        .product-cell,
+        .location-cell,
+        .warranty-cell {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+
+        .product-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #1e293b;
+          font-weight: 650;
+        }
+
+        .product-meta {
+          margin-top: 4px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+
+        .batch-link span {
+          color: #166534;
+          font-weight: 650;
+          white-space: nowrap;
+        }
+
+        .batch-link:hover span {
+          text-decoration: underline;
+        }
+
+        .batch-link small {
+          margin-top: 4px;
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+
+        .muted {
+          color: #94a3b8;
+          white-space: nowrap;
+        }
+
+        .status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 26px;
+          padding: 0 8px;
+          border: 1px solid transparent;
+          border-radius: 7px;
+          font-size: 10.5px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: currentColor;
+        }
+
+        .status-available {
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+          color: #15803d;
+        }
+
+        .status-reserved {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+
+        .status-sold {
+          border-color: #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+        }
+
+        .status-returned {
+          border-color: #ddd6fe;
+          background: #f5f3ff;
+          color: #6d28d9;
+        }
+
+        .status-warning {
+          border-color: #fde68a;
+          background: #fffbeb;
+          color: #b45309;
+        }
+
+        .status-danger {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+        .status-neutral {
+          border-color: #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+        }
+
+        .location-cell span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #334155;
+          font-weight: 600;
+        }
+
+        .location-cell small {
+          margin-top: 4px;
+          color: #94a3b8;
+          font-size: 10.5px;
+          white-space: nowrap;
+        }
+
+        .cost-cell {
+          color: #1e293b;
+          font-weight: 650;
+          white-space: nowrap;
+        }
+
+        .warranty-cell span {
+          font-weight: 650;
+          white-space: nowrap;
+        }
+
+        .warranty-cell small {
+          margin-top: 4px;
+          color: #94a3b8;
+          font-size: 10.5px;
+          white-space: nowrap;
+        }
+
+        .warranty-active span {
+          color: #15803d;
+        }
+
+        .warranty-expired span {
+          color: #dc2626;
+        }
+
+        .date-cell {
+          color: #64748b;
+          white-space: nowrap;
+        }
+
+        .loading-state {
+          min-height: 330px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        .spinner {
+          width: 25px;
+          height: 25px;
+          border: 2px solid #e2e8f0;
+          border-top-color: #166534;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        .empty-state {
+          min-height: 330px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+          text-align: center;
+        }
+
+        .empty-icon {
+          width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 14px;
+          border-radius: 12px;
+          background: #f1f5f9;
+          color: #64748b;
+          font-size: 21px;
+          font-weight: 700;
+        }
+
+        .empty-state h3 {
+          margin: 0;
+          font-size: 15px;
+          font-weight: 700;
+          color: #334155;
+        }
+
+        .empty-state p {
+          max-width: 460px;
+          margin: 7px 0 16px;
+          font-size: 12px;
+          line-height: 1.55;
+          color: #94a3b8;
+        }
+
+        .pagination {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 13px 16px;
+          border-top: 1px solid #e5e7eb;
+        }
+
+        .pagination-info {
+          color: #94a3b8;
+          font-size: 11.5px;
+        }
+
+        .pagination-info strong {
+          color: #475569;
+        }
+
+        .pagination-actions {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .pagination-actions button {
+          height: 32px;
+          padding: 0 11px;
+          border: 1px solid #dbe1e8;
+          border-radius: 7px;
+          background: white;
+          color: #475569;
+          font-size: 11px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .pagination-actions button:hover:not(
+            :disabled
+          ) {
+          background: #f8fafc;
+        }
+
+        .pagination-actions button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .pagination-actions span {
+          min-width: 85px;
+          text-align: center;
+          color: #64748b;
+          font-size: 11px;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @media (max-width: 1450px) {
+          .stats-grid {
+            grid-template-columns: repeat(
+              3,
+              minmax(0, 1fr)
+            );
+          }
+
+          .toolbar-main {
+            grid-template-columns:
+              minmax(260px, 1.6fr)
+              repeat(
+                3,
+                minmax(145px, 1fr)
+              );
+          }
+        }
+
+        @media (max-width: 1050px) {
+          .page-header {
+            flex-direction: column;
+          }
+
+          .header-actions {
+            width: 100%;
+          }
+
+          .toolbar-main {
+            grid-template-columns:
+              repeat(
+                2,
+                minmax(0, 1fr)
+              );
+          }
+        }
+
+        @media (max-width: 700px) {
+          .stats-grid {
+            grid-template-columns: repeat(
+              2,
+              minmax(0, 1fr)
+            );
+          }
+
+          .toolbar-main {
+            grid-template-columns: 1fr;
+          }
+
+          .header-actions {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .header-actions button {
+            width: 100%;
+          }
+
+          .pagination {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .pagination-actions {
+            width: 100%;
+            justify-content: space-between;
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }

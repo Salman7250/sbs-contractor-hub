@@ -10,31 +10,6 @@ import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
-type Batch = {
-  id: string;
-  company_id: string;
-  product_id: string;
-  variant_id: string | null;
-  lot_number: string;
-  supplier_id: string | null;
-  purchase_order_id: string | null;
-  purchase_order_item_id: string | null;
-  stock_receipt_id: string | null;
-  stock_receipt_item_id: string | null;
-  received_at: string | null;
-  quantity_received: number;
-  notes: string | null;
-  status: string | null;
-  created_by: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  unit_cost: number | null;
-  landed_cost_total: number | null;
-  refurbishment_cost_total: number | null;
-  other_cost_total: number | null;
-  total_cost: number | null;
-};
-
 type Product = {
   id: string;
   name: string;
@@ -45,40 +20,47 @@ type Product = {
 
 type Variant = {
   id: string;
+  product_id: string;
   name: string | null;
   sku: string | null;
-  barcode: string | null;
   cost_price: number | null;
   selling_price: number | null;
 };
 
-type Supplier = {
+type Batch = {
   id: string;
-  supplier_number: string | null;
-  legal_name: string | null;
-  display_name: string | null;
-  email: string | null;
-  phone: string | null;
-};
-
-type PurchaseOrder = {
-  id: string;
-  po_number: string | null;
-  status: string | null;
-  order_date: string | null;
-  expected_date: string | null;
-  warehouse_id: string | null;
-  total_amount: number | null;
-};
-
-type StockReceipt = {
-  id: string;
-  receipt_number: string | null;
-  supplier_name: string | null;
-  reference_number: string | null;
-  status: string | null;
-  received_at: string | null;
+  product_id: string;
+  variant_id: string | null;
+  lot_number: string;
+  supplier_id: string | null;
   purchase_order_id: string | null;
+  purchase_order_item_id: string | null;
+  stock_receipt_id: string | null;
+  stock_receipt_item_id: string | null;
+  received_at: string | null;
+  quantity_received: number;
+  unit_cost: number | null;
+  landed_cost_total: number | null;
+  refurbishment_cost_total: number | null;
+  other_cost_total: number | null;
+  total_cost: number | null;
+  notes: string | null;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type BatchStock = {
+  id: string;
+  batch_id: string;
+  product_id: string;
+  variant_id: string | null;
+  warehouse_id: string;
+  location_id: string;
+  quantity: number;
+  reserved_quantity: number;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type Warehouse = {
@@ -92,73 +74,32 @@ type Location = {
   warehouse_id: string;
   name: string;
   code: string | null;
-  location_type: string | null;
-};
-
-type BatchStock = {
-  id: string;
-  warehouse_id: string;
-  location_id: string;
-  quantity: number;
-  reserved_quantity: number;
 };
 
 type SerializedUnit = {
   id: string;
   serial_number: string;
   barcode: string | null;
+  product_id: string;
+  variant_id: string | null;
+  batch_id: string | null;
   status: string | null;
   warehouse_id: string | null;
   location_id: string | null;
-  customer_id: string | null;
-  order_id: string | null;
-  invoice_id: string | null;
   cost_price: number | null;
   warranty_start: string | null;
   warranty_end: string | null;
   received_at: string | null;
   sold_at: string | null;
-  returned_at: string | null;
-  disposed_at: string | null;
-  notes: string | null;
 };
 
-type Movement = {
-  id: string;
-  movement_type: string;
-  quantity: number;
-  quantity_before: number | null;
-  quantity_after: number | null;
-  reason: string | null;
-  reference_type: string | null;
-  reference_id: string | null;
-  notes: string | null;
-  warehouse_id: string | null;
-  location_id: string | null;
-  batch_id: string | null;
-  batch_stock_id: string | null;
-  unit_id: string | null;
-  transaction_id: string | null;
-  created_at: string;
-};
-
-type Order = {
-  id: string;
-  order_number: string | null;
-  customer_id: string | null;
-};
-
-type Customer = {
-  id: string;
-  name: string | null;
-  company_name: string | null;
-};
-
-type Tab =
-  | "overview"
-  | "stock"
-  | "serials"
-  | "movements";
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-AE", {
+    style: "currency",
+    currency: "AED",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -166,155 +107,146 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 function formatDate(value: string | null) {
   if (!value) return "—";
 
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
     month: "short",
-    day: "numeric",
-  }).format(new Date(value));
+    year: "numeric",
+  }).format(date);
 }
 
 function formatDateTime(value: string | null) {
   if (!value) return "—";
 
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
     month: "short",
-    day: "numeric",
-    hour: "numeric",
+    year: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
-function statusClass(status: string | null) {
-  switch (status) {
+function getStatusClass(status: string | null) {
+  switch ((status ?? "").toLowerCase()) {
     case "active":
-    case "available":
-      return "status success";
-
-    case "reserved":
-      return "status blue";
-
-    case "returned":
-      return "status green";
-
-    case "repair":
-    case "rma":
-      return "status orange";
-
-    case "quarantined":
-      return "status yellow";
-
-    case "damaged":
-    case "cancelled":
-      return "status red";
+      return "status status-active";
 
     case "depleted":
+      return "status status-depleted";
+
+    case "quarantined":
+      return "status status-quarantined";
+
     case "closed":
-    case "sold":
-    case "disposed":
-      return "status muted";
+      return "status status-closed";
+
+    case "cancelled":
+      return "status status-cancelled";
 
     default:
       return "status";
   }
 }
 
-function titleCase(value: string | null) {
-  if (!value) return "Unknown";
+function getSerialStatusClass(status: string | null) {
+  switch ((status ?? "").toLowerCase()) {
+    case "available":
+      return "status status-active";
 
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (char) =>
-      char.toUpperCase(),
-    );
+    case "reserved":
+      return "status status-reserved";
+
+    case "sold":
+      return "status status-sold";
+
+    case "returned":
+      return "status status-returned";
+
+    case "repair":
+      return "status status-repair";
+
+    case "rma":
+      return "status status-rma";
+
+    case "damaged":
+      return "status status-damaged";
+
+    case "lost":
+      return "status status-lost";
+
+    case "disposed":
+      return "status status-disposed";
+
+    default:
+      return "status";
+  }
 }
 
-export default function InventoryBatchDetailPage() {
+function getTrackingLabel(mode: string | null) {
+  switch ((mode ?? "").toLowerCase()) {
+    case "serial":
+      return "Serialized";
+
+    case "batch":
+      return "Batch";
+
+    case "quantity":
+      return "Quantity";
+
+    case "none":
+      return "Not tracked";
+
+    default:
+      return "—";
+  }
+}
+
+export default function BatchDetailPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const params = useParams();
 
-  const batchId = String(params?.batchId || "");
-
-  const [batch, setBatch] =
-    useState<Batch | null>(null);
-
-  const [product, setProduct] =
-    useState<Product | null>(null);
-
-  const [variant, setVariant] =
-    useState<Variant | null>(null);
-
-  const [supplier, setSupplier] =
-    useState<Supplier | null>(null);
-
-  const [purchaseOrder, setPurchaseOrder] =
-    useState<PurchaseOrder | null>(null);
-
-  const [stockReceipt, setStockReceipt] =
-    useState<StockReceipt | null>(null);
-
-  const [batchStock, setBatchStock] =
-    useState<BatchStock[]>([]);
-
-  const [warehouses, setWarehouses] = useState<
-    Warehouse[]
-  >([]);
-
-  const [locations, setLocations] = useState<
-    Location[]
-  >([]);
-
-  const [serializedUnits, setSerializedUnits] =
-    useState<SerializedUnit[]>([]);
-
-  const [movements, setMovements] =
-    useState<Movement[]>([]);
-
-  const [orders, setOrders] = useState<Order[]>(
-    [],
-  );
-
-  const [customers, setCustomers] = useState<
-    Customer[]
-  >([]);
+  const batchId = Array.isArray(params?.batchId)
+    ? params.batchId[0]
+    : params?.batchId;
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
-
-  const [activeTab, setActiveTab] =
-    useState<Tab>("overview");
-
-  const [serialSearch, setSerialSearch] =
-    useState("");
-
-  const [movementSearch, setMovementSearch] =
-    useState("");
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [variant, setVariant] = useState<Variant | null>(null);
+  const [stockRows, setStockRows] = useState<BatchStock[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [serialUnits, setSerialUnits] = useState<SerializedUnit[]>([]);
 
   const loadData = useCallback(
-    async (refresh = false) => {
-      try {
-        if (!batchId) {
-          throw new Error(
-            "No inventory batch was specified.",
-          );
-        }
+    async (showRefresh = false) => {
+      if (!batchId) {
+        setErrorMessage("Batch ID is missing.");
+        setLoading(false);
+        return;
+      }
 
-        if (refresh) {
+      try {
+        if (showRefresh) {
           setRefreshing(true);
         } else {
           setLoading(true);
@@ -324,104 +256,58 @@ export default function InventoryBatchDetailPage() {
 
         const {
           data: { user },
-          error: authError,
+          error: userError,
         } = await supabase.auth.getUser();
 
-        if (authError) {
-          throw new Error(authError.message);
-        }
-
-        if (!user) {
+        if (userError || !user) {
           throw new Error(
-            "You are not authenticated.",
+            "Unable to identify the current user.",
           );
         }
 
-        const {
-          data: membership,
-          error: membershipError,
-        } = await supabase
-          .from("company_members")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
+        const { data: membership, error: membershipError } =
+          await supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
 
-        if (membershipError) {
+        if (membershipError || !membership?.company_id) {
           throw new Error(
-            membershipError.message,
+            "No company is associated with this account.",
           );
         }
 
-        if (!membership?.company_id) {
-          throw new Error(
-            "No active company was found.",
-          );
+        const companyId = membership.company_id;
+
+        const { data: batchData, error: batchError } =
+          await supabase
+            .from("inventory_batches")
+            .select(
+              "id,product_id,variant_id,lot_number,supplier_id,purchase_order_id,purchase_order_item_id,stock_receipt_id,stock_receipt_item_id,received_at,quantity_received,unit_cost,landed_cost_total,refurbishment_cost_total,other_cost_total,total_cost,notes,status,created_at,updated_at",
+            )
+            .eq("company_id", companyId)
+            .eq("id", batchId)
+            .maybeSingle();
+
+        if (batchError) {
+          throw batchError;
         }
 
-        const companyId =
-          membership.company_id;
-
-        const batchResult = await supabase
-          .from("inventory_batches")
-          .select(
-            `
-              id,
-              company_id,
-              product_id,
-              variant_id,
-              lot_number,
-              supplier_id,
-              purchase_order_id,
-              purchase_order_item_id,
-              stock_receipt_id,
-              stock_receipt_item_id,
-              received_at,
-              quantity_received,
-              notes,
-              status,
-              created_by,
-              created_at,
-              updated_at,
-              unit_cost,
-              landed_cost_total,
-              refurbishment_cost_total,
-              other_cost_total,
-              total_cost
-            `,
-          )
-          .eq("company_id", companyId)
-          .eq("id", batchId)
-          .maybeSingle();
-
-        if (batchResult.error) {
-          throw new Error(
-            batchResult.error.message,
-          );
+        if (!batchData) {
+          throw new Error("Batch could not be found.");
         }
 
-        if (!batchResult.data) {
-          throw new Error(
-            "The requested batch could not be found.",
-          );
-        }
-
-        const currentBatch =
-          batchResult.data as Batch;
-
-        setBatch(currentBatch);
+        setBatch(batchData);
 
         const [
           productResult,
           variantResult,
-          supplierResult,
-          purchaseOrderResult,
-          stockReceiptResult,
           stockResult,
-          warehouseResult,
-          locationResult,
+          warehousesResult,
+          locationsResult,
           serialResult,
-          movementResult,
         ] = await Promise.all([
           supabase
             .from("products")
@@ -429,86 +315,17 @@ export default function InventoryBatchDetailPage() {
               "id,name,brand,category,tracking_mode",
             )
             .eq("company_id", companyId)
-            .eq(
-              "id",
-              currentBatch.product_id,
-            )
+            .eq("id", batchData.product_id)
             .maybeSingle(),
 
-          currentBatch.variant_id
+          batchData.variant_id
             ? supabase
                 .from("product_variants")
                 .select(
-                  "id,name,sku,barcode,cost_price,selling_price",
+                  "id,product_id,name,sku,cost_price,selling_price",
                 )
-                .eq(
-                  "company_id",
-                  companyId,
-                )
-                .eq(
-                  "id",
-                  currentBatch.variant_id,
-                )
-                .maybeSingle()
-            : Promise.resolve({
-                data: null,
-                error: null,
-              }),
-
-          currentBatch.supplier_id
-            ? supabase
-                .from("suppliers")
-                .select(
-                  "id,supplier_number,legal_name,display_name,email,phone",
-                )
-                .eq(
-                  "company_id",
-                  companyId,
-                )
-                .eq(
-                  "id",
-                  currentBatch.supplier_id,
-                )
-                .maybeSingle()
-            : Promise.resolve({
-                data: null,
-                error: null,
-              }),
-
-          currentBatch.purchase_order_id
-            ? supabase
-                .from("purchase_orders")
-                .select(
-                  "id,po_number,status,order_date,expected_date,warehouse_id,total_amount",
-                )
-                .eq(
-                  "company_id",
-                  companyId,
-                )
-                .eq(
-                  "id",
-                  currentBatch.purchase_order_id,
-                )
-                .maybeSingle()
-            : Promise.resolve({
-                data: null,
-                error: null,
-              }),
-
-          currentBatch.stock_receipt_id
-            ? supabase
-                .from("stock_receipts")
-                .select(
-                  "id,receipt_number,supplier_name,reference_number,status,received_at,purchase_order_id",
-                )
-                .eq(
-                  "company_id",
-                  companyId,
-                )
-                .eq(
-                  "id",
-                  currentBatch.stock_receipt_id,
-                )
+                .eq("company_id", companyId)
+                .eq("id", batchData.variant_id)
                 .maybeSingle()
             : Promise.resolve({
                 data: null,
@@ -518,415 +335,252 @@ export default function InventoryBatchDetailPage() {
           supabase
             .from("inventory_batch_stock")
             .select(
-              "id,warehouse_id,location_id,quantity,reserved_quantity",
+              "id,batch_id,product_id,variant_id,warehouse_id,location_id,quantity,reserved_quantity,created_at,updated_at",
             )
             .eq("company_id", companyId)
-            .eq("batch_id", batchId)
-            .order("created_at"),
+            .eq("batch_id", batchId),
 
           supabase
             .from("warehouses")
             .select("id,name,code")
             .eq("company_id", companyId)
+            .eq("is_active", true)
             .order("name"),
 
           supabase
             .from("warehouse_locations")
             .select(
-              "id,warehouse_id,name,code,location_type",
+              "id,warehouse_id,name,code",
             )
             .eq("company_id", companyId)
+            .eq("is_active", true)
             .order("name"),
 
           supabase
             .from("serialized_units")
             .select(
-              `
-                id,
-                serial_number,
-                barcode,
-                status,
-                warehouse_id,
-                location_id,
-                customer_id,
-                order_id,
-                invoice_id,
-                cost_price,
-                warranty_start,
-                warranty_end,
-                received_at,
-                sold_at,
-                returned_at,
-                disposed_at,
-                notes
-              `,
+              "id,serial_number,barcode,product_id,variant_id,batch_id,status,warehouse_id,location_id,cost_price,warranty_start,warranty_end,received_at,sold_at",
             )
             .eq("company_id", companyId)
             .eq("batch_id", batchId)
-            .order("created_at", {
-              ascending: false,
-            }),
-
-          supabase
-            .from("inventory_movements")
-            .select(
-              `
-                id,
-                movement_type,
-                quantity,
-                quantity_before,
-                quantity_after,
-                reason,
-                reference_type,
-                reference_id,
-                notes,
-                warehouse_id,
-                location_id,
-                batch_id,
-                batch_stock_id,
-                unit_id,
-                transaction_id,
-                created_at
-              `,
-            )
-            .eq("company_id", companyId)
-            .eq("batch_id", batchId)
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(500),
+            .order("serial_number"),
         ]);
 
-        const errors = [
-          productResult.error,
-          variantResult.error,
-          supplierResult.error,
-          purchaseOrderResult.error,
-          stockReceiptResult.error,
-          stockResult.error,
-          warehouseResult.error,
-          locationResult.error,
-          serialResult.error,
-          movementResult.error,
-        ].filter(Boolean);
-
-        if (errors.length > 0) {
-          throw new Error(
-            errors[0]?.message ||
-              "Failed to load batch details.",
-          );
+        if (productResult.error) {
+          throw productResult.error;
         }
 
-        setProduct(
-          (productResult.data as Product) ||
-            null,
-        );
-
-        setVariant(
-          (variantResult.data as Variant) ||
-            null,
-        );
-
-        setSupplier(
-          (supplierResult.data as Supplier) ||
-            null,
-        );
-
-        setPurchaseOrder(
-          (purchaseOrderResult.data as PurchaseOrder) ||
-            null,
-        );
-
-        setStockReceipt(
-          (stockReceiptResult.data as StockReceipt) ||
-            null,
-        );
-
-        setBatchStock(
-          (stockResult.data as BatchStock[]) ||
-            [],
-        );
-
-        setWarehouses(
-          (warehouseResult.data as Warehouse[]) ||
-            [],
-        );
-
-        setLocations(
-          (locationResult.data as Location[]) ||
-            [],
-        );
-
-        setSerializedUnits(
-          (serialResult.data as SerializedUnit[]) ||
-            [],
-        );
-
-        setMovements(
-          (movementResult.data as Movement[]) ||
-            [],
-        );
-
-        const orderIds = Array.from(
-          new Set(
-            (serialResult.data ?? [])
-              .map(
-                (unit: SerializedUnit) =>
-                  unit.order_id,
-              )
-              .filter(
-                (id): id is string =>
-                  Boolean(id),
-              ),
-          ),
-        );
-
-        const customerIds = Array.from(
-          new Set(
-            (serialResult.data ?? [])
-              .map(
-                (unit: SerializedUnit) =>
-                  unit.customer_id,
-              )
-              .filter(
-                (id): id is string =>
-                  Boolean(id),
-              ),
-          ),
-        );
-
-        const [ordersResult, customersResult] =
-          await Promise.all([
-            orderIds.length
-              ? supabase
-                  .from("orders")
-                  .select(
-                    "id,order_number,customer_id",
-                  )
-                  .eq(
-                    "company_id",
-                    companyId,
-                  )
-                  .in("id", orderIds)
-              : Promise.resolve({
-                  data: [],
-                  error: null,
-                }),
-
-            customerIds.length
-              ? supabase
-                  .from("customers")
-                  .select(
-                    "id,name,company_name",
-                  )
-                  .eq(
-                    "company_id",
-                    companyId,
-                  )
-                  .in(
-                    "id",
-                    customerIds,
-                  )
-              : Promise.resolve({
-                  data: [],
-                  error: null,
-                }),
-          ]);
-
-        if (ordersResult.error) {
-          throw new Error(
-            ordersResult.error.message,
-          );
+        if (variantResult.error) {
+          throw variantResult.error;
         }
 
-        if (customersResult.error) {
-          throw new Error(
-            customersResult.error.message,
-          );
+        if (stockResult.error) {
+          throw stockResult.error;
         }
 
-        setOrders(
-          (ordersResult.data as Order[]) ||
-            [],
-        );
+        if (warehousesResult.error) {
+          throw warehousesResult.error;
+        }
 
-        setCustomers(
-          (customersResult.data as Customer[]) ||
-            [],
-        );
+        if (locationsResult.error) {
+          throw locationsResult.error;
+        }
+
+        if (serialResult.error) {
+          throw serialResult.error;
+        }
+
+        setProduct(productResult.data ?? null);
+        setVariant(variantResult.data ?? null);
+        setStockRows(stockResult.data ?? []);
+        setWarehouses(warehousesResult.data ?? []);
+        setLocations(locationsResult.data ?? []);
+        setSerialUnits(serialResult.data ?? []);
       } catch (error) {
         console.error(
-          "BATCH DETAIL ERROR:",
+          "Unable to load batch detail:",
           error,
         );
 
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Failed to load batch details.",
+            : "Unable to load batch detail.",
         );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [batchId, supabase],
+    [supabase, batchId],
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadData();
-    }, 0);
-
-    return () => clearTimeout(timer);
+    loadData();
   }, [loadData]);
 
   const warehouseMap = useMemo(() => {
-    const map = new Map<string, Warehouse>();
-
-    warehouses.forEach((warehouse) =>
-      map.set(warehouse.id, warehouse),
+    return new Map(
+      warehouses.map((warehouse) => [
+        warehouse.id,
+        warehouse,
+      ]),
     );
-
-    return map;
   }, [warehouses]);
 
   const locationMap = useMemo(() => {
-    const map = new Map<string, Location>();
-
-    locations.forEach((location) =>
-      map.set(location.id, location),
+    return new Map(
+      locations.map((location) => [
+        location.id,
+        location,
+      ]),
     );
-
-    return map;
   }, [locations]);
 
-  const orderMap = useMemo(() => {
-    const map = new Map<string, Order>();
-
-    orders.forEach((order) =>
-      map.set(order.id, order),
-    );
-
-    return map;
-  }, [orders]);
-
-  const customerMap = useMemo(() => {
-    const map = new Map<string, Customer>();
-
-    customers.forEach((customer) =>
-      map.set(customer.id, customer),
-    );
-
-    return map;
-  }, [customers]);
-
-  const totals = useMemo(() => {
-    const quantity = batchStock.reduce(
+  const stockSummary = useMemo(() => {
+    const quantity = stockRows.reduce(
       (sum, row) =>
-        sum + Number(row.quantity || 0),
+        sum + Number(row.quantity ?? 0),
       0,
     );
 
-    const reserved = batchStock.reduce(
+    const reserved = stockRows.reduce(
       (sum, row) =>
         sum +
-        Number(row.reserved_quantity || 0),
+        Number(
+          row.reserved_quantity ?? 0,
+        ),
       0,
     );
 
     const available = Math.max(
-      0,
       quantity - reserved,
+      0,
     );
-
-    const unitCost = Number(
-      batch?.unit_cost || 0,
-    );
-
-    const currentValue =
-      quantity * unitCost;
-
-    const receivedValue =
-      Number(batch?.total_cost || 0);
-
-    const soldUnits =
-      serializedUnits.filter(
-        (unit) => unit.status === "sold",
-      ).length;
-
-    const availableUnits =
-      serializedUnits.filter(
-        (unit) => unit.status === "available",
-      ).length;
 
     return {
       quantity,
       reserved,
       available,
-      unitCost,
-      currentValue,
-      receivedValue,
-      soldUnits,
-      availableUnits,
     };
-  }, [batch, batchStock, serializedUnits]);
+  }, [stockRows]);
 
-  const filteredSerials = useMemo(() => {
-    const query = serialSearch
-      .trim()
-      .toLowerCase();
+  const consumedQuantity = useMemo(() => {
+    if (!batch) return 0;
 
-    if (!query) {
-      return serializedUnits;
+    return Math.max(
+      Number(batch.quantity_received ?? 0) -
+        stockSummary.quantity,
+      0,
+    );
+  }, [batch, stockSummary.quantity]);
+
+  const unitCost = useMemo(() => {
+    if (!batch) return 0;
+
+    if (batch.unit_cost !== null) {
+      return Number(batch.unit_cost);
     }
 
-    return serializedUnits.filter((unit) =>
-      [
-        unit.serial_number,
-        unit.barcode,
-        unit.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
+    return Number(
+      variant?.cost_price ?? 0,
     );
-  }, [serialSearch, serializedUnits]);
+  }, [batch, variant]);
 
-  const filteredMovements = useMemo(() => {
-    const query = movementSearch
-      .trim()
-      .toLowerCase();
+  const baseCost = useMemo(() => {
+    if (!batch) return 0;
 
-    if (!query) {
-      return movements;
+    return (
+      Number(
+        batch.quantity_received ?? 0,
+      ) * unitCost
+    );
+  }, [batch, unitCost]);
+
+  const landedCost = Number(
+    batch?.landed_cost_total ?? 0,
+  );
+
+  const refurbishmentCost = Number(
+    batch?.refurbishment_cost_total ?? 0,
+  );
+
+  const otherCost = Number(
+    batch?.other_cost_total ?? 0,
+  );
+
+  const calculatedTotalCost = useMemo(() => {
+    if (!batch) return 0;
+
+    if (batch.total_cost !== null) {
+      return Number(batch.total_cost);
     }
 
-    return movements.filter((movement) =>
-      [
-        movement.movement_type,
-        movement.reason,
-        movement.reference_type,
-        movement.reference_id,
-        movement.notes,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
+    return (
+      baseCost +
+      landedCost +
+      refurbishmentCost +
+      otherCost
     );
-  }, [movementSearch, movements]);
+  }, [
+    batch,
+    baseCost,
+    landedCost,
+    refurbishmentCost,
+    otherCost,
+  ]);
+
+  const serializedStats = useMemo(() => {
+    const total = serialUnits.length;
+
+    const available = serialUnits.filter(
+      (unit) =>
+        unit.status === "available",
+    ).length;
+
+    const sold = serialUnits.filter(
+      (unit) => unit.status === "sold",
+    ).length;
+
+    const repair = serialUnits.filter(
+      (unit) =>
+        unit.status === "repair" ||
+        unit.status === "rma",
+    ).length;
+
+    const problem = serialUnits.filter(
+      (unit) =>
+        unit.status === "damaged" ||
+        unit.status === "lost" ||
+        unit.status === "disposed",
+    ).length;
+
+    return {
+      total,
+      available,
+      sold,
+      repair,
+      problem,
+    };
+  }, [serialUnits]);
 
   if (loading) {
     return (
       <AppShell>
-        <div className="page-content">
-          <div className="loading-state">
-            <div className="spinner" />
-            <p>
-              Loading batch workspace...
-            </p>
+        <div className="page-content inventory-page">
+          <style jsx>{`
+            .loading-page {
+              min-height: 500px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: #64748b;
+              font-size: 13px;
+            }
+          `}</style>
+
+          <div className="loading-page">
+            Loading batch details...
           </div>
         </div>
       </AppShell>
@@ -936,31 +590,70 @@ export default function InventoryBatchDetailPage() {
   if (errorMessage || !batch) {
     return (
       <AppShell>
-        <div className="page-content">
-          <div className="error-card">
-            <div className="error-icon">
-              !
-            </div>
+        <div className="page-content inventory-page">
+          <style jsx>{`
+            .error-page {
+              background: #ffffff;
+              border: 1px solid #e5e7eb;
+              border-radius: 14px;
+              padding: 45px 25px;
+              text-align: center;
+            }
 
-            <div className="error-copy">
-              <h2>
-                Unable to open batch
-              </h2>
+            .error-title {
+              margin: 0;
+              color: #0f172a;
+              font-size: 18px;
+              font-weight: 750;
+            }
 
-              <p>
-                {errorMessage ||
-                  "The requested batch could not be found."}
-              </p>
-            </div>
+            .error-description {
+              margin: 8px auto 20px;
+              max-width: 500px;
+              color: #64748b;
+              font-size: 13px;
+              line-height: 1.6;
+            }
+
+            .button {
+              border: 1px solid #d1d5db;
+              border-radius: 9px;
+              background: #ffffff;
+              color: #334155;
+              min-height: 40px;
+              padding: 0 15px;
+              font-size: 13px;
+              font-weight: 650;
+              cursor: pointer;
+            }
+
+            .button-primary {
+              background: #166534;
+              border-color: #166534;
+              color: #ffffff;
+            }
+          `}</style>
+
+          <div className="error-page">
+            <h1 className="error-title">
+              Batch not available
+            </h1>
+
+            <p className="error-description">
+              {errorMessage ||
+                "The requested batch could not be found."}
+            </p>
 
             <button
               type="button"
-              className="primary-button"
+              className="button button-primary"
               onClick={() =>
-                void loadData()
+                router.push(
+                  "/inventory/batches",
+                )
               }
             >
-              Try Again
+              Back to Batches
             </button>
           </div>
         </div>
@@ -970,762 +663,749 @@ export default function InventoryBatchDetailPage() {
 
   return (
     <AppShell>
-      <div className="page-content batch-detail-page">
+      <div className="page-content inventory-page">
         <style jsx>{`
+          .inventory-page {
+            padding-bottom: 40px;
+          }
+
           .page-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 20px;
-            margin-bottom: 20px;
+            gap: 24px;
+            margin-bottom: 22px;
           }
 
-          .header-left {
-            min-width: 0;
-          }
-
-          .back-link {
-            display: inline-flex;
+          .breadcrumb {
+            display: flex;
             align-items: center;
-            gap: 6px;
-            margin-bottom: 13px;
-            padding: 0;
+            gap: 7px;
+            margin-bottom: 10px;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .breadcrumb-button {
             border: 0;
             background: transparent;
-            color: #64748b;
+            color: #166534;
+            padding: 0;
             font-size: 12px;
             font-weight: 700;
             cursor: pointer;
           }
 
-          .back-link:hover {
-            color: #166534;
+          .breadcrumb-separator {
+            color: #cbd5e1;
           }
 
           .eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             margin-bottom: 7px;
             color: #64748b;
-            font-size: 11px;
-            font-weight: 750;
+            font-size: 12px;
+            font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
           }
 
-          .title-row {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+          .eyebrow-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #16a34a;
           }
 
           .page-title {
             margin: 0;
             color: #0f172a;
-            font-size: 28px;
-            line-height: 1.15;
+            font-size: 30px;
+            line-height: 1.2;
             font-weight: 750;
-            letter-spacing: -0.025em;
+            letter-spacing: -0.03em;
           }
 
-          .lot-pill {
-            display: inline-flex;
-            align-items: center;
-            min-height: 28px;
-            padding: 0 9px;
-            border: 1px solid #dcfce7;
-            border-radius: 999px;
-            background: #f0fdf4;
-            color: #166534;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 11px;
-            font-weight: 750;
-          }
-
-          .subtitle {
+          .page-subtitle {
             margin: 7px 0 0;
             color: #64748b;
-            font-size: 13px;
+            font-size: 14px;
+            line-height: 1.6;
           }
 
           .header-actions {
             display: flex;
-            gap: 8px;
-            flex-shrink: 0;
+            gap: 9px;
+            flex-wrap: wrap;
           }
 
-          .secondary-button,
-          .primary-button {
+          .button {
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
+            background: #ffffff;
+            color: #334155;
             min-height: 40px;
             padding: 0 14px;
-            border-radius: 9px;
-            font-size: 12px;
-            font-weight: 750;
+            font-size: 13px;
+            font-weight: 650;
             cursor: pointer;
+            transition:
+              background 0.15s ease,
+              border-color 0.15s ease;
           }
 
-          .secondary-button {
-            border: 1px solid #dbe1e8;
-            background: #fff;
-            color: #334155;
-          }
-
-          .secondary-button:hover {
+          .button:hover {
             background: #f8fafc;
+            border-color: #cbd5e1;
           }
 
-          .primary-button {
-            border: 1px solid #166534;
+          .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .button-primary {
             background: #166534;
-            color: #fff;
+            border-color: #166534;
+            color: #ffffff;
           }
 
-          .primary-button:hover {
+          .button-primary:hover {
             background: #14532d;
+            border-color: #14532d;
+          }
+
+          .error-box {
+            background: #fff7f7;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            border-radius: 12px;
+            padding: 13px 15px;
+            margin-bottom: 18px;
+            font-size: 13px;
           }
 
           .hero-card {
-            display: grid;
-            grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
-            gap: 0;
-            margin-bottom: 18px;
+            background: #ffffff;
             border: 1px solid #e5e7eb;
             border-radius: 14px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-            overflow: hidden;
+            padding: 18px;
+            margin-bottom: 18px;
+            box-shadow:
+              0 1px 2px
+                rgba(15, 23, 42, 0.03);
           }
 
-          .hero-main {
-            padding: 20px;
-            border-right: 1px solid #eef0f3;
+          .hero-grid {
+            display: grid;
+            grid-template-columns:
+              minmax(260px, 1.6fr)
+              repeat(4, minmax(130px, 1fr));
+            gap: 18px;
+            align-items: center;
+          }
+
+          .product-label {
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
           }
 
           .product-name {
-            margin: 0;
-            color: #0f172a;
-            font-size: 17px;
-            font-weight: 750;
-          }
-
-          .product-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px;
-            margin-top: 7px;
-          }
-
-          .meta-pill {
-            display: inline-flex;
-            align-items: center;
-            min-height: 24px;
-            padding: 0 8px;
-            border-radius: 7px;
-            background: #f1f5f9;
-            color: #64748b;
-            font-size: 10px;
-            font-weight: 700;
-          }
-
-          .hero-source {
-            padding: 20px;
-            background: #fafafa;
-          }
-
-          .source-label {
-            color: #94a3b8;
-            font-size: 10px;
-            font-weight: 750;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-          }
-
-          .source-value {
             margin-top: 5px;
             color: #0f172a;
-            font-size: 14px;
+            font-size: 18px;
             font-weight: 750;
           }
 
-          .source-detail {
-            margin-top: 3px;
-            color: #64748b;
-            font-size: 11px;
-            line-height: 1.5;
-          }
-
-          .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 12px;
-            margin-bottom: 18px;
-          }
-
-          .stat-card {
-            padding: 15px 16px;
-            border: 1px solid #e5e7eb;
-            border-radius: 13px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-          }
-
-          .stat-label {
-            color: #64748b;
-            font-size: 10px;
-            font-weight: 700;
-          }
-
-          .stat-value {
-            margin-top: 7px;
-            color: #0f172a;
-            font-size: 22px;
-            font-weight: 750;
-          }
-
-          .stat-detail {
+          .product-variant {
             margin-top: 4px;
-            color: #94a3b8;
-            font-size: 10px;
-          }
-
-          .tabs-card {
-            margin-bottom: 18px;
-            border: 1px solid #e5e7eb;
-            border-radius: 13px;
-            background: #fff;
-            overflow: hidden;
-          }
-
-          .tabs {
-            display: flex;
-            gap: 2px;
-            padding: 6px;
-            overflow-x: auto;
-          }
-
-          .tab {
-            min-height: 38px;
-            padding: 0 13px;
-            border: 0;
-            border-radius: 8px;
-            background: transparent;
             color: #64748b;
             font-size: 12px;
-            font-weight: 750;
-            white-space: nowrap;
-            cursor: pointer;
           }
 
-          .tab:hover {
-            background: #f8fafc;
-          }
-
-          .tab.active {
-            background: #f0fdf4;
-            color: #166534;
-          }
-
-          .content-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
-            gap: 16px;
-          }
-
-          .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            background: #fff;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-            overflow: hidden;
-          }
-
-          .card + .card {
-            margin-top: 16px;
-          }
-
-          .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            padding: 16px 18px;
-            border-bottom: 1px solid #eef0f3;
-          }
-
-          .card-header h2 {
-            margin: 0;
-            color: #0f172a;
-            font-size: 15px;
-            font-weight: 750;
-          }
-
-          .card-header p {
-            margin: 4px 0 0;
+          .product-sku {
+            margin-top: 3px;
             color: #94a3b8;
             font-size: 11px;
+            font-family:
+              ui-monospace,
+              SFMono-Regular,
+              Menlo,
+              Monaco,
+              Consolas,
+              "Liberation Mono",
+              "Courier New",
+              monospace;
           }
 
-          .info-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+          .hero-stat {
+            border-left: 1px solid #eef2f7;
+            padding-left: 18px;
           }
 
-          .info-item {
-            padding: 14px 17px;
-            border-bottom: 1px solid #f1f5f9;
-          }
-
-          .info-item:nth-child(odd) {
-            border-right: 1px solid #f1f5f9;
-          }
-
-          .info-label {
-            color: #94a3b8;
-            font-size: 10px;
-            font-weight: 750;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-          }
-
-          .info-value {
-            margin-top: 5px;
-            color: #334155;
-            font-size: 12px;
+          .hero-stat-label {
+            color: #64748b;
+            font-size: 11px;
             font-weight: 650;
-            line-height: 1.5;
           }
 
-          .cost-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 14px;
-            padding: 11px 17px;
-            border-bottom: 1px solid #f1f5f9;
-            color: #64748b;
-            font-size: 12px;
-          }
-
-          .cost-row strong {
-            color: #334155;
-            font-weight: 750;
-          }
-
-          .cost-row.total {
-            background: #f8fafc;
+          .hero-stat-value {
+            margin-top: 5px;
             color: #0f172a;
-          }
-
-          .trace-card {
-            padding: 18px;
-          }
-
-          .trace-line {
-            position: relative;
-            padding-left: 28px;
-          }
-
-          .trace-line::before {
-            content: "";
-            position: absolute;
-            left: 7px;
-            top: 9px;
-            bottom: 9px;
-            width: 1px;
-            background: #dbe1e8;
-          }
-
-          .trace-item {
-            position: relative;
-            padding-bottom: 21px;
-          }
-
-          .trace-item:last-child {
-            padding-bottom: 0;
-          }
-
-          .trace-dot {
-            position: absolute;
-            left: -27px;
-            top: 3px;
-            width: 15px;
-            height: 15px;
-            border: 3px solid #fff;
-            border-radius: 50%;
-            background: #16a34a;
-            box-shadow: 0 0 0 1px #bbf7d0;
-          }
-
-          .trace-title {
-            color: #0f172a;
-            font-size: 12px;
+            font-size: 18px;
             font-weight: 750;
-          }
-
-          .trace-detail {
-            margin-top: 3px;
-            color: #64748b;
-            font-size: 11px;
-            line-height: 1.55;
-          }
-
-          .search-input {
-            width: 260px;
-            height: 38px;
-            padding: 0 11px;
-            border: 1px solid #dbe1e8;
-            border-radius: 8px;
-            outline: none;
-            color: #334155;
-            font-size: 12px;
-          }
-
-          .search-input:focus {
-            border-color: #86efac;
-            box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
-          }
-
-          .table-wrap {
-            width: 100%;
-            overflow-x: auto;
-          }
-
-          table {
-            width: 100%;
-            min-width: 980px;
-            border-collapse: collapse;
-          }
-
-          th {
-            padding: 10px 15px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e5e7eb;
-            color: #64748b;
-            font-size: 10px;
-            font-weight: 750;
-            text-align: left;
             white-space: nowrap;
-          }
-
-          td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #f1f5f9;
-            color: #334155;
-            font-size: 12px;
-            vertical-align: middle;
-          }
-
-          tbody tr:hover {
-            background: #fafafa;
-          }
-
-          tbody tr:last-child td {
-            border-bottom: 0;
-          }
-
-          .primary-text {
-            color: #0f172a;
-            font-weight: 700;
-          }
-
-          .secondary-text {
-            margin-top: 3px;
-            color: #94a3b8;
-            font-size: 10px;
-          }
-
-          .mono {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 10px;
           }
 
           .status {
             display: inline-flex;
             align-items: center;
-            min-height: 24px;
-            padding: 0 8px;
             border-radius: 999px;
+            padding: 5px 9px;
             background: #f1f5f9;
             color: #64748b;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 750;
             text-transform: capitalize;
+            white-space: nowrap;
           }
 
-          .status.success {
-            background: #ecfdf5;
-            color: #15803d;
-          }
-
-          .status.green {
-            background: #f0fdf4;
+          .status-active {
+            background: #ecfdf3;
             color: #166534;
           }
 
-          .status.blue {
-            background: #eff6ff;
-            color: #2563eb;
-          }
-
-          .status.orange {
-            background: #fff7ed;
-            color: #c2410c;
-          }
-
-          .status.yellow {
-            background: #fffbeb;
-            color: #b45309;
-          }
-
-          .status.red {
-            background: #fef2f2;
-            color: #dc2626;
-          }
-
-          .status.muted {
+          .status-depleted {
             background: #f8fafc;
             color: #64748b;
           }
 
-          .allocation-card {
-            padding: 18px;
+          .status-quarantined {
+            background: #fff7ed;
+            color: #c2410c;
           }
 
-          .allocation-row {
+          .status-closed {
+            background: #f1f5f9;
+            color: #475569;
+          }
+
+          .status-cancelled {
+            background: #fef2f2;
+            color: #b91c1c;
+          }
+
+          .status-reserved {
+            background: #eff6ff;
+            color: #1d4ed8;
+          }
+
+          .status-sold {
+            background: #f1f5f9;
+            color: #475569;
+          }
+
+          .status-returned {
+            background: #fff7ed;
+            color: #c2410c;
+          }
+
+          .status-repair,
+          .status-rma {
+            background: #fefce8;
+            color: #a16207;
+          }
+
+          .status-damaged,
+          .status-lost,
+          .status-disposed {
+            background: #fef2f2;
+            color: #b91c1c;
+          }
+
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(
+              6,
+              minmax(0, 1fr)
+            );
+            gap: 14px;
+            margin-bottom: 18px;
+          }
+
+          .stat-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 15px 16px;
+            box-shadow:
+              0 1px 2px
+                rgba(15, 23, 42, 0.03);
+          }
+
+          .stat-label {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 650;
+          }
+
+          .stat-value {
+            margin-top: 6px;
+            color: #0f172a;
+            font-size: 21px;
+            font-weight: 750;
+            white-space: nowrap;
+          }
+
+          .stat-helper {
+            margin-top: 4px;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .two-column {
+            display: grid;
+            grid-template-columns:
+              minmax(0, 1.35fr)
+              minmax(340px, 0.85fr);
+            gap: 18px;
+            margin-bottom: 18px;
+          }
+
+          .card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow:
+              0 1px 2px
+                rgba(15, 23, 42, 0.03);
+          }
+
+          .card-header {
+            padding: 14px 17px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+
+          .card-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 750;
+          }
+
+          .card-description {
+            margin: 4px 0 0;
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.5;
+          }
+
+          .details-grid {
+            display: grid;
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .detail-item {
+            padding: 13px 17px;
+            border-bottom: 1px solid #eef2f7;
+          }
+
+          .detail-item:nth-child(odd) {
+            border-right: 1px solid #eef2f7;
+          }
+
+          .detail-label {
+            color: #94a3b8;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+
+          .detail-value {
+            margin-top: 4px;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 650;
+          }
+
+          .cost-list {
+            padding: 4px 17px;
+          }
+
+          .cost-row {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
             gap: 15px;
-            padding: 13px 0;
-            border-bottom: 1px solid #f1f5f9;
+            padding: 11px 0;
+            border-bottom: 1px solid #eef2f7;
           }
 
-          .allocation-row:last-child {
+          .cost-row:last-child {
             border-bottom: 0;
           }
 
-          .allocation-main {
-            min-width: 0;
+          .cost-label {
+            color: #64748b;
+            font-size: 12px;
           }
 
-          .allocation-title {
-            color: #0f172a;
+          .cost-value {
+            color: #334155;
             font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+
+          .cost-total {
+            margin: 0 -17px;
+            padding: 14px 17px;
+            border-top: 1px solid #e5e7eb;
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+          }
+
+          .cost-total .cost-label {
+            color: #334155;
             font-weight: 750;
           }
 
-          .allocation-subtitle {
-            margin-top: 3px;
-            color: #94a3b8;
-            font-size: 10px;
-          }
-
-          .allocation-values {
-            flex-shrink: 0;
-            text-align: right;
-          }
-
-          .allocation-available {
-            color: #15803d;
-            font-size: 13px;
-            font-weight: 750;
-          }
-
-          .allocation-reserved {
-            margin-top: 3px;
-            color: #94a3b8;
-            font-size: 10px;
-          }
-
-          .empty-state {
-            padding: 50px 20px;
-            text-align: center;
-          }
-
-          .empty-icon {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 47px;
-            height: 47px;
-            margin: 0 auto 12px;
-            border-radius: 12px;
-            background: #f1f5f9;
-            color: #64748b;
-            font-size: 20px;
-          }
-
-          .empty-state h3 {
-            margin: 0;
-            color: #0f172a;
-            font-size: 15px;
-          }
-
-          .empty-state p {
-            max-width: 470px;
-            margin: 6px auto 0;
-            color: #94a3b8;
-            font-size: 12px;
-            line-height: 1.6;
-          }
-
-          .loading-state {
-            min-height: 450px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            color: #64748b;
-          }
-
-          .spinner {
-            width: 28px;
-            height: 28px;
-            border: 3px solid #e2e8f0;
-            border-top-color: #166534;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-          }
-
-          .error-card {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 20px;
-            border: 1px solid #fecaca;
-            border-radius: 14px;
-            background: #fff;
-          }
-
-          .error-icon {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            background: #fef2f2;
-            color: #dc2626;
+          .cost-total .cost-value {
+            color: #166534;
+            font-size: 14px;
             font-weight: 800;
           }
 
-          .error-copy {
-            flex: 1;
+          .stock-table-wrap {
+            overflow-x: auto;
           }
 
-          .error-copy h2 {
-            margin: 0;
-            color: #0f172a;
-            font-size: 15px;
+          .stock-table {
+            width: 100%;
+            min-width: 650px;
+            border-collapse: collapse;
           }
 
-          .error-copy p {
-            margin: 4px 0 0;
+          .stock-table th {
+            background: #f8fafc;
             color: #64748b;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 9px 14px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 750;
+            letter-spacing: 0.035em;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          .stock-table td {
+            color: #334155;
+            border-bottom: 1px solid #eef2f7;
+            padding: 10px 14px;
+            font-size: 12px;
+            white-space: nowrap;
+          }
+
+          .stock-table tr:last-child td {
+            border-bottom: 0;
+          }
+
+          .warehouse-name {
+            color: #0f172a;
+            font-weight: 700;
+          }
+
+          .location-name {
+            margin-top: 3px;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .number-strong {
+            color: #0f172a;
+            font-weight: 750;
+          }
+
+          .serial-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+          }
+
+          .serial-summary {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+          }
+
+          .serial-summary-item {
+            color: #64748b;
+            font-size: 11px;
+          }
+
+          .serial-summary-item strong {
+            color: #0f172a;
+          }
+
+          .serial-table-wrap {
+            overflow-x: auto;
+          }
+
+          .serial-table {
+            width: 100%;
+            min-width: 950px;
+            border-collapse: collapse;
+          }
+
+          .serial-table th {
+            background: #f8fafc;
+            color: #64748b;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 9px 14px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 750;
+            letter-spacing: 0.035em;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+
+          .serial-table td {
+            color: #334155;
+            border-bottom: 1px solid #eef2f7;
+            padding: 10px 14px;
+            font-size: 12px;
+            vertical-align: middle;
+            white-space: nowrap;
+          }
+
+          .serial-table tr:last-child td {
+            border-bottom: 0;
+          }
+
+          .serial-number {
+            color: #166534;
+            font-weight: 750;
+            cursor: pointer;
+          }
+
+          .serial-number:hover {
+            text-decoration: underline;
+          }
+
+          .serial-barcode {
+            margin-top: 3px;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .serial-location {
+            color: #334155;
+            font-weight: 650;
+          }
+
+          .serial-subtext {
+            margin-top: 3px;
+            color: #94a3b8;
+            font-size: 10px;
+          }
+
+          .notes-box {
+            padding: 15px 17px;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+          }
+
+          .empty {
+            padding: 35px 20px;
+            text-align: center;
+            color: #94a3b8;
             font-size: 12px;
           }
 
-          @keyframes spin {
-            to {
-              transform: rotate(360deg);
-            }
+          .footer-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px 17px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            color: #94a3b8;
+            font-size: 10px;
           }
 
           @media (max-width: 1400px) {
+            .hero-grid {
+              grid-template-columns:
+                minmax(240px, 1.5fr)
+                repeat(4, minmax(110px, 1fr));
+            }
+
             .stats-grid {
-              grid-template-columns: repeat(3, minmax(0, 1fr));
+              grid-template-columns: repeat(
+                3,
+                minmax(0, 1fr)
+              );
             }
           }
 
-          @media (max-width: 1000px) {
-            .hero-card,
-            .content-grid {
+          @media (max-width: 1050px) {
+            .page-header {
+              flex-direction: column;
+            }
+
+            .hero-grid {
+              grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            }
+
+            .hero-product {
+              grid-column: span 3;
+            }
+
+            .hero-stat {
+              border-left: 0;
+              padding-left: 0;
+            }
+
+            .two-column {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          @media (max-width: 700px) {
+            .hero-grid {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+            }
+
+            .hero-product {
+              grid-column: span 2;
+            }
+
+            .stats-grid {
+              grid-template-columns: repeat(
+                2,
+                minmax(0, 1fr)
+              );
+            }
+
+            .details-grid {
               grid-template-columns: 1fr;
             }
 
-            .hero-main {
+            .detail-item:nth-child(odd) {
               border-right: 0;
-              border-bottom: 1px solid #eef0f3;
             }
 
-            .page-header {
+            .serial-header {
+              align-items: flex-start;
               flex-direction: column;
+            }
+          }
+
+          @media (max-width: 500px) {
+            .stats-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .hero-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .hero-product {
+              grid-column: auto;
             }
 
             .header-actions {
               width: 100%;
             }
 
-            .header-actions button {
+            .header-actions .button {
               flex: 1;
             }
-          }
 
-          @media (max-width: 650px) {
-            .stats-grid {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .info-grid {
-              grid-template-columns: 1fr;
-            }
-
-            .info-item:nth-child(odd) {
-              border-right: 0;
-            }
-
-            .search-input {
-              width: 100%;
+            .footer-card {
+              align-items: flex-start;
+              flex-direction: column;
             }
           }
         `}</style>
 
         <div className="page-header">
-          <div className="header-left">
-            <button
-              type="button"
-              className="back-link"
-              onClick={() => {
-                if (batch.product_id) {
+          <div>
+            <div className="breadcrumb">
+              <button
+                type="button"
+                className="breadcrumb-button"
+                onClick={() =>
                   router.push(
-                    `/inventory/${batch.product_id}`,
-                  );
-                } else {
-                  router.push("/inventory");
+                    "/inventory/batches",
+                  )
                 }
-              }}
-            >
-              ← Back to Product Inventory
-            </button>
+              >
+                Batches & Lots
+              </button>
 
-            <div className="eyebrow">
-              Inventory Batch / Lot
-            </div>
+              <span className="breadcrumb-separator">
+                /
+              </span>
 
-            <div className="title-row">
-              <h1 className="page-title">
-                {batch.lot_number}
-              </h1>
-
-              <span className="lot-pill">
+              <span>
                 {batch.lot_number}
               </span>
             </div>
 
-            <p className="subtitle">
-              Complete batch provenance, stock
-              position, cost basis, units, and
-              movement history.
+            <div className="eyebrow">
+              <span className="eyebrow-dot" />
+              Batch Detail
+            </div>
+
+            <h1 className="page-title">
+              {batch.lot_number}
+            </h1>
+
+            <p className="page-subtitle">
+              Complete provenance, costing, stock,
+              and serialized asset information for
+              this inventory batch.
             </p>
           </div>
 
           <div className="header-actions">
             <button
               type="button"
-              className="secondary-button"
+              className="button"
               onClick={() =>
-                void loadData(true)
+                router.push(
+                  "/inventory/batches",
+                )
+              }
+            >
+              Back to Batches
+            </button>
+
+            <button
+              type="button"
+              className="button"
+              onClick={() =>
+                loadData(true)
               }
               disabled={refreshing}
             >
@@ -1733,99 +1413,117 @@ export default function InventoryBatchDetailPage() {
                 ? "Refreshing..."
                 : "Refresh"}
             </button>
-
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() =>
-                router.push(
-                  "/inventory/movements",
-                )
-              }
-            >
-              View Inventory Movements
-            </button>
           </div>
         </div>
 
-        <section className="hero-card">
-          <div className="hero-main">
-            <h2 className="product-name">
-              {product?.name ||
-                "Inventory Product"}
-            </h2>
+        {errorMessage && (
+          <div className="error-box">
+            {errorMessage}
+          </div>
+        )}
 
-            <div className="product-meta">
+        <div className="hero-card">
+          <div className="hero-grid">
+            <div className="hero-product">
+              <div className="product-label">
+                Product
+              </div>
+
+              <div className="product-name">
+                {product?.name ||
+                  "Unknown Product"}
+              </div>
+
               {variant?.name && (
-                <span className="meta-pill">
+                <div className="product-variant">
                   {variant.name}
-                </span>
+                </div>
               )}
 
               {variant?.sku && (
-                <span className="meta-pill">
-                  SKU {variant.sku}
-                </span>
+                <div className="product-sku">
+                  SKU: {variant.sku}
+                </div>
               )}
+            </div>
 
-              {product?.tracking_mode && (
-                <span className="meta-pill">
-                  {titleCase(
-                    product.tracking_mode,
-                  )}{" "}
-                  Tracking
-                </span>
-              )}
+            <div className="hero-stat">
+              <div className="hero-stat-label">
+                Tracking
+              </div>
 
-              <span
-                className={statusClass(
-                  batch.status,
+              <div className="hero-stat-value">
+                {getTrackingLabel(
+                  product?.tracking_mode ??
+                    null,
                 )}
+              </div>
+            </div>
+
+            <div className="hero-stat">
+              <div className="hero-stat-label">
+                Received
+              </div>
+
+              <div className="hero-stat-value">
+                {formatDate(
+                  batch.received_at,
+                )}
+              </div>
+            </div>
+
+            <div className="hero-stat">
+              <div className="hero-stat-label">
+                Unit Cost
+              </div>
+
+              <div className="hero-stat-value">
+                {formatCurrency(
+                  unitCost,
+                )}
+              </div>
+            </div>
+
+            <div className="hero-stat">
+              <div className="hero-stat-label">
+                Status
+              </div>
+
+              <div
+                style={{
+                  marginTop: 7,
+                }}
               >
-                {titleCase(batch.status)}
-              </span>
+                <span
+                  className={getStatusClass(
+                    batch.status,
+                  )}
+                >
+                  {batch.status ||
+                    "Unknown"}
+                </span>
+              </div>
             </div>
           </div>
-
-          <div className="hero-source">
-            <div className="source-label">
-              Received
-            </div>
-
-            <div className="source-value">
-              {formatDate(
-                batch.received_at,
-              )}
-            </div>
-
-            <div className="source-detail">
-              {stockReceipt?.receipt_number
-                ? `Goods Receipt ${stockReceipt.receipt_number}`
-                : "No goods receipt linked"}
-              {" · "}
-              {purchaseOrder?.po_number
-                ? `PO ${purchaseOrder.po_number}`
-                : "No purchase order linked"}
-            </div>
-          </div>
-        </section>
+        </div>
 
         <div className="stats-grid">
           <div className="stat-card">
             <div className="stat-label">
-              Quantity Received
+              Original Quantity
             </div>
 
             <div className="stat-value">
               {formatNumber(
                 Number(
-                  batch.quantity_received || 0,
+                  batch.quantity_received ??
+                    0,
                 ),
               )}
             </div>
 
-            <div className="stat-detail">
-              Original batch quantity
+            <div className="stat-helper">
+              Units received
             </div>
           </div>
 
@@ -1836,11 +1534,11 @@ export default function InventoryBatchDetailPage() {
 
             <div className="stat-value">
               {formatNumber(
-                totals.quantity,
+                stockSummary.quantity,
               )}
             </div>
 
-            <div className="stat-detail">
+            <div className="stat-helper">
               Across all locations
             </div>
           </div>
@@ -1852,12 +1550,12 @@ export default function InventoryBatchDetailPage() {
 
             <div className="stat-value">
               {formatNumber(
-                totals.available,
+                stockSummary.available,
               )}
             </div>
 
-            <div className="stat-detail">
-              Not reserved
+            <div className="stat-helper">
+              After reservations
             </div>
           </div>
 
@@ -1868,841 +1566,495 @@ export default function InventoryBatchDetailPage() {
 
             <div className="stat-value">
               {formatNumber(
-                totals.reserved,
+                stockSummary.reserved,
               )}
             </div>
 
-            <div className="stat-detail">
-              Held inventory
+            <div className="stat-helper">
+              Currently allocated
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-label">
-              Unit Cost
+              Consumed
             </div>
 
             <div className="stat-value">
-              {formatMoney(
-                totals.unitCost,
+              {formatNumber(
+                consumedQuantity,
               )}
             </div>
 
-            <div className="stat-detail">
-              Batch cost basis
+            <div className="stat-helper">
+              From original batch
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-label">
-              Current Value
+              Batch Cost
             </div>
 
             <div className="stat-value">
-              {formatMoney(
-                totals.currentValue,
+              {formatCurrency(
+                calculatedTotalCost,
               )}
             </div>
 
-            <div className="stat-detail">
-              Based on current stock
+            <div className="stat-helper">
+              Total acquisition cost
             </div>
           </div>
         </div>
 
-        <section className="tabs-card">
-          <div className="tabs">
-            <button
-              type="button"
-              className={
-                activeTab === "overview"
-                  ? "tab active"
-                  : "tab"
-              }
-              onClick={() =>
-                setActiveTab("overview")
-              }
-            >
-              Overview
-            </button>
+        <div className="two-column">
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">
+                Batch Information
+              </h2>
 
-            <button
-              type="button"
-              className={
-                activeTab === "stock"
-                  ? "tab active"
-                  : "tab"
-              }
-              onClick={() =>
-                setActiveTab("stock")
-              }
-            >
-              Warehouse Stock
-            </button>
-
-            <button
-              type="button"
-              className={
-                activeTab === "serials"
-                  ? "tab active"
-                  : "tab"
-              }
-              onClick={() =>
-                setActiveTab("serials")
-              }
-            >
-              Individual Units
-              {serializedUnits.length > 0 && (
-                <> ({serializedUnits.length})</>
-              )}
-            </button>
-
-            <button
-              type="button"
-              className={
-                activeTab === "movements"
-                  ? "tab active"
-                  : "tab"
-              }
-              onClick={() =>
-                setActiveTab("movements")
-              }
-            >
-              Movement History
-              {movements.length > 0 && (
-                <> ({movements.length})</>
-              )}
-            </button>
-          </div>
-        </section>
-
-        {activeTab === "overview" && (
-          <div className="content-grid">
-            <div>
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      Batch Information
-                    </h2>
-
-                    <p>
-                      The immutable receiving and
-                      cost identity for this lot.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="info-grid">
-                  <div className="info-item">
-                    <div className="info-label">
-                      Lot Number
-                    </div>
-
-                    <div className="info-value mono">
-                      {batch.lot_number}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Status
-                    </div>
-
-                    <div className="info-value">
-                      <span
-                        className={statusClass(
-                          batch.status,
-                        )}
-                      >
-                        {titleCase(
-                          batch.status,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Product
-                    </div>
-
-                    <div className="info-value">
-                      {product?.name ||
-                        "—"}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Variant
-                    </div>
-
-                    <div className="info-value">
-                      {variant?.name ||
-                        "Default / None"}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      SKU
-                    </div>
-
-                    <div className="info-value mono">
-                      {variant?.sku || "—"}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Received
-                    </div>
-
-                    <div className="info-value">
-                      {formatDate(
-                        batch.received_at,
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Quantity Received
-                    </div>
-
-                    <div className="info-value">
-                      {formatNumber(
-                        Number(
-                          batch.quantity_received ||
-                            0,
-                        ),
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Created
-                    </div>
-
-                    <div className="info-value">
-                      {formatDateTime(
-                        batch.created_at,
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      Source Documents
-                    </h2>
-
-                    <p>
-                      Procurement and receiving
-                      lineage for this batch.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="info-grid">
-                  <div className="info-item">
-                    <div className="info-label">
-                      Supplier
-                    </div>
-
-                    <div className="info-value">
-                      {supplier?.display_name ||
-                        supplier?.legal_name ||
-                        "Not linked"}
-                    </div>
-
-                    {supplier?.supplier_number && (
-                      <div className="secondary-text">
-                        {
-                          supplier.supplier_number
-                        }
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Purchase Order
-                    </div>
-
-                    <div className="info-value">
-                      {purchaseOrder?.po_number ||
-                        "Not linked"}
-                    </div>
-
-                    {purchaseOrder?.status && (
-                      <div className="secondary-text">
-                        Status:{" "}
-                        {titleCase(
-                          purchaseOrder.status,
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Goods Receipt
-                    </div>
-
-                    <div className="info-value">
-                      {stockReceipt?.receipt_number ||
-                        "Not linked"}
-                    </div>
-
-                    {stockReceipt?.received_at && (
-                      <div className="secondary-text">
-                        Received{" "}
-                        {formatDate(
-                          stockReceipt.received_at,
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="info-item">
-                    <div className="info-label">
-                      Supplier Reference
-                    </div>
-
-                    <div className="info-value">
-                      {stockReceipt?.reference_number ||
-                        "—"}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      Traceability Chain
-                    </h2>
-
-                    <p>
-                      Follow this inventory lot from
-                      procurement to customer.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="trace-card">
-                  <div className="trace-line">
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-                      <div className="trace-title">
-                        Supplier
-                      </div>
-
-                      <div className="trace-detail">
-                        {supplier?.display_name ||
-                          supplier?.legal_name ||
-                          "Supplier not linked"}
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Purchase Order
-                      </div>
-
-                      <div className="trace-detail">
-                        {purchaseOrder?.po_number ||
-                          "Purchase order not linked"}
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Goods Receipt
-                      </div>
-
-                      <div className="trace-detail">
-                        {stockReceipt?.receipt_number ||
-                          "Goods receipt not linked"}
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Batch / Lot
-                      </div>
-
-                      <div className="trace-detail">
-                        {batch.lot_number}
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Warehouse Stock
-                      </div>
-
-                      <div className="trace-detail">
-                        {batchStock.length} stock
-                        position
-                        {batchStock.length ===
-                        1
-                          ? ""
-                          : "s"} across{" "}
-                        {
-                          new Set(
-                            batchStock.map(
-                              (row) =>
-                                row.warehouse_id,
-                            ),
-                          ).size
-                        }{" "}
-                        warehouse
-                        {new Set(
-                          batchStock.map(
-                            (row) => row.warehouse_id,
-                          ),
-                        ).size === 1
-                          ? ""
-                          : "s"}.
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Individual Units
-                      </div>
-
-                      <div className="trace-detail">
-                        {serializedUnits.length >
-                        0
-                          ? `${serializedUnits.length} manufacturer serial unit${
-                              serializedUnits.length ===
-                              1
-                                ? ""
-                                : "s"
-                            } tracked`
-                          : "No serialized units are attached to this batch."}
-                      </div>
-                    </div>
-
-                    <div className="trace-item">
-                      <span className="trace-dot" />
-
-                      <div className="trace-title">
-                        Movement Ledger
-                      </div>
-
-                      <div className="trace-detail">
-                        {movements.length} movement
-                        {movements.length ===
-                        1
-                          ? ""
-                          : "s"}{" "}
-                        recorded for this lot.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+              <p className="card-description">
+                Provenance and receiving references
+                associated with this batch.
+              </p>
             </div>
 
-            <div>
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      Cost Breakdown
-                    </h2>
-
-                    <p>
-                      Actual batch cost components.
-                    </p>
-                  </div>
+            <div className="details-grid">
+              <div className="detail-item">
+                <div className="detail-label">
+                  Lot Number
                 </div>
 
-                <div>
-                  <div className="cost-row">
-                    <span>
-                      Base Unit Cost
-                    </span>
-
-                    <strong>
-                      {formatMoney(
-                        Number(
-                          batch.unit_cost ||
-                            0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Landed Costs
-                    </span>
-
-                    <strong>
-                      {formatMoney(
-                        Number(
-                          batch.landed_cost_total ||
-                            0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Refurbishment
-                    </span>
-
-                    <strong>
-                      {formatMoney(
-                        Number(
-                          batch.refurbishment_cost_total ||
-                            0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Other Costs
-                    </span>
-
-                    <strong>
-                      {formatMoney(
-                        Number(
-                          batch.other_cost_total ||
-                            0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row total">
-                    <span>
-                      Total Batch Cost
-                    </span>
-
-                    <strong>
-                      {formatMoney(
-                        Number(
-                          batch.total_cost ||
-                            0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
+                <div className="detail-value">
+                  {batch.lot_number}
                 </div>
-              </section>
+              </div>
 
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2>
-                      Unit Position
-                    </h2>
-
-                    <p>
-                      Current lifecycle position of
-                      this lot.
-                    </p>
-                  </div>
+              <div className="detail-item">
+                <div className="detail-label">
+                  Tracking Mode
                 </div>
 
-                <div>
-                  <div className="cost-row">
-                    <span>
-                      Current Stock
-                    </span>
-
-                    <strong>
-                      {formatNumber(
-                        totals.quantity,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Available
-                    </span>
-
-                    <strong>
-                      {formatNumber(
-                        totals.available,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Reserved
-                    </span>
-
-                    <strong>
-                      {formatNumber(
-                        totals.reserved,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Available Serial Units
-                    </span>
-
-                    <strong>
-                      {formatNumber(
-                        totals.availableUnits,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="cost-row">
-                    <span>
-                      Sold Serial Units
-                    </span>
-
-                    <strong>
-                      {formatNumber(
-                        totals.soldUnits,
-                      )}
-                    </strong>
-                  </div>
+                <div className="detail-value">
+                  {getTrackingLabel(
+                    product?.tracking_mode ??
+                      null,
+                  )}
                 </div>
-              </section>
+              </div>
 
-              {batch.notes && (
-                <section className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2>Batch Notes</h2>
-                    </div>
-                  </div>
+              <div className="detail-item">
+                <div className="detail-label">
+                  Purchase Order
+                </div>
 
-                  <div
-                    style={{
-                      padding: "17px 18px",
-                      color: "#64748b",
-                      fontSize: 12,
-                      lineHeight: 1.7,
-                    }}
+                <div className="detail-value">
+                  {batch.purchase_order_id
+                    ? batch.purchase_order_id
+                    : "Not linked"}
+                </div>
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">
+                  PO Item
+                </div>
+
+                <div className="detail-value">
+                  {batch.purchase_order_item_id
+                    ? batch.purchase_order_item_id
+                    : "Not linked"}
+                </div>
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">
+                  Stock Receipt
+                </div>
+
+                <div className="detail-value">
+                  {batch.stock_receipt_id
+                    ? batch.stock_receipt_id
+                    : "Not linked"}
+                </div>
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">
+                  Receipt Item
+                </div>
+
+                <div className="detail-value">
+                  {batch.stock_receipt_item_id
+                    ? batch.stock_receipt_item_id
+                    : "Not linked"}
+                </div>
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">
+                  Received At
+                </div>
+
+                <div className="detail-value">
+                  {formatDateTime(
+                    batch.received_at,
+                  )}
+                </div>
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">
+                  Batch Status
+                </div>
+
+                <div className="detail-value">
+                  <span
+                    className={getStatusClass(
+                      batch.status,
+                    )}
                   >
-                    {batch.notes}
-                  </div>
-                </section>
-              )}
+                    {batch.status ||
+                      "Unknown"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        )}
 
-        {activeTab === "stock" && (
-          <section className="card">
+          <div className="card">
             <div className="card-header">
-              <div>
-                <h2>
-                  Warehouse & Location Stock
-                </h2>
+              <h2 className="card-title">
+                Cost Breakdown
+              </h2>
 
-                <p>
-                  Exact physical stock positions
-                  for this batch.
-                </p>
-              </div>
+              <p className="card-description">
+                Full acquisition cost composition
+                for this batch.
+              </p>
             </div>
 
-            {batchStock.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  □
+            <div className="cost-list">
+              <div className="cost-row">
+                <div className="cost-label">
+                  Base inventory cost
                 </div>
 
-                <h3>
-                  No stock positions
-                </h3>
-
-                <p>
-                  This batch currently has no
-                  warehouse/location stock rows.
-                </p>
+                <div className="cost-value">
+                  {formatCurrency(
+                    baseCost,
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="allocation-card">
-                {batchStock.map((row) => {
-                  const warehouse =
-                    warehouseMap.get(
-                      row.warehouse_id,
-                    );
 
-                  const location =
-                    locationMap.get(
-                      row.location_id,
-                    );
+              <div className="cost-row">
+                <div className="cost-label">
+                  Landed cost
+                </div>
 
-                  const available =
-                    Math.max(
-                      0,
-                      Number(row.quantity || 0) -
+                <div className="cost-value">
+                  {formatCurrency(
+                    landedCost,
+                  )}
+                </div>
+              </div>
+
+              <div className="cost-row">
+                <div className="cost-label">
+                  Refurbishment cost
+                </div>
+
+                <div className="cost-value">
+                  {formatCurrency(
+                    refurbishmentCost,
+                  )}
+                </div>
+              </div>
+
+              <div className="cost-row">
+                <div className="cost-label">
+                  Other cost
+                </div>
+
+                <div className="cost-value">
+                  {formatCurrency(
+                    otherCost,
+                  )}
+                </div>
+              </div>
+
+              <div className="cost-total">
+                <div className="cost-label">
+                  Total Batch Cost
+                </div>
+
+                <div className="cost-value">
+                  {formatCurrency(
+                    calculatedTotalCost,
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="card-header">
+            <h2 className="card-title">
+              Current Stock by Location
+            </h2>
+
+            <p className="card-description">
+              Physical quantity belonging specifically
+              to this batch.
+            </p>
+          </div>
+
+          {stockRows.length === 0 ? (
+            <div className="empty">
+              This batch currently has no physical
+              stock records.
+            </div>
+          ) : (
+            <div className="stock-table-wrap">
+              <table className="stock-table">
+                <thead>
+                  <tr>
+                    <th>
+                      Warehouse
+                    </th>
+
+                    <th>
+                      Location
+                    </th>
+
+                    <th>
+                      Quantity
+                    </th>
+
+                    <th>
+                      Reserved
+                    </th>
+
+                    <th>
+                      Available
+                    </th>
+
+                    <th>
+                      Last Updated
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {stockRows.map(
+                    (stock) => {
+                      const warehouse =
+                        warehouseMap.get(
+                          stock.warehouse_id,
+                        );
+
+                      const location =
+                        locationMap.get(
+                          stock.location_id,
+                        );
+
+                      const quantity =
                         Number(
-                          row.reserved_quantity ||
+                          stock.quantity ??
                             0,
-                        ),
-                    );
+                        );
 
-                  return (
-                    <div
-                      key={row.id}
-                      className="allocation-row"
-                    >
-                      <div className="allocation-main">
-                        <div className="allocation-title">
-                          {warehouse?.name ||
-                            "Unknown Warehouse"}
-                        </div>
+                      const reserved =
+                        Number(
+                          stock.reserved_quantity ??
+                            0,
+                        );
 
-                        <div className="allocation-subtitle">
-                          {warehouse?.code
-                            ? `${warehouse.code} · `
-                            : ""}
-                          {location?.name ||
-                            "Unknown Location"}
-                          {location?.code
-                            ? ` (${location.code})`
-                            : ""}
-                        </div>
-                      </div>
+                      return (
+                        <tr
+                          key={
+                            stock.id
+                          }
+                        >
+                          <td>
+                            <div className="warehouse-name">
+                              {warehouse
+                                ?.name ||
+                                "Unknown Warehouse"}
+                            </div>
 
-                      <div className="allocation-values">
-                        <div className="allocation-available">
-                          {formatNumber(
-                            available,
-                          )}{" "}
-                          available
-                        </div>
+                            {warehouse
+                              ?.code && (
+                              <div className="location-name">
+                                {
+                                  warehouse.code
+                                }
+                              </div>
+                            )}
+                          </td>
 
-                        <div className="allocation-reserved">
-                          {formatNumber(
-                            Number(
-                              row.reserved_quantity ||
-                                0,
-                            ),
-                          )}{" "}
-                          reserved ·{" "}
-                          {formatNumber(
-                            Number(
-                              row.quantity || 0,
-                            ),
-                          )}{" "}
-                          total
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
+                          <td>
+                            <div className="warehouse-name">
+                              {location
+                                ?.name ||
+                                "Unknown Location"}
+                            </div>
 
-        {activeTab === "serials" && (
-          <section className="card">
+                            {location
+                              ?.code && (
+                              <div className="location-name">
+                                {
+                                  location.code
+                                }
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            <span className="number-strong">
+                              {formatNumber(
+                                quantity,
+                              )}
+                            </span>
+                          </td>
+
+                          <td>
+                            {formatNumber(
+                              reserved,
+                            )}
+                          </td>
+
+                          <td>
+                            <span className="number-strong">
+                              {formatNumber(
+                                Math.max(
+                                  quantity -
+                                    reserved,
+                                  0,
+                                ),
+                              )}
+                            </span>
+                          </td>
+
+                          <td>
+                            {formatDateTime(
+                              stock.updated_at,
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {product?.tracking_mode ===
+          "serial" && (
+          <div
+            className="card"
+            style={{
+              marginBottom: 18,
+            }}
+          >
             <div className="card-header">
-              <div>
-                <h2>
-                  Individual Units
-                </h2>
+              <div className="serial-header">
+                <div>
+                  <h2 className="card-title">
+                    Serial Assets in This Batch
+                  </h2>
 
-                <p>
-                  Actual manufacturer serial
-                  numbers belonging to this batch.
-                </p>
+                  <p className="card-description">
+                    Individual serialized units that
+                    belong to this batch.
+                  </p>
+                </div>
+
+                <div className="serial-summary">
+                  <span className="serial-summary-item">
+                    Total:{" "}
+                    <strong>
+                      {serializedStats.total}
+                    </strong>
+                  </span>
+
+                  <span className="serial-summary-item">
+                    Available:{" "}
+                    <strong>
+                      {
+                        serializedStats.available
+                      }
+                    </strong>
+                  </span>
+
+                  <span className="serial-summary-item">
+                    Sold:{" "}
+                    <strong>
+                      {serializedStats.sold}
+                    </strong>
+                  </span>
+
+                  <span className="serial-summary-item">
+                    Repair:{" "}
+                    <strong>
+                      {serializedStats.repair}
+                    </strong>
+                  </span>
+                </div>
               </div>
-
-              <input
-                className="search-input"
-                type="search"
-                value={serialSearch}
-                onChange={(event) =>
-                  setSerialSearch(
-                    event.target.value,
-                  )
-                }
-                placeholder="Search serial..."
-              />
             </div>
 
-            {serializedUnits.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  #
-                </div>
-
-                <h3>
-                  No serialized units
-                </h3>
-
-                <p>
-                  This batch does not currently
-                  contain individual manufacturer
-                  serial units.
-                </p>
-              </div>
-            ) : filteredSerials.length ===
-              0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  #
-                </div>
-
-                <h3>
-                  No matching serials
-                </h3>
-
-                <p>
-                  No serialized units matched
-                  your search.
-                </p>
+            {serialUnits.length === 0 ? (
+              <div className="empty">
+                No serialized assets are currently
+                linked to this batch.
               </div>
             ) : (
-              <div className="table-wrap">
-                <table>
+              <div className="serial-table-wrap">
+                <table className="serial-table">
                   <thead>
                     <tr>
                       <th>
-                        Manufacturer Serial
+                        Serial Number
                       </th>
-                      <th>Status</th>
-                      <th>Location</th>
-                      <th>Cost</th>
-                      <th>Order</th>
-                      <th>Customer</th>
-                      <th>Warranty</th>
+
+                      <th>
+                        Status
+                      </th>
+
+                      <th>
+                        Warehouse
+                      </th>
+
+                      <th>
+                        Location
+                      </th>
+
+                      <th>
+                        Cost
+                      </th>
+
+                      <th>
+                        Warranty
+                      </th>
+
+                      <th>
+                        Received
+                      </th>
+
+                      <th>
+                        Sold
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {filteredSerials.map(
+                    {serialUnits.map(
                       (unit) => {
                         const warehouse =
                           unit.warehouse_id
@@ -2718,31 +2070,36 @@ export default function InventoryBatchDetailPage() {
                               )
                             : null;
 
-                        const order =
-                          unit.order_id
-                            ? orderMap.get(
-                                unit.order_id,
+                        const warrantyText =
+                          unit.warranty_end
+                            ? formatDate(
+                                unit.warranty_end,
                               )
-                            : null;
-
-                        const customer =
-                          unit.customer_id
-                            ? customerMap.get(
-                                unit.customer_id,
-                              )
-                            : null;
+                            : "No warranty";
 
                         return (
-                          <tr key={unit.id}>
+                          <tr
+                            key={
+                              unit.id
+                            }
+                          >
                             <td>
-                              <div className="primary-text mono">
+                              <div
+                                className="serial-number"
+                                onClick={() =>
+                                  router.push(
+                                    `/inventory/serial-numbers/${unit.id}`,
+                                  )
+                                }
+                              >
                                 {
                                   unit.serial_number
                                 }
                               </div>
 
                               {unit.barcode && (
-                                <div className="secondary-text">
+                                <div className="serial-barcode">
+                                  Barcode:{" "}
                                   {
                                     unit.barcode
                                   }
@@ -2752,54 +2109,72 @@ export default function InventoryBatchDetailPage() {
 
                             <td>
                               <span
-                                className={statusClass(
+                                className={getSerialStatusClass(
                                   unit.status,
                                 )}
                               >
-                                {titleCase(
-                                  unit.status,
-                                )}
+                                {unit.status ||
+                                  "Unknown"}
                               </span>
                             </td>
 
                             <td>
-                              <div className="primary-text">
-                                {warehouse?.name ||
+                              <div className="serial-location">
+                                {warehouse
+                                  ?.name ||
                                   "—"}
                               </div>
 
-                              <div className="secondary-text">
-                                {location?.name ||
-                                  "—"}
-                              </div>
+                              {warehouse
+                                ?.code && (
+                                <div className="serial-subtext">
+                                  {
+                                    warehouse.code
+                                  }
+                                </div>
+                              )}
                             </td>
 
                             <td>
-                              {formatMoney(
+                              <div className="serial-location">
+                                {location
+                                  ?.name ||
+                                  "—"}
+                              </div>
+
+                              {location
+                                ?.code && (
+                                <div className="serial-subtext">
+                                  {
+                                    location.code
+                                  }
+                                </div>
+                              )}
+                            </td>
+
+                            <td>
+                              {formatCurrency(
                                 Number(
-                                  unit.cost_price ||
-                                    0,
+                                  unit.cost_price ??
+                                    unitCost,
                                 ),
                               )}
                             </td>
 
                             <td>
-                              {order?.order_number ||
-                                "—"}
+                              {warrantyText}
                             </td>
 
                             <td>
-                              {customer?.company_name ||
-                                customer?.name ||
-                                "—"}
+                              {formatDate(
+                                unit.received_at,
+                              )}
                             </td>
 
                             <td>
-                              {unit.warranty_end
-                                ? formatDate(
-                                    unit.warranty_end,
-                                  )
-                                : "—"}
+                              {formatDate(
+                                unit.sold_at,
+                              )}
                             </td>
                           </tr>
                         );
@@ -2809,190 +2184,47 @@ export default function InventoryBatchDetailPage() {
                 </table>
               </div>
             )}
-          </section>
+          </div>
         )}
 
-        {activeTab === "movements" && (
-          <section className="card">
-            <div className="card-header">
-              <div>
-                <h2>
-                  Batch Movement History
-                </h2>
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="card-header">
+            <h2 className="card-title">
+              Notes
+            </h2>
 
-                <p>
-                  Every stock movement involving
-                  this batch.
-                </p>
-              </div>
+            <p className="card-description">
+              Internal notes recorded against this
+              batch.
+            </p>
+          </div>
 
-              <input
-                className="search-input"
-                type="search"
-                value={movementSearch}
-                onChange={(event) =>
-                  setMovementSearch(
-                    event.target.value,
-                  )
-                }
-                placeholder="Search movements..."
-              />
-            </div>
+          <div className="notes-box">
+            {batch.notes?.trim()
+              ? batch.notes
+              : "No notes have been recorded for this batch."}
+          </div>
+        </div>
 
-            {filteredMovements.length ===
-            0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  ⇄
-                </div>
-
-                <h3>
-                  No movements recorded
-                </h3>
-
-                <p>
-                  Batch movements will appear here
-                  as receiving, sales, transfers,
-                  adjustments, and returns occur.
-                </p>
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Movement</th>
-                      <th>Quantity</th>
-                      <th>Balance</th>
-                      <th>Location</th>
-                      <th>Reference</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredMovements.map(
-                      (movement) => {
-                        const warehouse =
-                          movement.warehouse_id
-                            ? warehouseMap.get(
-                                movement.warehouse_id,
-                              )
-                            : null;
-
-                        const location =
-                          movement.location_id
-                            ? locationMap.get(
-                                movement.location_id,
-                              )
-                            : null;
-
-                        return (
-                          <tr
-                            key={movement.id}
-                          >
-                            <td>
-                              {formatDateTime(
-                                movement.created_at,
-                              )}
-                            </td>
-
-                            <td>
-                              <div className="primary-text">
-                                {titleCase(
-                                  movement.movement_type,
-                                )}
-                              </div>
-
-                              {movement.reason && (
-                                <div className="secondary-text">
-                                  {
-                                    movement.reason
-                                  }
-                                </div>
-                              )}
-                            </td>
-
-                            <td>
-                              {formatNumber(
-                                Number(
-                                  movement.quantity ||
-                                    0,
-                                ),
-                              )}
-                            </td>
-
-                            <td>
-                              <div className="secondary-text">
-                                Before:{" "}
-                                {movement.quantity_before !==
-                                null
-                                  ? formatNumber(
-                                      movement.quantity_before,
-                                    )
-                                  : "—"}
-                              </div>
-
-                              <div className="primary-text">
-                                After:{" "}
-                                {movement.quantity_after !==
-                                null
-                                  ? formatNumber(
-                                      movement.quantity_after,
-                                    )
-                                  : "—"}
-                              </div>
-                            </td>
-
-                            <td>
-                              <div className="primary-text">
-                                {warehouse?.name ||
-                                  "—"}
-                              </div>
-
-                              <div className="secondary-text">
-                                {location?.name ||
-                                  "—"}
-                              </div>
-                            </td>
-
-                            <td>
-                              {movement.reference_type && (
-                                <div className="primary-text">
-                                  {titleCase(
-                                    movement.reference_type,
-                                  )}
-                                </div>
-                              )}
-
-                              {movement.reference_id && (
-                                <div className="secondary-text mono">
-                                  {
-                                    movement.reference_id
-                                  }
-                                </div>
-                              )}
-
-                              {!movement.reference_type &&
-                                !movement.reference_id &&
-                                "—"}
-                            </td>
-
-                            <td>
-                              {movement.notes ||
-                                "—"}
-                            </td>
-                          </tr>
-                        );
-                      },
-                    )}
-                  </tbody>
-                </table>
-              </div>
+        <div className="footer-card">
+          <span>
+            Batch created:{" "}
+            {formatDateTime(
+              batch.created_at,
             )}
-          </section>
-        )}
+          </span>
+
+          <span>
+            Last updated:{" "}
+            {formatDateTime(
+              batch.updated_at,
+            )}
+          </span>
+
+          <span>
+            Batch ID: {batch.id}
+          </span>
+        </div>
       </div>
     </AppShell>
   );

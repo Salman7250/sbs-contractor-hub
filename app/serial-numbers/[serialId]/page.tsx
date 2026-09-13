@@ -6,21 +6,60 @@ import {
   useMemo,
   useState,
 } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
-type SerialStatus =
-  | "available"
-  | "reserved"
-  | "sold"
-  | "returned"
-  | "repair"
-  | "rma"
-  | "damaged"
-  | "lost"
-  | "disposed";
+type Product = {
+  id: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  tracking_mode: string | null;
+};
+
+type Variant = {
+  id: string;
+  product_id: string;
+  name: string | null;
+  sku: string | null;
+  cost_price: number | null;
+  selling_price: number | null;
+};
+
+type Batch = {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  lot_number: string;
+  supplier_id: string | null;
+  purchase_order_id: string | null;
+  purchase_order_item_id: string | null;
+  stock_receipt_id: string | null;
+  stock_receipt_item_id: string | null;
+  received_at: string | null;
+  quantity_received: number;
+  unit_cost: number | null;
+  landed_cost_total: number | null;
+  refurbishment_cost_total: number | null;
+  other_cost_total: number | null;
+  total_cost: number | null;
+  status: string | null;
+  notes: string | null;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+  code: string | null;
+};
+
+type Location = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  code: string | null;
+};
 
 type SerializedUnit = {
   id: string;
@@ -29,43 +68,33 @@ type SerializedUnit = {
   variant_id: string | null;
   serial_number: string;
   barcode: string | null;
-  status: SerialStatus;
+  status: string | null;
   warehouse_id: string | null;
+  location_id: string | null;
   customer_id: string | null;
   order_id: string | null;
+  order_item_id: string | null;
   invoice_id: string | null;
   purchase_order_id: string | null;
   purchase_order_item_id: string | null;
-  cost_price: number;
+  cost_price: number | null;
   warranty_start: string | null;
   warranty_end: string | null;
   received_at: string | null;
   sold_at: string | null;
+  batch_id: string | null;
+  allocated_at: string | null;
+  returned_at: string | null;
+  disposed_at: string | null;
   notes: string | null;
-  created_at: string;
-  updated_at: string;
-  product?: {
-    id: string;
-    name: string;
-    brand: string | null;
-    category: string | null;
-  } | null;
-  variant?: {
-    id: string;
-    name: string;
-    sku: string | null;
-    barcode: string | null;
-  } | null;
-  customer?: {
-    id: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-  } | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-type HistoryEvent = {
+type SerialHistory = {
   id: string;
+  company_id: string;
+  serialized_unit_id: string;
   event_type: string;
   from_status: string | null;
   to_status: string | null;
@@ -75,76 +104,20 @@ type HistoryEvent = {
   reference_id: string | null;
   notes: string | null;
   created_by: string | null;
-  created_at: string;
+  created_at: string | null;
 };
-
-const inputStyle = {
-  border: "1px solid #e2e8f0",
-};
-
-function statusLabel(status: SerialStatus) {
-  switch (status) {
-    case "available":
-      return "Available";
-    case "reserved":
-      return "Reserved";
-    case "sold":
-      return "Sold";
-    case "returned":
-      return "Returned";
-    case "repair":
-      return "Repair";
-    case "rma":
-      return "RMA";
-    case "damaged":
-      return "Damaged";
-    case "lost":
-      return "Lost";
-    case "disposed":
-      return "Disposed";
-    default:
-      return status;
-  }
-}
-
-function statusClasses(status: SerialStatus) {
-  switch (status) {
-    case "available":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "reserved":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "sold":
-      return "bg-blue-50 text-blue-700 ring-blue-200";
-    case "returned":
-      return "bg-violet-50 text-violet-700 ring-violet-200";
-    case "repair":
-      return "bg-orange-50 text-orange-700 ring-orange-200";
-    case "rma":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
-    case "damaged":
-      return "bg-red-50 text-red-700 ring-red-200";
-    case "lost":
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-    case "disposed":
-      return "bg-slate-100 text-slate-500 ring-slate-200";
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
 
 function formatDate(value: string | null) {
   if (!value) return "—";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return date.toLocaleDateString(undefined, {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
   });
 }
 
@@ -153,910 +126,2260 @@ function formatDateTime(value: string | null) {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return date.toLocaleString(undefined, {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
 }
 
-function formatMoney(value: number, currency: string) {
+function formatCurrency(value: number | null) {
+  if (value === null || value === undefined) return "—";
+
   return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency,
-    minimumFractionDigits: 2,
+    currency: "AED",
     maximumFractionDigits: 2,
   }).format(value);
 }
 
-function eventLabel(eventType: string) {
-  switch (eventType) {
-    case "created":
-      return "Serial number created";
-    case "status_changed":
-      return "Status changed";
-    case "warehouse_transfer":
-      return "Warehouse transferred";
+function titleCase(value: string | null) {
+  if (!value) return "Unknown";
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalize(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().trim();
+}
+
+function statusClass(status: string | null) {
+  switch (normalize(status)) {
+    case "available":
+      return "status status-available";
+
+    case "reserved":
+      return "status status-reserved";
+
     case "sold":
-      return "Unit sold";
+      return "status status-sold";
+
     case "returned":
-      return "Unit returned";
+      return "status status-returned";
+
     case "repair":
-      return "Sent for repair";
     case "rma":
-      return "RMA created";
-    case "warranty":
-      return "Warranty updated";
+      return "status status-warning";
+
+    case "damaged":
+    case "lost":
+    case "disposed":
+      return "status status-danger";
+
     default:
-      return eventType
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (letter) =>
-          letter.toUpperCase()
-        );
+      return "status status-neutral";
   }
 }
 
-function formatStatusForHistory(
-  status: string | null
+function getWarrantyState(
+  start: string | null,
+  end: string | null,
 ) {
-  if (!status) return "—";
+  if (!start && !end) return "none";
 
-  return status
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
+  const now = new Date();
+
+  if (end) {
+    const warrantyEnd = new Date(end);
+
+    if (!Number.isNaN(warrantyEnd.getTime())) {
+      return warrantyEnd >= now
+        ? "active"
+        : "expired";
+    }
+  }
+
+  return "none";
 }
 
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
-
-      <div className="mt-1.5 text-sm text-slate-900">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-export default function SerialNumberDetailPage() {
+export default function SerialDetailPage() {
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const params = useParams();
-  const supabase = useMemo(() => createClient(), []);
 
-  const serialId = Array.isArray(params.serialId)
-    ? params.serialId[0]
-    : params.serialId;
+  const serialIdParam = params?.serialId;
+
+  const serialId = Array.isArray(serialIdParam)
+    ? serialIdParam[0]
+    : serialIdParam;
 
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [unit, setUnit] =
     useState<SerializedUnit | null>(null);
 
+  const [product, setProduct] =
+    useState<Product | null>(null);
+
+  const [variant, setVariant] =
+    useState<Variant | null>(null);
+
+  const [batch, setBatch] =
+    useState<Batch | null>(null);
+
+  const [warehouse, setWarehouse] =
+    useState<Warehouse | null>(null);
+
+  const [location, setLocation] =
+    useState<Location | null>(null);
+
   const [history, setHistory] =
-    useState<HistoryEvent[]>([]);
+    useState<SerialHistory[]>([]);
 
-  const [currency, setCurrency] = useState("USD");
+  const [historyWarehouses, setHistoryWarehouses] =
+    useState<Warehouse[]>([]);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setErrorMessage("");
+  const loadData = useCallback(
+    async (showRefresh = false) => {
+      try {
+        if (showRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
 
-      if (!serialId) {
-        setErrorMessage(
-          "Serial number ID is missing."
-        );
-        return;
-      }
+        setErrorMessage("");
 
-      // ------------------------------------------------------
-      // 1. Authenticate
-      // ------------------------------------------------------
+        if (!serialId) {
+          throw new Error(
+            "Serial asset ID is missing.",
+          );
+        }
 
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (authError || !user) {
-        router.push("/login");
-        return;
-      }
+        if (userError) {
+          throw new Error(userError.message);
+        }
 
-      // ------------------------------------------------------
-      // 2. Get company membership
-      // ------------------------------------------------------
+        if (!user) {
+          throw new Error("You must be signed in.");
+        }
 
-      const {
-        data: membership,
-        error: membershipError,
-      } = await supabase
-        .from("company_members")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+        const { data: membership, error: membershipError } =
+          await supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
 
-      if (membershipError) {
-        throw membershipError;
-      }
+        if (membershipError) {
+          throw new Error(
+            membershipError.message,
+          );
+        }
 
-      if (!membership?.company_id) {
-        setErrorMessage(
-          "No company membership was found for this account."
-        );
-        return;
-      }
+        if (!membership?.company_id) {
+          throw new Error(
+            "No company membership found.",
+          );
+        }
 
-      const companyId = membership.company_id;
+        const companyId = membership.company_id;
 
-      // ------------------------------------------------------
-      // 3. Company
-      // ------------------------------------------------------
-
-      const {
-        data: company,
-        error: companyError,
-      } = await supabase
-        .from("companies")
-        .select("id, currency")
-        .eq("id", companyId)
-        .maybeSingle();
-
-      if (companyError) {
-        throw companyError;
-      }
-
-      setCurrency(company?.currency || "USD");
-
-      // ------------------------------------------------------
-      // 4. Serialized unit
-      // ------------------------------------------------------
-
-      const {
-        data: serialData,
-        error: serialError,
-      } = await supabase
-        .from("serialized_units")
-        .select(
-          `
-            id,
-            company_id,
-            product_id,
-            variant_id,
-            serial_number,
-            barcode,
-            status,
-            warehouse_id,
-            customer_id,
-            order_id,
-            invoice_id,
-            purchase_order_id,
-            purchase_order_item_id,
-            cost_price,
-            warranty_start,
-            warranty_end,
-            received_at,
-            sold_at,
-            notes,
-            created_at,
-            updated_at,
-            products (
-              id,
-              name,
-              brand,
-              category
-            ),
-            product_variants (
-              id,
-              name,
-              sku,
-              barcode
-            ),
-            customers (
-              id,
-              name,
-              email,
-              phone
+        const { data: serializedData, error: serializedError } =
+          await supabase
+            .from("serialized_units")
+            .select(
+              [
+                "id",
+                "company_id",
+                "product_id",
+                "variant_id",
+                "serial_number",
+                "barcode",
+                "status",
+                "warehouse_id",
+                "location_id",
+                "customer_id",
+                "order_id",
+                "order_item_id",
+                "invoice_id",
+                "purchase_order_id",
+                "purchase_order_item_id",
+                "cost_price",
+                "warranty_start",
+                "warranty_end",
+                "received_at",
+                "sold_at",
+                "batch_id",
+                "allocated_at",
+                "returned_at",
+                "disposed_at",
+                "notes",
+                "created_at",
+                "updated_at",
+              ].join(","),
             )
-          `
-        )
-        .eq("id", serialId)
-        .eq("company_id", companyId)
-        .maybeSingle();
+            .eq("company_id", companyId)
+            .eq("id", serialId)
+            .maybeSingle();
 
-      if (serialError) {
-        throw serialError;
-      }
+        if (serializedError) {
+          throw new Error(
+            serializedError.message,
+          );
+        }
 
-      if (!serialData) {
-        setErrorMessage(
-          "Serial number not found."
+        if (!serializedData) {
+          throw new Error(
+            "Serial asset not found.",
+          );
+        }
+
+        const serializedUnit =
+          serializedData as unknown as SerializedUnit;
+
+        setUnit(serializedUnit);
+
+        const [
+          productResult,
+          variantResult,
+          batchResult,
+          warehouseResult,
+          locationResult,
+          historyResult,
+        ] = await Promise.all([
+          supabase
+            .from("products")
+            .select(
+              "id,name,brand,category,tracking_mode",
+            )
+            .eq("company_id", companyId)
+            .eq("id", serializedUnit.product_id)
+            .maybeSingle(),
+
+          serializedUnit.variant_id
+            ? supabase
+                .from("product_variants")
+                .select(
+                  "id,product_id,name,sku,cost_price,selling_price",
+                )
+                .eq("company_id", companyId)
+                .eq(
+                  "id",
+                  serializedUnit.variant_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
+
+          serializedUnit.batch_id
+            ? supabase
+                .from("inventory_batches")
+                .select(
+                  [
+                    "id",
+                    "product_id",
+                    "variant_id",
+                    "lot_number",
+                    "supplier_id",
+                    "purchase_order_id",
+                    "purchase_order_item_id",
+                    "stock_receipt_id",
+                    "stock_receipt_item_id",
+                    "received_at",
+                    "quantity_received",
+                    "unit_cost",
+                    "landed_cost_total",
+                    "refurbishment_cost_total",
+                    "other_cost_total",
+                    "total_cost",
+                    "status",
+                    "notes",
+                  ].join(","),
+                )
+                .eq("company_id", companyId)
+                .eq(
+                  "id",
+                  serializedUnit.batch_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
+
+          serializedUnit.warehouse_id
+            ? supabase
+                .from("warehouses")
+                .select("id,name,code")
+                .eq("company_id", companyId)
+                .eq(
+                  "id",
+                  serializedUnit.warehouse_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
+
+          serializedUnit.location_id
+            ? supabase
+                .from("warehouse_locations")
+                .select(
+                  "id,warehouse_id,name,code",
+                )
+                .eq("company_id", companyId)
+                .eq(
+                  "id",
+                  serializedUnit.location_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
+
+          supabase
+            .from("serial_number_history")
+            .select(
+              [
+                "id",
+                "company_id",
+                "serialized_unit_id",
+                "event_type",
+                "from_status",
+                "to_status",
+                "from_warehouse_id",
+                "to_warehouse_id",
+                "reference_type",
+                "reference_id",
+                "notes",
+                "created_by",
+                "created_at",
+              ].join(","),
+            )
+            .eq("company_id", companyId)
+            .eq(
+              "serialized_unit_id",
+              serialId,
+            )
+            .order("created_at", {
+              ascending: false,
+            }),
+        ]);
+
+        if (productResult.error) {
+          throw new Error(
+            productResult.error.message,
+          );
+        }
+
+        if (variantResult.error) {
+          throw new Error(
+            variantResult.error.message,
+          );
+        }
+
+        if (batchResult.error) {
+          throw new Error(
+            batchResult.error.message,
+          );
+        }
+
+        if (warehouseResult.error) {
+          throw new Error(
+            warehouseResult.error.message,
+          );
+        }
+
+        if (locationResult.error) {
+          throw new Error(
+            locationResult.error.message,
+          );
+        }
+
+        if (historyResult.error) {
+          throw new Error(
+            historyResult.error.message,
+          );
+        }
+
+        setProduct(
+          productResult.data as Product | null,
         );
-        return;
+
+        setVariant(
+          variantResult.data as Variant | null,
+        );
+
+        setBatch(
+          batchResult.data as Batch | null,
+        );
+
+        setWarehouse(
+          warehouseResult.data as Warehouse | null,
+        );
+
+        setLocation(
+          locationResult.data as Location | null,
+        );
+
+        const historyRows =
+          (historyResult.data ??
+            []) as unknown as SerialHistory[];
+
+        setHistory(historyRows);
+
+        const historyWarehouseIds = Array.from(
+          new Set(
+            historyRows.flatMap((row) =>
+              [
+                row.from_warehouse_id,
+                row.to_warehouse_id,
+              ].filter(Boolean),
+            ),
+          ),
+        );
+
+        if (historyWarehouseIds.length > 0) {
+          const {
+            data: historicalWarehouses,
+            error: historicalWarehouseError,
+          } = await supabase
+            .from("warehouses")
+            .select("id,name,code")
+            .eq("company_id", companyId)
+            .in(
+              "id",
+              historyWarehouseIds,
+            );
+
+          if (historicalWarehouseError) {
+            throw new Error(
+              historicalWarehouseError.message,
+            );
+          }
+
+          setHistoryWarehouses(
+            (historicalWarehouses ??
+              []) as Warehouse[],
+          );
+        } else {
+          setHistoryWarehouses([]);
+        }
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load serial asset.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      const normalizedUnit: SerializedUnit = {
-        id: serialData.id,
-        company_id: serialData.company_id,
-        product_id: serialData.product_id,
-        variant_id: serialData.variant_id,
-        serial_number: serialData.serial_number,
-        barcode: serialData.barcode,
-        status: serialData.status,
-        warehouse_id: serialData.warehouse_id,
-        customer_id: serialData.customer_id,
-        order_id: serialData.order_id,
-        invoice_id: serialData.invoice_id,
-        purchase_order_id:
-          serialData.purchase_order_id,
-        purchase_order_item_id:
-          serialData.purchase_order_item_id,
-        cost_price: Number(
-          serialData.cost_price || 0
-        ),
-        warranty_start:
-          serialData.warranty_start,
-        warranty_end:
-          serialData.warranty_end,
-        received_at:
-          serialData.received_at,
-        sold_at: serialData.sold_at,
-        notes: serialData.notes,
-        created_at:
-          serialData.created_at,
-        updated_at:
-          serialData.updated_at,
-        product: Array.isArray(
-          serialData.products
-        )
-          ? serialData.products[0] || null
-          : serialData.products || null,
-        variant: Array.isArray(
-          serialData.product_variants
-        )
-          ? serialData.product_variants[0] ||
-            null
-          : serialData.product_variants ||
-            null,
-        customer: Array.isArray(
-          serialData.customers
-        )
-          ? serialData.customers[0] || null
-          : serialData.customers || null,
-      };
-
-      setUnit(normalizedUnit);
-
-      // ------------------------------------------------------
-      // 5. History
-      // ------------------------------------------------------
-
-      const {
-        data: historyData,
-        error: historyError,
-      } = await supabase
-        .from("serial_number_history")
-        .select(
-          `
-            id,
-            event_type,
-            from_status,
-            to_status,
-            from_warehouse_id,
-            to_warehouse_id,
-            reference_type,
-            reference_id,
-            notes,
-            created_by,
-            created_at
-          `
-        )
-        .eq(
-          "serialized_unit_id",
-          serialId
-        )
-        .eq("company_id", companyId)
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (historyError) {
-        throw historyError;
-      }
-
-      setHistory(
-        (historyData || []) as HistoryEvent[]
-      );
-    } catch (error) {
-      console.error(
-        "Serial number detail load error:",
-        error
-      );
-
-      setErrorMessage(
-        "Unable to load this serial number. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [router, serialId, supabase]);
+    },
+    [serialId, supabase],
+  );
 
   useEffect(() => {
-    // This effect intentionally starts the asynchronous serial-number synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
+    loadData();
   }, [loadData]);
 
-  // ----------------------------------------------------------
-  // Warranty state
-  // ----------------------------------------------------------
+  const historyWarehouseMap = useMemo(
+    () =>
+      new Map(
+        historyWarehouses.map(
+          (item) => [item.id, item],
+        ),
+      ),
+    [historyWarehouses],
+  );
 
-  const warrantyState = useMemo(() => {
-    if (!unit?.warranty_end) {
-      return {
-        label: "No Warranty",
-        classes:
-          "bg-slate-100 text-slate-600 ring-slate-200",
-      };
+  const warrantyState = unit
+    ? getWarrantyState(
+        unit.warranty_start,
+        unit.warranty_end,
+      )
+    : "none";
+
+  const totalCost = useMemo(() => {
+    if (!unit) return null;
+
+    if (unit.cost_price !== null) {
+      return unit.cost_price;
     }
 
-    const today = new Date();
-    const end = new Date(
-      `${unit.warranty_end}T23:59:59`
-    );
-
-    if (end < today) {
-      return {
-        label: "Expired",
-        classes:
-          "bg-red-50 text-red-700 ring-red-200",
-      };
-    }
-
-    return {
-      label: "Active",
-      classes:
-        "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    };
-  }, [unit]);
+    return batch?.unit_cost ?? null;
+  }, [unit, batch]);
 
   return (
-    <AppShell
-      title={
-        unit
-          ? unit.serial_number
-          : "Serial Number"
-      }
-      description={
-        unit?.product?.name ||
-        "Serialized unit details"
-      }
-      actions={
-        unit ? (
-          <Link
-            href={`/serial-numbers/${unit.id}/edit`}
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-black px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+    <AppShell>
+      <div className="page-content serial-detail-page">
+        <div className="top-bar">
+          <button
+            type="button"
+            className="back-button"
+            onClick={() =>
+              router.push("/serial-numbers")
+            }
           >
-            Edit Serial Number
-          </Link>
-        ) : null
-      }
-    >
-      <div className="space-y-6">
-        {/* -------------------------------------------------- */}
-        {/* Back */}
-        {/* -------------------------------------------------- */}
+            ← Back to Serial Numbers
+          </button>
 
-        <Link
-          href="/serial-numbers"
-          className="inline-flex items-center text-sm font-medium text-slate-600 hover:text-black"
-        >
-          <span className="mr-2">←</span>
-          Back to Serial Numbers
-        </Link>
-
-        {/* -------------------------------------------------- */}
-        {/* Error */}
-        {/* -------------------------------------------------- */}
-
-        {errorMessage && (
-          <div
-            className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-            style={{
-              border:
-                "1px solid #fecaca",
-            }}
+          <button
+            type="button"
+            className="refresh-button"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
           >
-            {errorMessage}
-          </div>
-        )}
-
-        {/* -------------------------------------------------- */}
-        {/* Loading */}
-        {/* -------------------------------------------------- */}
+            {refreshing
+              ? "Refreshing..."
+              : "Refresh"}
+          </button>
+        </div>
 
         {loading ? (
-          <div
-            className="rounded-xl bg-white p-12 text-center text-sm text-slate-500"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
-          >
-            Loading serial number...
+          <div className="loading-card">
+            <div className="spinner" />
+
+            <span>
+              Loading serial asset...
+            </span>
           </div>
-        ) : unit ? (
-          <>
-            {/* ------------------------------------------------ */}
-            {/* Hero */}
-            {/* ------------------------------------------------ */}
+        ) : errorMessage ? (
+          <div className="error-card">
+            <div>
+              <strong>
+                Unable to load serial asset
+              </strong>
 
-            <section
-              className="rounded-xl bg-white p-6"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
+              <p>{errorMessage}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadData()}
             >
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="break-all text-2xl font-semibold tracking-tight text-slate-950">
-                      {unit.serial_number}
-                    </h1>
+              Retry
+            </button>
+          </div>
+        ) : !unit ? (
+          <div className="empty-card">
+            <h2>
+              Serial asset not found
+            </h2>
 
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${statusClasses(
-                        unit.status
-                      )}`}
-                    >
-                      {statusLabel(
-                        unit.status
-                      )}
-                    </span>
-                  </div>
+            <p>
+              The requested serialized asset could
+              not be found.
+            </p>
 
-                  <div className="mt-2 text-sm text-slate-500">
-                    {unit.product?.name ||
-                      "Unknown Product"}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                router.push("/serial-numbers")
+              }
+            >
+              Back to Serial Numbers
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="hero-card">
+              <div className="hero-left">
+                <div className="hero-eyebrow">
+                  Serialized Asset
+                </div>
 
-                    {unit.variant &&
-                      unit.variant.name !==
-                        "Default" && (
-                        <>
-                          {" "}
-                          ·{" "}
-                          {unit.variant.name}
-                        </>
-                      )}
-                  </div>
+                <h1>
+                  {unit.serial_number}
+                </h1>
 
+                <p>
+                  {product?.name ??
+                    "Unknown Product"}
+
+                  {variant?.name
+                    ? ` · ${variant.name}`
+                    : ""}
+
+                  {variant?.sku
+                    ? ` · SKU ${variant.sku}`
+                    : ""}
+                </p>
+
+                <div className="hero-meta">
                   {unit.barcode && (
-                    <div className="mt-3 text-sm text-slate-500">
-                      <span className="font-medium text-slate-700">
-                        Barcode:
-                      </span>{" "}
-                      {unit.barcode}
-                    </div>
+                    <span>
+                      Barcode: {unit.barcode}
+                    </span>
+                  )}
+
+                  {batch && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          `/inventory/batches/${batch.id}`,
+                        )
+                      }
+                    >
+                      Batch: {batch.lot_number}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="hero-right">
+                <span
+                  className={statusClass(
+                    unit.status,
+                  )}
+                >
+                  <span className="status-dot" />
+
+                  {titleCase(unit.status)}
+                </span>
+
+                <div className="hero-location">
+                  <strong>
+                    {warehouse?.name ??
+                      "No warehouse"}
+                  </strong>
+
+                  <span>
+                    {location?.name ??
+                      "No location"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-label">
+                  Current Status
+                </div>
+
+                <div className="stat-value small">
+                  {titleCase(unit.status)}
+                </div>
+
+                <div className="stat-meta">
+                  Asset lifecycle state
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-label">
+                  Asset Cost
+                </div>
+
+                <div className="stat-value">
+                  {formatCurrency(
+                    totalCost,
                   )}
                 </div>
 
-                <div className="flex flex-col items-start gap-2 lg:items-end">
-                  <div className="text-xs uppercase tracking-wide text-slate-400">
-                    Unit Cost
+                <div className="stat-meta">
+                  Serialized unit cost
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-label">
+                  Batch / Lot
+                </div>
+
+                <div className="stat-value small">
+                  {batch?.lot_number ?? "—"}
+                </div>
+
+                <div className="stat-meta">
+                  Parent inventory record
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-label">
+                  Warranty
+                </div>
+
+                <div
+                  className={`stat-value small ${
+                    warrantyState === "active"
+                      ? "green"
+                      : warrantyState ===
+                          "expired"
+                        ? "red"
+                        : ""
+                  }`}
+                >
+                  {warrantyState === "active"
+                    ? "Active"
+                    : warrantyState ===
+                        "expired"
+                      ? "Expired"
+                      : "None"}
+                </div>
+
+                <div className="stat-meta">
+                  {unit.warranty_end
+                    ? `Until ${formatDate(
+                        unit.warranty_end,
+                      )}`
+                    : "No warranty end date"}
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-label">
+                  Received
+                </div>
+
+                <div className="stat-value small">
+                  {formatDate(
+                    unit.received_at,
+                  )}
+                </div>
+
+                <div className="stat-meta">
+                  Inventory entry date
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-label">
+                  Sold
+                </div>
+
+                <div className="stat-value small">
+                  {formatDate(unit.sold_at)}
+                </div>
+
+                <div className="stat-meta">
+                  Sale completion date
+                </div>
+              </div>
+            </div>
+
+            <div className="two-column">
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>
+                      Asset Information
+                    </h2>
+
+                    <p>
+                      Identity and product
+                      information.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <span>
+                      Serial Number
+                    </span>
+
+                    <strong>
+                      {unit.serial_number}
+                    </strong>
                   </div>
 
-                  <div className="text-xl font-semibold text-slate-950">
-                    {formatMoney(
-                      unit.cost_price,
-                      currency
-                    )}
+                  <div className="detail-item">
+                    <span>
+                      Barcode
+                    </span>
+
+                    <strong>
+                      {unit.barcode ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Product
+                    </span>
+
+                    <strong>
+                      {product?.name ??
+                        "Unknown"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Brand
+                    </span>
+
+                    <strong>
+                      {product?.brand ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Variant
+                    </span>
+
+                    <strong>
+                      {variant?.name ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      SKU
+                    </span>
+
+                    <strong>
+                      {variant?.sku ?? "—"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Tracking
+                    </span>
+
+                    <strong>
+                      {titleCase(
+                        product?.tracking_mode ??
+                          null,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Category
+                    </span>
+
+                    <strong>
+                      {product?.category ?? "—"}
+                    </strong>
                   </div>
                 </div>
               </div>
-            </section>
 
-            {/* ------------------------------------------------ */}
-            {/* Overview */}
-            {/* ------------------------------------------------ */}
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>
+                      Current Location
+                    </h2>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-              {/* Product */}
-              <section
-                className="rounded-xl bg-white p-6"
-                style={inputStyle}
-              >
-                <h2 className="text-base font-semibold text-slate-950">
-                  Product
-                </h2>
-
-                <div className="mt-5 space-y-5">
-                  <DetailItem
-                    label="Product"
-                    value={
-                      <Link
-                        href={`/products/${unit.product_id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {unit.product?.name ||
-                          "Unknown Product"}
-                      </Link>
-                    }
-                  />
-
-                  <DetailItem
-                    label="Brand"
-                    value={
-                      unit.product?.brand ||
-                      "—"
-                    }
-                  />
-
-                  <DetailItem
-                    label="Category"
-                    value={
-                      unit.product?.category ||
-                      "—"
-                    }
-                  />
-
-                  <DetailItem
-                    label="Variant"
-                    value={
-                      unit.variant?.name ||
-                      "Default"
-                    }
-                  />
-
-                  <DetailItem
-                    label="SKU"
-                    value={
-                      unit.variant?.sku ||
-                      "—"
-                    }
-                  />
-                </div>
-              </section>
-
-              {/* Ownership */}
-              <section
-                className="rounded-xl bg-white p-6"
-                style={inputStyle}
-              >
-                <h2 className="text-base font-semibold text-slate-950">
-                  Ownership & Location
-                </h2>
-
-                <div className="mt-5 space-y-5">
-                  <DetailItem
-                    label="Customer"
-                    value={
-                      unit.customer ? (
-                        <Link
-                          href={`/customers/${unit.customer.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {unit.customer.name}
-                        </Link>
-                      ) : (
-                        "Not assigned"
-                      )
-                    }
-                  />
-
-                  <DetailItem
-                    label="Warehouse"
-                    value={
-                      unit.warehouse_id
-                        ? unit.warehouse_id
-                        : "Not assigned"
-                    }
-                  />
-
-                  <DetailItem
-                    label="Sales Order"
-                    value={
-                      unit.order_id ? (
-                        <Link
-                          href={`/sales/${unit.order_id}`}
-                          className="font-medium hover:underline"
-                        >
-                          View Order
-                        </Link>
-                      ) : (
-                        "Not assigned"
-                      )
-                    }
-                  />
-
-                  <DetailItem
-                    label="Invoice"
-                    value={
-                      unit.invoice_id ? (
-                        <Link
-                          href={`/invoices/${unit.invoice_id}`}
-                          className="font-medium hover:underline"
-                        >
-                          View Invoice
-                        </Link>
-                      ) : (
-                        "Not assigned"
-                      )
-                    }
-                  />
-                </div>
-              </section>
-
-              {/* Warranty */}
-              <section
-                className="rounded-xl bg-white p-6"
-                style={inputStyle}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Warranty
-                  </h2>
-
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${warrantyState.classes}`}
-                  >
-                    {warrantyState.label}
-                  </span>
+                    <p>
+                      Where the asset is currently
+                      assigned.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-5 space-y-5">
-                  <DetailItem
-                    label="Warranty Start"
-                    value={formatDate(
-                      unit.warranty_start
-                    )}
-                  />
+                <div className="location-highlight">
+                  <div className="location-icon">
+                    ◉
+                  </div>
 
-                  <DetailItem
-                    label="Warranty End"
-                    value={formatDate(
-                      unit.warranty_end
-                    )}
-                  />
+                  <div>
+                    <strong>
+                      {warehouse?.name ??
+                        "No warehouse"}
+                    </strong>
 
-                  <DetailItem
-                    label="Received"
-                    value={formatDateTime(
-                      unit.received_at
-                    )}
-                  />
+                    <span>
+                      {warehouse?.code
+                        ? `Warehouse code: ${warehouse.code}`
+                        : ""}
+                    </span>
 
-                  <DetailItem
-                    label="Sold"
-                    value={formatDateTime(
-                      unit.sold_at
+                    <span>
+                      Location:{" "}
+                      {location?.name ??
+                        "Not assigned"}
+                    </span>
+
+                    {location?.code && (
+                      <span>
+                        Location code:{" "}
+                        {location.code}
+                      </span>
                     )}
-                  />
+                  </div>
                 </div>
-              </section>
+
+                <div className="detail-grid compact">
+                  <div className="detail-item">
+                    <span>
+                      Allocated
+                    </span>
+
+                    <strong>
+                      {formatDateTime(
+                        unit.allocated_at,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Returned
+                    </span>
+
+                    <strong>
+                      {formatDateTime(
+                        unit.returned_at,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="detail-item">
+                    <span>
+                      Disposed
+                    </span>
+
+                    <strong>
+                      {formatDateTime(
+                        unit.disposed_at,
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* ------------------------------------------------ */}
-            {/* Notes */}
-            {/* ------------------------------------------------ */}
+            <div className="two-column">
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>
+                      Batch / Lot
+                    </h2>
 
-            {unit.notes && (
-              <section
-                className="rounded-xl bg-white p-6"
-                style={inputStyle}
-              >
-                <h2 className="text-base font-semibold text-slate-950">
-                  Notes
-                </h2>
+                    <p>
+                      Parent inventory provenance
+                      for this serialized asset.
+                    </p>
+                  </div>
 
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                  {unit.notes}
-                </p>
-              </section>
-            )}
+                  {batch && (
+                    <button
+                      type="button"
+                      className="panel-link"
+                      onClick={() =>
+                        router.push(
+                          `/inventory/batches/${batch.id}`,
+                        )
+                      }
+                    >
+                      Open Batch
+                    </button>
+                  )}
+                </div>
 
-            {/* ------------------------------------------------ */}
-            {/* History */}
-            {/* ------------------------------------------------ */}
+                {batch ? (
+                  <div className="batch-box">
+                    <div className="batch-title">
+                      <strong>
+                        {batch.lot_number}
+                      </strong>
 
-            <section
-              className="rounded-xl bg-white p-6"
-              style={inputStyle}
-            >
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">
-                  Serial History
-                </h2>
+                      <span
+                        className={statusClass(
+                          batch.status,
+                        )}
+                      >
+                        {titleCase(
+                          batch.status,
+                        )}
+                      </span>
+                    </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Complete lifecycle history for this
-                  physical unit.
-                </p>
+                    <div className="detail-grid">
+                      <div className="detail-item">
+                        <span>
+                          Received
+                        </span>
+
+                        <strong>
+                          {formatDate(
+                            batch.received_at,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="detail-item">
+                        <span>
+                          Quantity Received
+                        </span>
+
+                        <strong>
+                          {batch.quantity_received.toLocaleString()}
+                        </strong>
+                      </div>
+
+                      <div className="detail-item">
+                        <span>
+                          Batch Unit Cost
+                        </span>
+
+                        <strong>
+                          {formatCurrency(
+                            batch.unit_cost,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="detail-item">
+                        <span>
+                          Total Batch Cost
+                        </span>
+
+                        <strong>
+                          {formatCurrency(
+                            batch.total_cost,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="detail-item">
+                        <span>
+                          Purchase Order
+                        </span>
+
+                        <strong>
+                          {batch.purchase_order_id ??
+                            "—"}
+                        </strong>
+                      </div>
+
+                      <div className="detail-item">
+                        <span>
+                          Stock Receipt
+                        </span>
+
+                        <strong>
+                          {batch.stock_receipt_id ??
+                            "—"}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="empty-inline">
+                    This serialized asset is not
+                    currently linked to a batch.
+                  </div>
+                )}
+              </div>
+
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>
+                      Warranty
+                    </h2>
+
+                    <p>
+                      Warranty coverage recorded
+                      against this asset.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="warranty-box">
+                  <div
+                    className={`warranty-status ${
+                      warrantyState === "active"
+                        ? "active"
+                        : warrantyState ===
+                            "expired"
+                          ? "expired"
+                          : "none"
+                    }`}
+                  >
+                    <span className="warranty-dot" />
+
+                    <strong>
+                      {warrantyState === "active"
+                        ? "Warranty Active"
+                        : warrantyState ===
+                            "expired"
+                          ? "Warranty Expired"
+                          : "No Active Warranty"}
+                    </strong>
+                  </div>
+
+                  <div className="detail-grid compact">
+                    <div className="detail-item">
+                      <span>
+                        Warranty Start
+                      </span>
+
+                      <strong>
+                        {formatDate(
+                          unit.warranty_start,
+                        )}
+                      </strong>
+                    </div>
+
+                    <div className="detail-item">
+                      <span>
+                        Warranty End
+                      </span>
+
+                      <strong>
+                        {formatDate(
+                          unit.warranty_end,
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>
+                    Commercial References
+                  </h2>
+
+                  <p>
+                    Business records associated
+                    with this serialized asset.
+                  </p>
+                </div>
+              </div>
+
+              <div className="reference-grid">
+                <div className="reference-item">
+                  <span>
+                    Customer ID
+                  </span>
+
+                  <strong>
+                    {unit.customer_id ?? "—"}
+                  </strong>
+                </div>
+
+                <div className="reference-item">
+                  <span>
+                    Order ID
+                  </span>
+
+                  <strong>
+                    {unit.order_id ?? "—"}
+                  </strong>
+                </div>
+
+                <div className="reference-item">
+                  <span>
+                    Order Item ID
+                  </span>
+
+                  <strong>
+                    {unit.order_item_id ?? "—"}
+                  </strong>
+                </div>
+
+                <div className="reference-item">
+                  <span>
+                    Invoice ID
+                  </span>
+
+                  <strong>
+                    {unit.invoice_id ?? "—"}
+                  </strong>
+                </div>
+
+                <div className="reference-item">
+                  <span>
+                    Purchase Order ID
+                  </span>
+
+                  <strong>
+                    {unit.purchase_order_id ??
+                      "—"}
+                  </strong>
+                </div>
+
+                <div className="reference-item">
+                  <span>
+                    Purchase Order Item
+                  </span>
+
+                  <strong>
+                    {unit.purchase_order_item_id ??
+                      "—"}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>
+                    Serial History
+                  </h2>
+
+                  <p>
+                    Complete lifecycle and movement
+                    trace for this serialized unit.
+                  </p>
+                </div>
+
+                <div className="history-count">
+                  {history.length} events
+                </div>
               </div>
 
               {history.length === 0 ? (
-                <div className="mt-6 rounded-lg bg-slate-50 p-8 text-center text-sm text-slate-500">
-                  No history events recorded yet.
+                <div className="empty-inline">
+                  No serial history events have been
+                  recorded yet.
                 </div>
               ) : (
-                <div className="relative mt-6">
-                  <div className="space-y-6">
-                    {history.map(
-                      (event, index) => (
-                        <div
-                          key={event.id}
-                          className="relative flex gap-4"
-                        >
-                          {/* Timeline */}
-                          <div className="flex w-6 flex-shrink-0 flex-col items-center">
-                            <div className="z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black text-[10px] text-white">
-                              {index + 1}
-                            </div>
+                <div className="timeline">
+                  {history.map((event, index) => {
+                    const fromWarehouse =
+                      event.from_warehouse_id
+                        ? historyWarehouseMap.get(
+                            event.from_warehouse_id,
+                          )
+                        : null;
 
-                            {index <
-                              history.length -
-                                1 && (
-                              <div className="absolute left-[11px] top-6 h-full w-px bg-slate-200" />
-                            )}
-                          </div>
+                    const toWarehouse =
+                      event.to_warehouse_id
+                        ? historyWarehouseMap.get(
+                            event.to_warehouse_id,
+                          )
+                        : null;
 
-                          {/* Event */}
-                          <div className="min-w-0 flex-1 pb-1">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <h3 className="text-sm font-medium text-slate-900">
-                                {eventLabel(
-                                  event.event_type
+                    return (
+                      <div
+                        className="timeline-row"
+                        key={event.id}
+                      >
+                        <div className="timeline-line">
+                          <div className="timeline-dot" />
+
+                          {index <
+                            history.length - 1 && (
+                            <div className="timeline-connector" />
+                          )}
+                        </div>
+
+                        <div className="timeline-content">
+                          <div className="timeline-top">
+                            <div>
+                              <strong>
+                                {titleCase(
+                                  event.event_type,
                                 )}
-                              </h3>
+                              </strong>
 
-                              <span className="text-xs text-slate-400">
+                              <span>
                                 {formatDateTime(
-                                  event.created_at
+                                  event.created_at,
                                 )}
                               </span>
                             </div>
 
-                            {(event.from_status ||
-                              event.to_status) && (
-                              <div className="mt-2 text-sm text-slate-600">
-                                {event.from_status && (
-                                  <span>
-                                    {formatStatusForHistory(
-                                      event.from_status
-                                    )}
-                                  </span>
+                            {event.reference_type && (
+                              <span className="reference-badge">
+                                {titleCase(
+                                  event.reference_type,
                                 )}
+                              </span>
+                            )}
+                          </div>
 
-                                {event.from_status &&
-                                  event.to_status && (
-                                    <span className="mx-2 text-slate-400">
-                                      →
-                                    </span>
-                                  )}
+                          <div className="timeline-details">
+                            {event.from_status ||
+                            event.to_status ? (
+                              <div>
+                                <span>
+                                  Status
+                                </span>
 
-                                {event.to_status && (
-                                  <span className="font-medium text-slate-900">
-                                    {formatStatusForHistory(
-                                      event.to_status
-                                    )}
-                                  </span>
-                                )}
+                                <strong>
+                                  {event.from_status
+                                    ? titleCase(
+                                        event.from_status,
+                                      )
+                                    : "—"}{" "}
+                                  →{" "}
+                                  {event.to_status
+                                    ? titleCase(
+                                        event.to_status,
+                                      )
+                                    : "—"}
+                                </strong>
+                              </div>
+                            ) : null}
+
+                            {fromWarehouse ||
+                            toWarehouse ? (
+                              <div>
+                                <span>
+                                  Warehouse
+                                </span>
+
+                                <strong>
+                                  {fromWarehouse?.name ??
+                                    "—"}{" "}
+                                  →{" "}
+                                  {toWarehouse?.name ??
+                                    "—"}
+                                </strong>
+                              </div>
+                            ) : null}
+
+                            {event.reference_id && (
+                              <div>
+                                <span>
+                                  Reference
+                                </span>
+
+                                <strong>
+                                  {
+                                    event.reference_id
+                                  }
+                                </strong>
                               </div>
                             )}
-
-                            {event.notes && (
-                              <p className="mt-2 text-sm leading-6 text-slate-500">
-                                {event.notes}
-                              </p>
-                            )}
-
-                            {event.reference_type &&
-                              event.reference_id && (
-                                <div className="mt-2 text-xs text-slate-400">
-                                  Reference:{" "}
-                                  {
-                                    event.reference_type
-                                  }
-                                </div>
-                              )}
                           </div>
+
+                          {event.notes && (
+                            <p className="timeline-notes">
+                              {event.notes}
+                            </p>
+                          )}
                         </div>
-                      )
-                    )}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </section>
+            </div>
 
-            {/* ------------------------------------------------ */}
-            {/* System Information */}
-            {/* ------------------------------------------------ */}
+            {unit.notes && (
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>
+                      Notes
+                    </h2>
 
-            <section
-              className="rounded-xl bg-white p-6"
-              style={inputStyle}
-            >
-              <h2 className="text-base font-semibold text-slate-950">
-                System Information
-              </h2>
+                    <p>
+                      Internal notes attached to
+                      this serialized asset.
+                    </p>
+                  </div>
+                </div>
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <DetailItem
-                  label="Serial ID"
-                  value={
-                    <span className="break-all font-mono text-xs">
-                      {unit.id}
-                    </span>
-                  }
-                />
-
-                <DetailItem
-                  label="Created"
-                  value={formatDateTime(
-                    unit.created_at
-                  )}
-                />
-
-                <DetailItem
-                  label="Last Updated"
-                  value={formatDateTime(
-                    unit.updated_at
-                  )}
-                />
-
-                <DetailItem
-                  label="Company"
-                  value={
-                    <span className="break-all font-mono text-xs">
-                      {unit.company_id}
-                    </span>
-                  }
-                />
+                <div className="notes-content">
+                  {unit.notes}
+                </div>
               </div>
-            </section>
+            )}
+
+            <div className="footer-meta">
+              <span>
+                Serial ID: {unit.id}
+              </span>
+
+              <span>
+                Created:{" "}
+                {formatDateTime(
+                  unit.created_at,
+                )}
+              </span>
+
+              <span>
+                Updated:{" "}
+                {formatDateTime(
+                  unit.updated_at,
+                )}
+              </span>
+            </div>
           </>
-        ) : (
-          <div
-            className="rounded-xl bg-white p-12 text-center"
-            style={inputStyle}
-          >
-            <h2 className="text-base font-semibold text-slate-950">
-              Serial number not found
-            </h2>
-
-            <p className="mt-2 text-sm text-slate-500">
-              This serialized unit may have been removed
-              or you may not have access to it.
-            </p>
-
-            <Link
-              href="/serial-numbers"
-              className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-black px-4 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Back to Serial Numbers
-            </Link>
-          </div>
         )}
       </div>
+
+      <style jsx>{`
+        .serial-detail-page {
+          padding-bottom: 40px;
+        }
+
+        .top-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+
+        .back-button,
+        .refresh-button {
+          height: 38px;
+          padding: 0 13px;
+          border-radius: 9px;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .back-button {
+          border: 1px solid #dbe1e8;
+          background: white;
+          color: #475569;
+        }
+
+        .back-button:hover,
+        .refresh-button:hover:not(
+            :disabled
+          ) {
+          background: #f8fafc;
+        }
+
+        .refresh-button {
+          border: 1px solid #d1d5db;
+          background: white;
+          color: #334155;
+        }
+
+        .refresh-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .hero-card {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 30px;
+          margin-bottom: 18px;
+          padding: 23px 24px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .hero-left {
+          min-width: 0;
+        }
+
+        .hero-eyebrow {
+          margin-bottom: 7px;
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 750;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .hero-card h1 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 28px;
+          line-height: 1.15;
+          font-weight: 750;
+          letter-spacing: -0.025em;
+        }
+
+        .hero-card p {
+          margin: 7px 0 0;
+          color: #64748b;
+          font-size: 13px;
+        }
+
+        .hero-meta {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 14px;
+        }
+
+        .hero-meta span,
+        .hero-meta button {
+          padding: 6px 9px;
+          border: 1px solid #e2e8f0;
+          border-radius: 7px;
+          background: #f8fafc;
+          color: #64748b;
+          font-size: 10.5px;
+          font-weight: 600;
+        }
+
+        .hero-meta button {
+          color: #166534;
+          cursor: pointer;
+        }
+
+        .hero-meta button:hover {
+          background: #f0fdf4;
+          border-color: #bbf7d0;
+        }
+
+        .hero-right {
+          display: flex;
+          align-items: flex-end;
+          flex-direction: column;
+          gap: 13px;
+          flex-shrink: 0;
+        }
+
+        .hero-location {
+          display: flex;
+          align-items: flex-end;
+          flex-direction: column;
+        }
+
+        .hero-location strong {
+          color: #334155;
+          font-size: 13px;
+        }
+
+        .hero-location span {
+          margin-top: 3px;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 27px;
+          padding: 0 9px;
+          border: 1px solid transparent;
+          border-radius: 7px;
+          font-size: 10.5px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: currentColor;
+        }
+
+        .status-available {
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+          color: #15803d;
+        }
+
+        .status-reserved {
+          border-color: #bfdbfe;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+
+        .status-sold {
+          border-color: #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+        }
+
+        .status-returned {
+          border-color: #ddd6fe;
+          background: #f5f3ff;
+          color: #6d28d9;
+        }
+
+        .status-warning {
+          border-color: #fde68a;
+          background: #fffbeb;
+          color: #b45309;
+        }
+
+        .status-danger {
+          border-color: #fecaca;
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+        .status-neutral {
+          border-color: #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            6,
+            minmax(0, 1fr)
+          );
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .stat-card {
+          min-width: 0;
+          padding: 17px 18px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .stat-label {
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 650;
+        }
+
+        .stat-value {
+          margin-top: 8px;
+          overflow: hidden;
+          color: #0f172a;
+          font-size: 21px;
+          line-height: 1;
+          font-weight: 750;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .stat-value.small {
+          font-size: 17px;
+        }
+
+        .stat-value.green {
+          color: #15803d;
+        }
+
+        .stat-value.red {
+          color: #dc2626;
+        }
+
+        .stat-meta {
+          margin-top: 8px;
+          overflow: hidden;
+          color: #94a3b8;
+          font-size: 10.5px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .two-column {
+          display: grid;
+          grid-template-columns: repeat(
+            2,
+            minmax(0, 1fr)
+          );
+          gap: 18px;
+          margin-bottom: 18px;
+        }
+
+        .panel {
+          margin-bottom: 18px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          box-shadow: 0 2px 8px
+            rgba(15, 23, 42, 0.035);
+        }
+
+        .two-column .panel {
+          margin-bottom: 0;
+        }
+
+        .panel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 17px 18px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .panel-header h2 {
+          margin: 0;
+          color: #1e293b;
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .panel-header p {
+          margin: 4px 0 0;
+          color: #94a3b8;
+          font-size: 11.5px;
+        }
+
+        .panel-link {
+          border: 0;
+          background: transparent;
+          color: #166534;
+          font-size: 11.5px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .panel-link:hover {
+          text-decoration: underline;
+        }
+
+        .detail-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            2,
+            minmax(0, 1fr)
+          );
+          gap: 0;
+          padding: 4px 18px;
+        }
+
+        .detail-grid.compact {
+          padding-top: 0;
+        }
+
+        .detail-item {
+          min-width: 0;
+          padding: 12px 0;
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .detail-item:nth-last-child(-n + 2) {
+          border-bottom: 0;
+        }
+
+        .detail-item span {
+          display: block;
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+
+        .detail-item strong {
+          display: block;
+          margin-top: 4px;
+          overflow: hidden;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 650;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .location-highlight {
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          margin: 16px 18px 5px;
+          padding: 13px;
+          border: 1px solid #dcfce7;
+          border-radius: 10px;
+          background: #f7fdf8;
+        }
+
+        .location-icon {
+          width: 34px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 34px;
+          border-radius: 9px;
+          background: #dcfce7;
+          color: #15803d;
+          font-size: 15px;
+        }
+
+        .location-highlight > div:last-child {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+
+        .location-highlight strong {
+          color: #334155;
+          font-size: 13px;
+        }
+
+        .location-highlight span {
+          margin-top: 3px;
+          color: #64748b;
+          font-size: 10.5px;
+        }
+
+        .batch-box {
+          padding-bottom: 4px;
+        }
+
+        .batch-title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin: 16px 18px 0;
+        }
+
+        .batch-title > strong {
+          color: #166534;
+          font-size: 15px;
+        }
+
+        .warranty-box {
+          padding: 16px 18px 4px;
+        }
+
+        .warranty-status {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .warranty-status strong {
+          font-size: 13px;
+        }
+
+        .warranty-status.active strong {
+          color: #15803d;
+        }
+
+        .warranty-status.expired strong {
+          color: #dc2626;
+        }
+
+        .warranty-status.none strong {
+          color: #64748b;
+        }
+
+        .warranty-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: currentColor;
+        }
+
+        .warranty-status.active {
+          color: #15803d;
+        }
+
+        .warranty-status.expired {
+          color: #dc2626;
+        }
+
+        .warranty-status.none {
+          color: #94a3b8;
+        }
+
+        .reference-grid {
+          display: grid;
+          grid-template-columns: repeat(
+            3,
+            minmax(0, 1fr)
+          );
+        }
+
+        .reference-item {
+          min-width: 0;
+          padding: 15px 18px;
+          border-right: 1px solid #f1f5f9;
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .reference-item:nth-child(3n) {
+          border-right: 0;
+        }
+
+        .reference-item:nth-last-child(-n + 3) {
+          border-bottom: 0;
+        }
+
+        .reference-item span {
+          display: block;
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+
+        .reference-item strong {
+          display: block;
+          margin-top: 5px;
+          overflow: hidden;
+          color: #475569;
+          font-size: 11.5px;
+          font-weight: 650;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .history-count {
+          min-width: 34px;
+          height: 28px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 9px;
+          border-radius: 7px;
+          background: #f1f5f9;
+          color: #64748b;
+          font-size: 10.5px;
+          font-weight: 700;
+        }
+
+        .timeline {
+          padding: 19px 20px 20px;
+        }
+
+        .timeline-row {
+          display: flex;
+          gap: 13px;
+        }
+
+        .timeline-line {
+          position: relative;
+          width: 16px;
+          flex: 0 0 16px;
+          display: flex;
+          justify-content: center;
+        }
+
+        .timeline-dot {
+          position: relative;
+          z-index: 2;
+          width: 9px;
+          height: 9px;
+          margin-top: 5px;
+          border: 2px solid white;
+          border-radius: 999px;
+          background: #166534;
+          box-shadow: 0 0 0 1px #86efac;
+        }
+
+        .timeline-connector {
+          position: absolute;
+          top: 14px;
+          bottom: -2px;
+          width: 1px;
+          background: #dbe1e8;
+        }
+
+        .timeline-content {
+          min-width: 0;
+          flex: 1;
+          padding-bottom: 21px;
+        }
+
+        .timeline-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .timeline-top > div {
+          display: flex;
+          align-items: baseline;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .timeline-top strong {
+          color: #334155;
+          font-size: 12.5px;
+        }
+
+        .timeline-top span {
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+
+        .reference-badge {
+          padding: 4px 7px;
+          border-radius: 6px;
+          background: #f1f5f9;
+          color: #64748b !important;
+          font-size: 9.5px !important;
+          font-weight: 650;
+        }
+
+        .timeline-details {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-top: 9px;
+        }
+
+        .timeline-details > div {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 6px 8px;
+          border-radius: 7px;
+          background: #f8fafc;
+        }
+
+        .timeline-details span {
+          color: #94a3b8;
+          font-size: 9.5px;
+        }
+
+        .timeline-details strong {
+          color: #475569;
+          font-size: 10.5px;
+        }
+
+        .timeline-notes {
+          margin: 8px 0 0;
+          color: #64748b;
+          font-size: 11px;
+          line-height: 1.5;
+        }
+
+        .notes-content {
+          padding: 17px 18px;
+          color: #475569;
+          font-size: 12px;
+          line-height: 1.6;
+          white-space: pre-wrap;
+        }
+
+        .empty-inline {
+          padding: 28px 18px;
+          color: #94a3b8;
+          font-size: 12px;
+          text-align: center;
+        }
+
+        .footer-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 10px 20px;
+          color: #94a3b8;
+          font-size: 10px;
+        }
+
+        .loading-card {
+          min-height: 360px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        .spinner {
+          width: 25px;
+          height: 25px;
+          border: 2px solid #e2e8f0;
+          border-top-color: #166534;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        .error-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 15px 17px;
+          border: 1px solid #fecaca;
+          border-radius: 12px;
+          background: #fef2f2;
+          color: #991b1b;
+        }
+
+        .error-card strong {
+          display: block;
+          font-size: 13px;
+        }
+
+        .error-card p {
+          margin: 4px 0 0;
+          color: #b91c1c;
+          font-size: 12px;
+        }
+
+        .error-card button {
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          background: white;
+          color: #991b1b;
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .empty-card {
+          min-height: 300px;
+          display: flex;
+          align-items: center;
+          flex-direction: column;
+          justify-content: center;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: white;
+          text-align: center;
+        }
+
+        .empty-card h2 {
+          margin: 0;
+          color: #334155;
+          font-size: 17px;
+        }
+
+        .empty-card p {
+          margin: 7px 0 17px;
+          color: #94a3b8;
+          font-size: 12px;
+        }
+
+        .secondary-button {
+          height: 38px;
+          padding: 0 13px;
+          border: 1px solid #d1d5db;
+          border-radius: 9px;
+          background: white;
+          color: #334155;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+
+        .secondary-button:hover {
+          background: #f8fafc;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @media (max-width: 1450px) {
+          .stats-grid {
+            grid-template-columns: repeat(
+              3,
+              minmax(0, 1fr)
+            );
+          }
+        }
+
+        @media (max-width: 1000px) {
+          .two-column {
+            grid-template-columns: 1fr;
+          }
+
+          .reference-grid {
+            grid-template-columns: repeat(
+              2,
+              minmax(0, 1fr)
+            );
+          }
+
+          .reference-item:nth-child(3n) {
+            border-right: 1px solid #f1f5f9;
+          }
+
+          .reference-item:nth-child(2n) {
+            border-right: 0;
+          }
+
+          .reference-item:nth-last-child(-n + 3) {
+            border-bottom: 1px solid #f1f5f9;
+          }
+
+          .reference-item:nth-last-child(-n + 2) {
+            border-bottom: 0;
+          }
+        }
+
+        @media (max-width: 700px) {
+          .hero-card {
+            flex-direction: column;
+          }
+
+          .hero-right {
+            align-items: flex-start;
+          }
+
+          .hero-location {
+            align-items: flex-start;
+          }
+
+          .stats-grid {
+            grid-template-columns: repeat(
+              2,
+              minmax(0, 1fr)
+            );
+          }
+
+          .reference-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .reference-item,
+          .reference-item:nth-child(2n),
+          .reference-item:nth-child(3n) {
+            border-right: 0;
+            border-bottom: 1px solid #f1f5f9;
+          }
+
+          .reference-item:last-child {
+            border-bottom: 0;
+          }
+
+          .detail-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .detail-item:nth-last-child(-n + 2) {
+            border-bottom: 1px solid #f1f5f9;
+          }
+
+          .detail-item:last-child {
+            border-bottom: 0;
+          }
+
+          .top-bar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }
