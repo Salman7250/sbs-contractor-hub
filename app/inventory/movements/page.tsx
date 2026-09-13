@@ -1,20 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
-type Movement = {
+type InventoryMovement = {
   id: string;
   company_id: string;
-  inventory_id: string;
+  inventory_id: string | null;
   product_id: string;
-  variant_id: string;
+  variant_id: string | null;
   movement_type: string;
   quantity: number;
-  quantity_before: number;
-  quantity_after: number;
+  quantity_before: number | null;
+  quantity_after: number | null;
   reason: string | null;
   reference_type: string | null;
   reference_id: string | null;
@@ -23,6 +28,10 @@ type Movement = {
   created_at: string;
   warehouse_id: string | null;
   location_id: string | null;
+  batch_id: string | null;
+  batch_stock_id: string | null;
+  unit_id: string | null;
+  transaction_id: string | null;
 };
 
 type Product = {
@@ -30,275 +39,233 @@ type Product = {
   name: string;
   brand: string | null;
   category: string | null;
+  tracking_mode: string | null;
 };
 
 type ProductVariant = {
   id: string;
   product_id: string;
-  name: string;
+  name: string | null;
   sku: string | null;
 };
 
 type Warehouse = {
   id: string;
   name: string;
-  code: string;
+  code: string | null;
 };
 
 type WarehouseLocation = {
   id: string;
   warehouse_id: string;
   name: string;
-  code: string;
+  code: string | null;
 };
 
-type FilterType =
+type InventoryBatch = {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  lot_number: string;
+};
+
+type SerializedUnit = {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  serial_number: string;
+  barcode: string | null;
+};
+
+type MovementFilter =
   | "all"
   | "stock_in"
   | "stock_out"
   | "sale"
   | "purchase"
-  | "adjustment_in"
-  | "adjustment_out"
   | "return"
   | "transfer_in"
-  | "transfer_out";
+  | "transfer_out"
+  | "adjustment_in"
+  | "adjustment_out";
 
-const movementLabels: Record<string, string> = {
-  stock_in: "Stock In",
-  stock_out: "Stock Out",
-  sale: "Sale",
-  purchase: "Purchase",
-  adjustment_in: "Adjustment In",
-  adjustment_out: "Adjustment Out",
-  return: "Return",
-  transfer_in: "Transfer In",
-  transfer_out: "Transfer Out",
-};
+const MOVEMENT_TYPES: {
+  value: MovementFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All Movement Types" },
+  { value: "stock_in", label: "Stock In" },
+  { value: "stock_out", label: "Stock Out" },
+  { value: "sale", label: "Sale" },
+  { value: "purchase", label: "Purchase" },
+  { value: "return", label: "Return" },
+  { value: "transfer_in", label: "Transfer In" },
+  { value: "transfer_out", label: "Transfer Out" },
+  { value: "adjustment_in", label: "Adjustment In" },
+  { value: "adjustment_out", label: "Adjustment Out" },
+];
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+function formatNumber(value: number | null | undefined) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 4,
+  }).format(Number(value ?? 0));
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-US", {
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
-  });
+  }).format(new Date(value));
 }
 
-function movementLabel(type: string) {
-  return movementLabels[type] || type.replace(/_/g, " ");
+function titleCase(value: string | null | undefined) {
+  if (!value) return "—";
+
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function isIncoming(type: string) {
-  return [
-    "stock_in",
-    "purchase",
-    "adjustment_in",
-    "return",
-    "transfer_in",
-  ].includes(type);
+function getMovementClasses(movementType: string) {
+  switch (movementType) {
+    case "stock_in":
+    case "purchase":
+    case "transfer_in":
+    case "adjustment_in":
+      return {
+        background: "#dcfce7",
+        color: "#166534",
+        border: "#bbf7d0",
+      };
+
+    case "stock_out":
+    case "sale":
+    case "transfer_out":
+    case "adjustment_out":
+      return {
+        background: "#fee2e2",
+        color: "#991b1b",
+        border: "#fecaca",
+      };
+
+    case "return":
+      return {
+        background: "#dbeafe",
+        color: "#1d4ed8",
+        border: "#bfdbfe",
+      };
+
+    default:
+      return {
+        background: "#f3f4f6",
+        color: "#374151",
+        border: "#e5e7eb",
+      };
+  }
 }
 
-function isOutgoing(type: string) {
-  return [
-    "stock_out",
-    "sale",
-    "adjustment_out",
-    "transfer_out",
-  ].includes(type);
-}
+function getReferenceHref(
+  referenceType: string | null,
+  referenceId: string | null,
+) {
+  if (!referenceId) return null;
 
-function Icon({
-  name,
-  size = 18,
-}: {
-  name:
-    | "arrow-left"
-    | "refresh"
-    | "search"
-    | "filter"
-    | "package"
-    | "warehouse"
-    | "calendar"
-    | "in"
-    | "out"
-    | "chevron";
-  size?: number;
-}) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
+  switch ((referenceType ?? "").toLowerCase()) {
+    case "purchase_order":
+    case "purchase-order":
+      return `/purchase-orders/${referenceId}`;
 
-  if (name === "arrow-left") {
-    return (
-      <svg {...common}>
-        <path d="M19 12H5" />
-        <path d="m12 19-7-7 7-7" />
-      </svg>
-    );
+    case "sales_order":
+    case "sales-order":
+    case "order":
+      return `/sales-orders/${referenceId}`;
+
+    case "invoice":
+      return `/invoices/${referenceId}`;
+
+    case "receipt":
+    case "stock_receipt":
+    case "stock-receipt":
+      return `/inventory/receipts/${referenceId}`;
+
+    default:
+      return null;
   }
-
-  if (name === "refresh") {
-    return (
-      <svg {...common}>
-        <path d="M20 11a8.1 8.1 0 0 0-14.8-4L3 10" />
-        <path d="M3 4v6h6" />
-        <path d="M4 13a8.1 8.1 0 0 0 14.8 4L21 14" />
-        <path d="M21 20v-6h-6" />
-      </svg>
-    );
-  }
-
-  if (name === "search") {
-    return (
-      <svg {...common}>
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-4-4" />
-      </svg>
-    );
-  }
-
-  if (name === "filter") {
-    return (
-      <svg {...common}>
-        <path d="M4 6h16" />
-        <path d="M7 12h10" />
-        <path d="M10 18h4" />
-      </svg>
-    );
-  }
-
-  if (name === "package") {
-    return (
-      <svg {...common}>
-        <path d="m16.5 9.4-9-5.19" />
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-        <path d="M3.3 7 12 12l8.7-5" />
-        <path d="M12 22V12" />
-      </svg>
-    );
-  }
-
-  if (name === "warehouse") {
-    return (
-      <svg {...common}>
-        <path d="m3 10 9-6 9 6" />
-        <path d="M5 9v10h14V9" />
-        <path d="M9 19v-6h6v6" />
-      </svg>
-    );
-  }
-
-  if (name === "calendar") {
-    return (
-      <svg {...common}>
-        <rect x="3" y="4" width="18" height="17" rx="2" />
-        <path d="M16 2v4M8 2v4M3 10h18" />
-      </svg>
-    );
-  }
-
-  if (name === "in") {
-    return (
-      <svg {...common}>
-        <path d="M12 19V5" />
-        <path d="m6 11 6-6 6 6" />
-      </svg>
-    );
-  }
-
-  if (name === "out") {
-    return (
-      <svg {...common}>
-        <path d="M12 5v14" />
-        <path d="m18 13-6 6-6-6" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...common}>
-      <path d="m9 18 6-6-6-6" />
-    </svg>
-  );
 }
 
 export default function InventoryMovementsPage() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [movements, setMovements] = useState<Movement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [movements, setMovements] = useState<
+    InventoryMovement[]
+  >([]);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [locations, setLocations] = useState<
+    WarehouseLocation[]
+  >([]);
+  const [batches, setBatches] = useState<InventoryBatch[]>([]);
+  const [serializedUnits, setSerializedUnits] = useState<
+    SerializedUnit[]
+  >([]);
 
   const [search, setSearch] = useState("");
-  const [movementFilter, setMovementFilter] =
-    useState<FilterType>("all");
-  const [warehouseFilter, setWarehouseFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [movementType, setMovementType] =
+    useState<MovementFilter>("all");
+  const [productFilter, setProductFilter] = useState("all");
+  const [warehouseFilter, setWarehouseFilter] =
+    useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  const loadData = useCallback(
-    async (showRefresh = false) => {
+  const loadPage = useCallback(
+    async (silent = false) => {
       try {
-        if (showRefresh) {
+        if (silent) {
           setRefreshing(true);
         } else {
           setLoading(true);
         }
 
-        setError("");
+        setErrorMessage("");
 
         const {
-          data: {
-            user,
-          },
+          data: { user },
+          error: userError,
         } = await supabase.auth.getUser();
 
-        if (!user) {
-          throw new Error("You must be signed in to view inventory movements.");
+        if (userError || !user) {
+          throw new Error("Your session has expired.");
         }
 
-        const { data: membership, error: membershipError } =
+        const { data: memberships, error: membershipError } =
           await supabase
             .from("company_members")
             .select("company_id")
-            .eq("user_id", user.id)
-            .limit(1)
-            .maybeSingle();
+            .eq("user_id", user.id);
 
         if (membershipError) {
-          throw membershipError;
+          throw new Error(membershipError.message);
         }
 
-        if (!membership?.company_id) {
-          throw new Error("No company membership was found.");
+        if (!memberships?.length) {
+          throw new Error(
+            "No company workspace is available for your account.",
+          );
         }
 
-        const currentCompanyId = membership.company_id;
-        setCompanyId(currentCompanyId);
+        const companyId = memberships[0].company_id;
 
         const [
           movementsResult,
@@ -306,169 +273,341 @@ export default function InventoryMovementsPage() {
           variantsResult,
           warehousesResult,
           locationsResult,
+          batchesResult,
+          serializedUnitsResult,
         ] = await Promise.all([
           supabase
             .from("inventory_movements")
-            .select(
-              `
-                id,
-                company_id,
-                inventory_id,
-                product_id,
-                variant_id,
-                movement_type,
-                quantity,
-                quantity_before,
-                quantity_after,
-                reason,
-                reference_type,
-                reference_id,
-                notes,
-                created_by,
-                created_at,
-                warehouse_id,
-                location_id
-              `
-            )
-            .eq("company_id", currentCompanyId)
-            .order("created_at", { ascending: false })
-            .limit(500),
+            .select(`
+              id,
+              company_id,
+              inventory_id,
+              product_id,
+              variant_id,
+              movement_type,
+              quantity,
+              quantity_before,
+              quantity_after,
+              reason,
+              reference_type,
+              reference_id,
+              notes,
+              created_by,
+              created_at,
+              warehouse_id,
+              location_id,
+              batch_id,
+              batch_stock_id,
+              unit_id,
+              transaction_id
+            `)
+            .eq("company_id", companyId)
+            .order("created_at", {
+              ascending: false,
+            }),
 
           supabase
             .from("products")
-            .select("id, name, brand, category")
-            .eq("company_id", currentCompanyId),
+            .select(`
+              id,
+              name,
+              brand,
+              category,
+              tracking_mode
+            `)
+            .eq("company_id", companyId)
+            .order("name", {
+              ascending: true,
+            }),
 
           supabase
             .from("product_variants")
-            .select("id, product_id, name, sku")
-            .eq("company_id", currentCompanyId),
+            .select(`
+              id,
+              product_id,
+              name,
+              sku
+            `)
+            .eq("company_id", companyId)
+            .order("name", {
+              ascending: true,
+            }),
 
           supabase
             .from("warehouses")
-            .select("id, name, code")
-            .eq("company_id", currentCompanyId)
-            .order("name"),
+            .select(`
+              id,
+              name,
+              code
+            `)
+            .eq("company_id", companyId)
+            .eq("is_active", true)
+            .order("name", {
+              ascending: true,
+            }),
 
           supabase
             .from("warehouse_locations")
-            .select("id, warehouse_id, name, code")
-            .eq("company_id", currentCompanyId)
-            .order("name"),
+            .select(`
+              id,
+              warehouse_id,
+              name,
+              code
+            `)
+            .eq("company_id", companyId)
+            .eq("is_active", true)
+            .order("name", {
+              ascending: true,
+            }),
+
+          supabase
+            .from("inventory_batches")
+            .select(`
+              id,
+              product_id,
+              variant_id,
+              lot_number
+            `)
+            .eq("company_id", companyId)
+            .order("created_at", {
+              ascending: false,
+            }),
+
+          supabase
+            .from("serialized_units")
+            .select(`
+              id,
+              product_id,
+              variant_id,
+              serial_number,
+              barcode
+            `)
+            .eq("company_id", companyId)
+            .order("created_at", {
+              ascending: false,
+            }),
         ]);
 
         if (movementsResult.error) {
-          throw movementsResult.error;
+          throw new Error(
+            movementsResult.error.message,
+          );
         }
 
         if (productsResult.error) {
-          throw productsResult.error;
+          throw new Error(
+            productsResult.error.message,
+          );
         }
 
         if (variantsResult.error) {
-          throw variantsResult.error;
+          throw new Error(
+            variantsResult.error.message,
+          );
         }
 
         if (warehousesResult.error) {
-          throw warehousesResult.error;
+          throw new Error(
+            warehousesResult.error.message,
+          );
         }
 
         if (locationsResult.error) {
-          throw locationsResult.error;
+          throw new Error(
+            locationsResult.error.message,
+          );
         }
 
-        setMovements((movementsResult.data || []) as Movement[]);
-        setProducts((productsResult.data || []) as Product[]);
-        setVariants((variantsResult.data || []) as ProductVariant[]);
-        setWarehouses((warehousesResult.data || []) as Warehouse[]);
-        setLocations(
-          (locationsResult.data || []) as WarehouseLocation[]
-        );
-      } catch (loadError) {
-        console.error("INVENTORY MOVEMENTS LOAD ERROR:", loadError);
+        if (batchesResult.error) {
+          throw new Error(
+            batchesResult.error.message,
+          );
+        }
 
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Unable to load inventory movements."
+        if (serializedUnitsResult.error) {
+          throw new Error(
+            serializedUnitsResult.error.message,
+          );
+        }
+
+        setMovements(
+          (movementsResult.data as InventoryMovement[]) ?? [],
+        );
+
+        setProducts(
+          (productsResult.data as Product[]) ?? [],
+        );
+
+        setVariants(
+          (variantsResult.data as ProductVariant[]) ?? [],
+        );
+
+        setWarehouses(
+          (warehousesResult.data as Warehouse[]) ?? [],
+        );
+
+        setLocations(
+          (locationsResult.data as WarehouseLocation[]) ?? [],
+        );
+
+        setBatches(
+          (batchesResult.data as InventoryBatch[]) ?? [],
+        );
+
+        setSerializedUnits(
+          (serializedUnitsResult.data as SerializedUnit[]) ?? [],
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load inventory movements:",
+          error,
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to load inventory movements.",
         );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [supabase]
+    [supabase],
   );
 
   useEffect(() => {
-    // Initial data loading intentionally updates component state asynchronously.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
-  }, [loadData]);
+    void loadPage();
+  }, [loadPage]);
 
-  const productMap = useMemo(() => {
-    return new Map(products.map((product) => [product.id, product]));
-  }, [products]);
+  const productMap = useMemo(
+    () =>
+      new Map(
+        products.map((product) => [
+          product.id,
+          product,
+        ]),
+      ),
+    [products],
+  );
 
-  const variantMap = useMemo(() => {
-    return new Map(variants.map((variant) => [variant.id, variant]));
-  }, [variants]);
+  const variantMap = useMemo(
+    () =>
+      new Map(
+        variants.map((variant) => [
+          variant.id,
+          variant,
+        ]),
+      ),
+    [variants],
+  );
 
-  const warehouseMap = useMemo(() => {
-    return new Map(
-      warehouses.map((warehouse) => [warehouse.id, warehouse])
-    );
-  }, [warehouses]);
+  const warehouseMap = useMemo(
+    () =>
+      new Map(
+        warehouses.map((warehouse) => [
+          warehouse.id,
+          warehouse,
+        ]),
+      ),
+    [warehouses],
+  );
 
-  const locationMap = useMemo(() => {
-    return new Map(
-      locations.map((location) => [location.id, location])
-    );
-  }, [locations]);
+  const locationMap = useMemo(
+    () =>
+      new Map(
+        locations.map((location) => [
+          location.id,
+          location,
+        ]),
+      ),
+    [locations],
+  );
+
+  const batchMap = useMemo(
+    () =>
+      new Map(
+        batches.map((batch) => [
+          batch.id,
+          batch,
+        ]),
+      ),
+    [batches],
+  );
+
+  const unitMap = useMemo(
+    () =>
+      new Map(
+        serializedUnits.map((unit) => [
+          unit.id,
+          unit,
+        ]),
+      ),
+    [serializedUnits],
+  );
+
+  const stats = useMemo(() => {
+    const total = movements.length;
+
+    const stockIn = movements.filter(
+      (movement) =>
+        movement.movement_type === "stock_in" ||
+        movement.movement_type === "purchase" ||
+        movement.movement_type === "transfer_in" ||
+        movement.movement_type === "adjustment_in",
+    ).length;
+
+    const stockOut = movements.filter(
+      (movement) =>
+        movement.movement_type === "stock_out" ||
+        movement.movement_type === "sale" ||
+        movement.movement_type === "transfer_out" ||
+        movement.movement_type === "adjustment_out",
+    ).length;
+
+    const sales = movements.filter(
+      (movement) =>
+        movement.movement_type === "sale",
+    ).length;
+
+    const returns = movements.filter(
+      (movement) =>
+        movement.movement_type === "return",
+    ).length;
+
+    return {
+      total,
+      stockIn,
+      stockOut,
+      sales,
+      returns,
+    };
+  }, [movements]);
 
   const filteredMovements = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = search
+      .trim()
+      .toLowerCase();
+
+    const fromTime = dateFrom
+      ? new Date(`${dateFrom}T00:00:00`).getTime()
+      : null;
+
+    const toTime = dateTo
+      ? new Date(`${dateTo}T23:59:59.999`).getTime()
+      : null;
 
     return movements.filter((movement) => {
-      const product = productMap.get(movement.product_id);
-      const variant = variantMap.get(movement.variant_id);
-      const warehouse = movement.warehouse_id
-        ? warehouseMap.get(movement.warehouse_id)
-        : undefined;
-      const location = movement.location_id
-        ? locationMap.get(movement.location_id)
-        : undefined;
-
-      const searchText = [
-        product?.name,
-        product?.brand,
-        product?.category,
-        variant?.name,
-        variant?.sku,
-        warehouse?.name,
-        warehouse?.code,
-        location?.name,
-        location?.code,
-        movement.movement_type,
-        movement.reason,
-        movement.reference_type,
-        movement.reference_id,
-        movement.notes,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
       if (
-        normalizedSearch &&
-        !searchText.includes(normalizedSearch)
+        movementType !== "all" &&
+        movement.movement_type !== movementType
       ) {
         return false;
       }
 
       if (
-        movementFilter !== "all" &&
-        movement.movement_type !== movementFilter
+        productFilter !== "all" &&
+        movement.product_id !== productFilter
       ) {
         return false;
       }
@@ -480,945 +619,1248 @@ export default function InventoryMovementsPage() {
         return false;
       }
 
-      if (dateFilter !== "all") {
-        const movementDate = new Date(movement.created_at);
-        const now = new Date();
+      const movementTime = new Date(
+        movement.created_at,
+      ).getTime();
 
-        if (dateFilter === "today") {
-          if (
-            movementDate.toDateString() !== now.toDateString()
-          ) {
-            return false;
-          }
-        }
-
-        if (dateFilter === "7") {
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - 7);
-
-          if (movementDate < cutoff) {
-            return false;
-          }
-        }
-
-        if (dateFilter === "30") {
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - 30);
-
-          if (movementDate < cutoff) {
-            return false;
-          }
-        }
+      if (
+        fromTime !== null &&
+        movementTime < fromTime
+      ) {
+        return false;
       }
 
-      return true;
+      if (
+        toTime !== null &&
+        movementTime > toTime
+      ) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const product = productMap.get(
+        movement.product_id,
+      );
+
+      const variant = movement.variant_id
+        ? variantMap.get(movement.variant_id)
+        : null;
+
+      const batch = movement.batch_id
+        ? batchMap.get(movement.batch_id)
+        : null;
+
+      const unit = movement.unit_id
+        ? unitMap.get(movement.unit_id)
+        : null;
+
+      const warehouse = movement.warehouse_id
+        ? warehouseMap.get(movement.warehouse_id)
+        : null;
+
+      const location = movement.location_id
+        ? locationMap.get(movement.location_id)
+        : null;
+
+      const searchable = [
+        movement.movement_type,
+        movement.reason,
+        movement.reference_type,
+        movement.reference_id,
+        movement.notes,
+        movement.transaction_id,
+        product?.name,
+        product?.brand,
+        product?.category,
+        variant?.name,
+        variant?.sku,
+        batch?.lot_number,
+        unit?.serial_number,
+        unit?.barcode,
+        warehouse?.name,
+        warehouse?.code,
+        location?.name,
+        location?.code,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(normalizedSearch);
     });
   }, [
     movements,
+    search,
+    movementType,
+    productFilter,
+    warehouseFilter,
+    dateFrom,
+    dateTo,
     productMap,
     variantMap,
+    batchMap,
+    unitMap,
     warehouseMap,
     locationMap,
-    search,
-    movementFilter,
-    warehouseFilter,
-    dateFilter,
   ]);
-
-  const stats = useMemo(() => {
-    const incoming = movements
-      .filter((movement) => isIncoming(movement.movement_type))
-      .reduce((sum, movement) => sum + movement.quantity, 0);
-
-    const outgoing = movements
-      .filter((movement) => isOutgoing(movement.movement_type))
-      .reduce((sum, movement) => sum + movement.quantity, 0);
-
-    return {
-      total: movements.length,
-      incoming,
-      outgoing,
-      net: incoming - outgoing,
-    };
-  }, [movements]);
 
   const clearFilters = () => {
     setSearch("");
-    setMovementFilter("all");
+    setMovementType("all");
+    setProductFilter("all");
     setWarehouseFilter("all");
-    setDateFilter("all");
+    setDateFrom("");
+    setDateTo("");
   };
-
-  const hasFilters =
-    search.trim() !== "" ||
-    movementFilter !== "all" ||
-    warehouseFilter !== "all" ||
-    dateFilter !== "all";
 
   return (
     <AppShell>
-      <div className="movements-page">
-        <style jsx>{`
-          .movements-page {
-            min-height: 100vh;
-            background: #f8fafc;
-            color: #0f172a;
-            padding: 28px;
-          }
-
-          .container {
-            max-width: 1500px;
-            margin: 0 auto;
-          }
-
-          .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 26px;
-          }
-
-          .heading {
-            display: flex;
-            align-items: flex-start;
-            gap: 14px;
-          }
-
-          .back-button {
-            width: 42px;
-            height: 42px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            background: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: #475569;
-            text-decoration: none;
-            flex-shrink: 0;
-          }
-
-          .back-button:hover {
-            background: #f1f5f9;
-          }
-
-          h1 {
-            margin: 0;
-            font-size: 28px;
-            line-height: 1.2;
-            letter-spacing: -0.02em;
-          }
-
-          .subtitle {
-            margin: 6px 0 0;
-            color: #64748b;
-            font-size: 14px;
-          }
-
-          .actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-
-          .button {
-            height: 42px;
-            padding: 0 15px;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            background: #ffffff;
-            color: #334155;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-          }
-
-          .button:hover {
-            background: #f8fafc;
-          }
-
-          .stats {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 20px;
-          }
-
-          .stat {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 18px;
-          }
-
-          .stat-label {
-            color: #64748b;
-            font-size: 13px;
-            font-weight: 600;
-          }
-
-          .stat-value {
-            margin-top: 7px;
-            font-size: 25px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-          }
-
-          .filters {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 16px;
-            margin-bottom: 18px;
-          }
-
-          .filter-row {
-            display: grid;
-            grid-template-columns: minmax(260px, 1.8fr) repeat(
-                3,
-                minmax(150px, 1fr)
-              ) auto;
-            gap: 10px;
-            align-items: center;
-          }
-
-          .search-box {
-            position: relative;
-          }
-
-          .search-icon {
-            position: absolute;
-            left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #94a3b8;
-            pointer-events: none;
-          }
-
-          .input,
-          .select {
-            width: 100%;
-            height: 42px;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #ffffff;
-            color: #0f172a;
-            padding: 0 12px;
-            font-size: 14px;
-            outline: none;
-          }
-
-          .search-input {
-            padding-left: 40px;
-          }
-
-          .input:focus,
-          .select:focus {
-            border-color: #94a3b8;
-          }
-
-          .clear-button {
-            height: 42px;
-            padding: 0 12px;
-            border: 0;
-            background: transparent;
-            color: #64748b;
-            font-weight: 600;
-            cursor: pointer;
-            white-space: nowrap;
-          }
-
-          .clear-button:hover {
-            color: #0f172a;
-          }
-
-          .table-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            overflow: hidden;
-          }
-
-          .table-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            padding: 17px 18px;
-            border-bottom: 1px solid #e2e8f0;
-          }
-
-          .table-title {
-            font-size: 16px;
-            font-weight: 700;
-          }
-
-          .table-count {
-            color: #64748b;
-            font-size: 13px;
-          }
-
-          .table-wrap {
-            width: 100%;
-            overflow-x: auto;
-          }
-
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 1050px;
-          }
-
-          th {
-            text-align: left;
-            padding: 12px 16px;
-            background: #f8fafc;
-            color: #64748b;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border-bottom: 1px solid #e2e8f0;
-            white-space: nowrap;
-          }
-
-          td {
-            padding: 15px 16px;
-            border-bottom: 1px solid #f1f5f9;
-            vertical-align: middle;
-            font-size: 13px;
-          }
-
-          tr:last-child td {
-            border-bottom: 0;
-          }
-
-          .product-cell {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            min-width: 210px;
-          }
-
-          .product-name {
-            color: #0f172a;
-            font-weight: 700;
-            text-decoration: none;
-          }
-
-          .product-name:hover {
-            text-decoration: underline;
-          }
-
-          .variant-name {
-            color: #64748b;
-            font-size: 12px;
-          }
-
-          .sku {
-            color: #94a3b8;
-            font-size: 11px;
-          }
-
-          .movement-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 999px;
-            padding: 6px 9px;
-            font-size: 11px;
-            font-weight: 700;
-            white-space: nowrap;
-          }
-
-          .movement-in {
-            background: #ecfdf5;
-            color: #047857;
-          }
-
-          .movement-out {
-            background: #fff1f2;
-            color: #be123c;
-          }
-
-          .movement-neutral {
-            background: #f1f5f9;
-            color: #475569;
-          }
-
-          .quantity-in {
-            color: #047857;
-            font-weight: 700;
-          }
-
-          .quantity-out {
-            color: #be123c;
-            font-weight: 700;
-          }
-
-          .balance {
-            font-weight: 700;
-          }
-
-          .location-cell {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-          }
-
-          .warehouse-name {
-            font-weight: 600;
-          }
-
-          .location-name {
-            color: #64748b;
-            font-size: 12px;
-          }
-
-          .date-cell {
-            white-space: nowrap;
-          }
-
-          .date-main {
-            font-weight: 600;
-          }
-
-          .date-time {
-            margin-top: 3px;
-            color: #94a3b8;
-            font-size: 11px;
-          }
-
-          .reference {
-            max-width: 190px;
-            color: #475569;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-
-          .empty {
-            padding: 70px 20px;
-            text-align: center;
-            color: #64748b;
-          }
-
-          .empty-icon {
-            width: 52px;
-            height: 52px;
-            margin: 0 auto 14px;
-            border-radius: 14px;
-            background: #f1f5f9;
-            color: #64748b;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .empty-title {
-            color: #0f172a;
-            font-size: 16px;
-            font-weight: 700;
-          }
-
-          .empty-text {
-            max-width: 440px;
-            margin: 7px auto 0;
-            font-size: 13px;
-            line-height: 1.6;
-          }
-
-          .error {
-            margin-bottom: 18px;
-            padding: 13px 15px;
-            border: 1px solid #fecdd3;
-            border-radius: 10px;
-            background: #fff1f2;
-            color: #be123c;
-            font-size: 13px;
-          }
-
-          .loading {
-            padding: 60px 20px;
-            text-align: center;
-            color: #64748b;
-          }
-
-          .footer-note {
-            margin-top: 14px;
-            color: #94a3b8;
-            font-size: 12px;
-          }
-
-          @media (max-width: 1100px) {
-            .filter-row {
-              grid-template-columns: 1fr 1fr;
-            }
-
-            .search-box {
-              grid-column: 1 / -1;
-            }
-
-            .clear-button {
-              justify-self: start;
-            }
-          }
-
-          @media (max-width: 800px) {
-            .movements-page {
-              padding: 18px 14px 30px;
-            }
-
-            .topbar {
-              align-items: flex-start;
-              flex-direction: column;
-            }
-
-            .actions {
-              width: 100%;
-            }
-
-            .actions .button {
-              flex: 1;
-            }
-
-            .stats {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .filter-row {
-              grid-template-columns: 1fr;
-            }
-
-            .search-box {
-              grid-column: auto;
-            }
-
-            h1 {
-              font-size: 24px;
-            }
-          }
-
-          @media (max-width: 480px) {
-            .stats {
-              grid-template-columns: 1fr;
-            }
-
-            .heading {
-              gap: 10px;
-            }
-
-            .back-button {
-              width: 38px;
-              height: 38px;
-            }
-          }
-        `}</style>
-
-        <div className="container">
-          <div className="topbar">
-            <div className="heading">
-              <Link
-                href="/inventory"
-                className="back-button"
-                aria-label="Back to inventory"
-              >
-                <Icon name="arrow-left" />
-              </Link>
-
-              <div>
-                <h1>Movement History</h1>
-                <p className="subtitle">
-                  Complete inventory movement and audit ledger.
-                </p>
+      <main className="page-content">
+        <div className="page-shell">
+          <div className="page-header">
+            <div>
+              <div className="eyebrow">
+                PRODUCTS & INVENTORY
               </div>
+
+              <h1>Inventory Movements</h1>
+
+              <p>
+                Complete audit ledger for stock movements,
+                batches, warehouses, and serialized units.
+              </p>
             </div>
 
-            <div className="actions">
-              <Link
-                href="/inventory"
-                className="button"
-              >
-                <Icon name="package" size={16} />
-                Inventory
-              </Link>
-
+            <div className="page-actions">
               <button
                 type="button"
-                className="button"
-                onClick={() => void loadData(true)}
-                disabled={refreshing}
+                className="secondary-button"
+                onClick={() => void loadPage(true)}
+                disabled={loading || refreshing}
               >
-                <Icon name="refresh" size={16} />
-                {refreshing ? "Refreshing..." : "Refresh"}
+                {refreshing
+                  ? "Refreshing..."
+                  : "Refresh"}
               </button>
             </div>
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {errorMessage ? (
+            <div className="error-card">
+              <div>
+                <strong>
+                  Unable to load inventory movements
+                </strong>
 
-          <div className="stats">
-            <div className="stat">
-              <div className="stat-label">Total Movements</div>
+                <span>{errorMessage}</span>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void loadPage()}
+              >
+                Try Again
+              </button>
+            </div>
+          ) : null}
+
+          <section className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-label">
+                Total Events
+              </div>
+
               <div className="stat-value">
-                {formatNumber(stats.total)}
+                {stats.total}
+              </div>
+
+              <div className="stat-description">
+                Inventory movement records
               </div>
             </div>
 
-            <div className="stat">
-              <div className="stat-label">Units In</div>
+            <div className="stat-card">
+              <div className="stat-label">
+                Stock In
+              </div>
+
               <div className="stat-value">
-                {formatNumber(stats.incoming)}
+                {stats.stockIn}
+              </div>
+
+              <div className="stat-description">
+                Receipts and inbound adjustments
               </div>
             </div>
 
-            <div className="stat">
-              <div className="stat-label">Units Out</div>
+            <div className="stat-card">
+              <div className="stat-label">
+                Stock Out
+              </div>
+
               <div className="stat-value">
-                {formatNumber(stats.outgoing)}
+                {stats.stockOut}
+              </div>
+
+              <div className="stat-description">
+                Sales, transfers and outbound adjustments
               </div>
             </div>
 
-            <div className="stat">
-              <div className="stat-label">Net Movement</div>
+            <div className="stat-card">
+              <div className="stat-label">
+                Returns
+              </div>
+
               <div className="stat-value">
-                {stats.net >= 0 ? "+" : ""}
-                {formatNumber(stats.net)}
+                {stats.returns}
+              </div>
+
+              <div className="stat-description">
+                Inventory returned into stock
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="filters">
-            <div className="filter-row">
-              <div className="search-box">
-                <span className="search-icon">
-                  <Icon name="search" size={17} />
-                </span>
+          <section className="secondary-stats">
+            <div>
+              <span>Sales Events</span>
+              <strong>{stats.sales}</strong>
+            </div>
+
+            <div>
+              <span>Products</span>
+              <strong>{products.length}</strong>
+            </div>
+
+            <div>
+              <span>Batches / Lots</span>
+              <strong>{batches.length}</strong>
+            </div>
+
+            <div>
+              <span>Serialized Units</span>
+              <strong>
+                {serializedUnits.length}
+              </strong>
+            </div>
+          </section>
+
+          <section className="content-card">
+            <div className="filters-header">
+              <div>
+                <h2>Movement Ledger</h2>
+
+                <p>
+                  Search product, batch, serial, reference,
+                  warehouse, reason, or transaction.
+                </p>
+              </div>
+
+              <div className="result-count">
+                {filteredMovements.length} of{" "}
+                {movements.length}
+              </div>
+            </div>
+
+            <div className="filters">
+              <div className="search-wrapper">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
 
                 <input
-                  type="search"
-                  className="input search-input"
-                  placeholder="Search products, SKU, warehouse, reference..."
+                  type="text"
                   value={search}
                   onChange={(event) =>
                     setSearch(event.target.value)
                   }
+                  placeholder="Search movement, product, batch, serial..."
                 />
               </div>
 
               <select
-                className="select"
-                value={movementFilter}
+                value={movementType}
                 onChange={(event) =>
-                  setMovementFilter(
-                    event.target.value as FilterType
+                  setMovementType(
+                    event.target.value as MovementFilter,
                   )
                 }
               >
-                <option value="all">All Movement Types</option>
-                <option value="stock_in">Stock In</option>
-                <option value="stock_out">Stock Out</option>
-                <option value="sale">Sale</option>
-                <option value="purchase">Purchase</option>
-                <option value="adjustment_in">
-                  Adjustment In
-                </option>
-                <option value="adjustment_out">
-                  Adjustment Out
-                </option>
-                <option value="return">Return</option>
-                <option value="transfer_in">
-                  Transfer In
-                </option>
-                <option value="transfer_out">
-                  Transfer Out
-                </option>
+                {MOVEMENT_TYPES.map((option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </option>
+                ))}
               </select>
 
               <select
-                className="select"
+                value={productFilter}
+                onChange={(event) =>
+                  setProductFilter(event.target.value)
+                }
+              >
+                <option value="all">
+                  All Products
+                </option>
+
+                {products.map((product) => (
+                  <option
+                    key={product.id}
+                    value={product.id}
+                  >
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
                 value={warehouseFilter}
                 onChange={(event) =>
                   setWarehouseFilter(event.target.value)
                 }
               >
-                <option value="all">All Warehouses</option>
+                <option value="all">
+                  All Warehouses
+                </option>
 
                 {warehouses.map((warehouse) => (
                   <option
                     key={warehouse.id}
                     value={warehouse.id}
                   >
-                    {warehouse.name} ({warehouse.code})
+                    {warehouse.name}
                   </option>
                 ))}
               </select>
 
-              <select
-                className="select"
-                value={dateFilter}
+              <input
+                type="date"
+                value={dateFrom}
                 onChange={(event) =>
-                  setDateFilter(event.target.value)
+                  setDateFrom(event.target.value)
                 }
-              >
-                <option value="all">All Dates</option>
-                <option value="today">Today</option>
-                <option value="7">Last 7 Days</option>
-                <option value="30">Last 30 Days</option>
-              </select>
+              />
 
-              {hasFilters && (
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(event) =>
+                  setDateTo(event.target.value)
+                }
+              />
+
+              {(search ||
+                movementType !== "all" ||
+                productFilter !== "all" ||
+                warehouseFilter !== "all" ||
+                dateFrom ||
+                dateTo) && (
                 <button
                   type="button"
                   className="clear-button"
                   onClick={clearFilters}
                 >
-                  Clear
+                  Clear Filters
                 </button>
               )}
             </div>
-          </div>
 
-          <div className="table-card">
-            <div className="table-header">
-              <div>
-                <div className="table-title">
-                  Inventory Movements
-                </div>
-                <div className="table-count">
-                  Showing {formatNumber(filteredMovements.length)}{" "}
-                  of {formatNumber(movements.length)} movements
-                </div>
-              </div>
-            </div>
+            <div className="table-wrapper">
+              {loading ? (
+                <div className="loading-state">
+                  <div className="loading-spinner" />
 
-            {loading ? (
-              <div className="loading">
-                Loading movement history...
-              </div>
-            ) : filteredMovements.length === 0 ? (
-              <div className="empty">
-                <div className="empty-icon">
-                  <Icon name="package" size={24} />
+                  <span>
+                    Loading inventory movements...
+                  </span>
                 </div>
+              ) : filteredMovements.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">
+                    MOV
+                  </div>
 
-                <div className="empty-title">
-                  {hasFilters
-                    ? "No matching movements"
-                    : "No inventory movements yet"}
+                  <h3>
+                    {movements.length === 0
+                      ? "No inventory movements yet"
+                      : "No matching movements"}
+                  </h3>
+
+                  <p>
+                    {movements.length === 0
+                      ? "Inventory movement events will appear here as stock is received, sold, transferred, returned, or adjusted."
+                      : "Try changing your search or filters."}
+                  </p>
+
+                  {movements.length > 0 ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={clearFilters}
+                    >
+                      Clear Filters
+                    </button>
+                  ) : null}
                 </div>
-
-                <div className="empty-text">
-                  {hasFilters
-                    ? "Try changing your search or filters."
-                    : "Inventory movements will appear here when stock is received, sold, adjusted, returned, or transferred."}
-                </div>
-
-                {hasFilters && (
-                  <button
-                    type="button"
-                    className="button"
-                    style={{ marginTop: 16 }}
-                    onClick={clearFilters}
-                  >
-                    Clear Filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table>
+              ) : (
+                <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Product</th>
-                      <th>Movement</th>
-                      <th>Quantity</th>
-                      <th>Balance</th>
-                      <th>Warehouse / Location</th>
-                      <th>Reference</th>
                       <th>Date</th>
+                      <th>Movement</th>
+                      <th>Product</th>
+                      <th>Batch / Lot</th>
+                      <th>Serial Unit</th>
+                      <th>Warehouse / Location</th>
+                      <th>Qty</th>
+                      <th>Before</th>
+                      <th>After</th>
+                      <th>Reference</th>
+                      <th>Transaction</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {filteredMovements.map((movement) => {
-                      const product = productMap.get(
-                        movement.product_id
-                      );
-                      const variant = variantMap.get(
-                        movement.variant_id
-                      );
-                      const warehouse = movement.warehouse_id
-                        ? warehouseMap.get(movement.warehouse_id)
-                        : undefined;
-                      const location = movement.location_id
-                        ? locationMap.get(movement.location_id)
-                        : undefined;
+                    {filteredMovements.map(
+                      (movement) => {
+                        const product =
+                          productMap.get(
+                            movement.product_id,
+                          );
 
-                      const incoming = isIncoming(
-                        movement.movement_type
-                      );
-                      const outgoing = isOutgoing(
-                        movement.movement_type
-                      );
+                        const variant =
+                          movement.variant_id
+                            ? variantMap.get(
+                                movement.variant_id,
+                              )
+                            : null;
 
-                      const reference = [
-                        movement.reference_type,
-                        movement.reference_id,
-                      ]
-                        .filter(Boolean)
-                        .join(" • ");
+                        const batch =
+                          movement.batch_id
+                            ? batchMap.get(
+                                movement.batch_id,
+                              )
+                            : null;
 
-                      return (
-                        <tr key={movement.id}>
-                          <td>
-                            <div className="product-cell">
-                              <Link
-                                href={`/inventory/${movement.product_id}`}
-                                className="product-name"
+                        const unit =
+                          movement.unit_id
+                            ? unitMap.get(
+                                movement.unit_id,
+                              )
+                            : null;
+
+                        const warehouse =
+                          movement.warehouse_id
+                            ? warehouseMap.get(
+                                movement.warehouse_id,
+                              )
+                            : null;
+
+                        const location =
+                          movement.location_id
+                            ? locationMap.get(
+                                movement.location_id,
+                              )
+                            : null;
+
+                        const referenceHref =
+                          getReferenceHref(
+                            movement.reference_type,
+                            movement.reference_id,
+                          );
+
+                        const movementClasses =
+                          getMovementClasses(
+                            movement.movement_type,
+                          );
+
+                        return (
+                          <tr key={movement.id}>
+                            <td>
+                              <div className="cell-primary">
+                                {formatDateTime(
+                                  movement.created_at,
+                                )}
+                              </div>
+
+                              {movement.created_by ? (
+                                <div className="cell-secondary">
+                                  User:{" "}
+                                  {movement.created_by.slice(
+                                    0,
+                                    8,
+                                  )}
+                                  ...
+                                </div>
+                              ) : null}
+                            </td>
+
+                            <td>
+                              <span
+                                className="movement-badge"
+                                style={{
+                                  background:
+                                    movementClasses.background,
+                                  color:
+                                    movementClasses.color,
+                                  borderColor:
+                                    movementClasses.border,
+                                }}
                               >
+                                {titleCase(
+                                  movement.movement_type,
+                                )}
+                              </span>
+
+                              {movement.reason ? (
+                                <div className="cell-secondary">
+                                  {movement.reason}
+                                </div>
+                              ) : null}
+                            </td>
+
+                            <td>
+                              <div className="cell-primary">
                                 {product?.name ||
                                   "Unknown Product"}
-                              </Link>
+                              </div>
 
-                              {variant?.name && (
-                                <div className="variant-name">
-                                  {variant.name}
-                                </div>
+                              <div className="cell-secondary">
+                                {variant?.sku ||
+                                  variant?.name ||
+                                  "Default Variant"}
+                              </div>
+                            </td>
+
+                            <td>
+                              {batch ? (
+                                <Link
+                                  href={`/inventory/batches/${batch.id}`}
+                                  className="inline-link"
+                                >
+                                  {batch.lot_number}
+                                </Link>
+                              ) : (
+                                "—"
                               )}
+                            </td>
 
-                              {variant?.sku && (
-                                <div className="sku">
-                                  SKU: {variant.sku}
-                                </div>
+                            <td>
+                              {unit ? (
+                                <Link
+                                  href={`/inventory/serial-numbers/${unit.id}`}
+                                  className="inline-link"
+                                >
+                                  {unit.serial_number}
+                                </Link>
+                              ) : (
+                                "—"
                               )}
-                            </div>
-                          </td>
+                            </td>
 
-                          <td>
-                            <span
-                              className={`movement-badge ${
-                                incoming
-                                  ? "movement-in"
-                                  : outgoing
-                                    ? "movement-out"
-                                    : "movement-neutral"
-                              }`}
-                            >
-                              <Icon
-                                name={
-                                  incoming ? "in" : "out"
-                                }
-                                size={13}
-                              />
-                              {movementLabel(
-                                movement.movement_type
-                              )}
-                            </span>
-                          </td>
-
-                          <td>
-                            <span
-                              className={
-                                incoming
-                                  ? "quantity-in"
-                                  : outgoing
-                                    ? "quantity-out"
-                                    : ""
-                              }
-                            >
-                              {incoming
-                                ? "+"
-                                : outgoing
-                                  ? "-"
-                                  : ""}
-                              {formatNumber(
-                                movement.quantity
-                              )}
-                            </span>
-                          </td>
-
-                          <td>
-                            <span className="balance">
-                              {formatNumber(
-                                movement.quantity_before
-                              )}{" "}
-                              →{" "}
-                              {formatNumber(
-                                movement.quantity_after
-                              )}
-                            </span>
-                          </td>
-
-                          <td>
-                            <div className="location-cell">
-                              <div className="warehouse-name">
+                            <td>
+                              <div className="cell-primary">
                                 {warehouse?.name ||
-                                  "No warehouse"}
+                                  "—"}
                               </div>
 
-                              <div className="location-name">
-                                {location
-                                  ? `${location.name} (${location.code})`
-                                  : "No location"}
-                              </div>
-                            </div>
-                          </td>
+                              {location?.name ? (
+                                <div className="cell-secondary">
+                                  {location.name}
+                                </div>
+                              ) : null}
+                            </td>
 
-                          <td>
-                            <div
-                              className="reference"
-                              title={
-                                reference ||
-                                movement.reason ||
-                                movement.notes ||
-                                ""
-                              }
-                            >
-                              {reference ||
-                                movement.reason ||
-                                movement.notes ||
-                                "—"}
-                            </div>
-                          </td>
+                            <td className="numeric-cell">
+                              {formatNumber(
+                                movement.quantity,
+                              )}
+                            </td>
 
-                          <td>
-                            <div className="date-cell">
-                              <div className="date-main">
-                                {formatDate(
-                                  movement.created_at
-                                )}
-                              </div>
+                            <td className="numeric-cell">
+                              {formatNumber(
+                                movement.quantity_before,
+                              )}
+                            </td>
 
-                              <div className="date-time">
-                                {formatTime(
-                                  movement.created_at
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <td className="numeric-cell">
+                              {formatNumber(
+                                movement.quantity_after,
+                              )}
+                            </td>
+
+                            <td>
+                              {movement.reference_id ? (
+                                referenceHref ? (
+                                  <Link
+                                    href={
+                                      referenceHref
+                                    }
+                                    className="inline-link"
+                                  >
+                                    {titleCase(
+                                      movement.reference_type,
+                                    )}
+                                  </Link>
+                                ) : (
+                                  <div className="cell-primary">
+                                    {titleCase(
+                                      movement.reference_type,
+                                    )}
+                                  </div>
+                                )
+                              ) : (
+                                <span className="muted">
+                                  —
+                                </span>
+                              )}
+
+                              {movement.reference_id ? (
+                                <div className="cell-secondary">
+                                  {movement.reference_id.slice(
+                                    0,
+                                    8,
+                                  )}
+                                  ...
+                                </div>
+                              ) : null}
+                            </td>
+
+                            <td>
+                              {movement.transaction_id ? (
+                                <div>
+                                  <div className="cell-primary transaction-id">
+                                    {movement.transaction_id.slice(
+                                      0,
+                                      8,
+                                    )}
+                                    ...
+                                  </div>
+
+                                  <div className="cell-secondary">
+                                    Transaction
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="muted">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      },
+                    )}
                   </tbody>
                 </table>
-              </div>
-            )}
-          </div>
-
-          {companyId && (
-            <div className="footer-note">
-              Movement history is restricted to your company
-              inventory.
+              )}
             </div>
-          )}
+          </section>
+
+          <section className="content-card audit-info">
+            <div className="audit-row">
+              <div>
+                <strong>
+                  Inventory audit trail
+                </strong>
+
+                <span>
+                  Movement records are displayed from the
+                  authoritative inventory_movements ledger.
+                </span>
+              </div>
+
+              <Link
+                href="/inventory"
+                className="secondary-button"
+              >
+                Back to Inventory
+              </Link>
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
+
+      <style jsx>{`
+        .page-content {
+          padding: 28px;
+        }
+
+        .page-shell {
+          max-width: 1750px;
+          margin: 0 auto;
+        }
+
+        .page-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 22px;
+        }
+
+        .eyebrow {
+          margin-bottom: 6px;
+          color: #6b7280;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+        }
+
+        h1 {
+          margin: 0;
+          color: #111827;
+          font-size: 28px;
+          line-height: 1.15;
+          font-weight: 700;
+        }
+
+        .page-header p {
+          margin: 8px 0 0;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .page-actions {
+          display: flex;
+          gap: 10px;
+        }
+
+        .secondary-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 38px;
+          padding: 0 14px;
+          border-radius: 8px;
+          border: 1px solid #d1d5db;
+          background: #ffffff;
+          color: #111827;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          cursor: pointer;
+        }
+
+        .secondary-button:hover {
+          background: #f9fafb;
+        }
+
+        .secondary-button:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+
+        .error-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 16px 18px;
+          margin-bottom: 20px;
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+          border-radius: 12px;
+        }
+
+        .error-card > div {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .error-card strong {
+          color: #9a3412;
+          font-size: 13px;
+        }
+
+        .error-card span {
+          color: #c2410c;
+          font-size: 12px;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+
+        .stat-card {
+          padding: 20px;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+
+        .stat-label {
+          margin-bottom: 8px;
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .stat-value {
+          color: #111827;
+          font-size: 25px;
+          line-height: 1.15;
+          font-weight: 700;
+        }
+
+        .stat-description {
+          margin-top: 7px;
+          color: #9ca3af;
+          font-size: 12px;
+        }
+
+        .secondary-stats {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 1px;
+          margin-bottom: 20px;
+          background: #e5e7eb;
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .secondary-stats > div {
+          padding: 14px 18px;
+          background: #ffffff;
+        }
+
+        .secondary-stats span {
+          display: block;
+          margin-bottom: 4px;
+          color: #6b7280;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .secondary-stats strong {
+          color: #111827;
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .content-card {
+          margin-bottom: 20px;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+          overflow: hidden;
+        }
+
+        .filters-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 20px 22px 16px;
+        }
+
+        .filters-header h2 {
+          margin: 0;
+          color: #111827;
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .filters-header p {
+          margin: 5px 0 0;
+          color: #6b7280;
+          font-size: 12px;
+        }
+
+        .result-count {
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
+        .filters {
+          display: grid;
+          grid-template-columns:
+            minmax(280px, 1.7fr)
+            minmax(170px, 1fr)
+            minmax(180px, 1fr)
+            minmax(180px, 1fr)
+            150px
+            150px
+            auto;
+          gap: 10px;
+          padding: 0 22px 18px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+
+        .search-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .search-wrapper svg {
+          position: absolute;
+          left: 12px;
+          color: #9ca3af;
+          pointer-events: none;
+        }
+
+        .search-wrapper input,
+        .filters select,
+        .filters > input {
+          width: 100%;
+          height: 38px;
+          padding: 0 12px;
+          box-sizing: border-box;
+          color: #111827;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          outline: none;
+          font-size: 13px;
+        }
+
+        .search-wrapper input {
+          padding-left: 36px;
+        }
+
+        .search-wrapper input:focus,
+        .filters select:focus,
+        .filters > input:focus {
+          border-color: #9ca3af;
+          box-shadow:
+            0 0 0 2px rgba(156, 163, 175, 0.15);
+        }
+
+        .clear-button {
+          height: 38px;
+          padding: 0 12px;
+          border: 0;
+          background: transparent;
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .clear-button:hover {
+          color: #111827;
+        }
+
+        .table-wrapper {
+          overflow-x: auto;
+        }
+
+        .data-table {
+          width: 100%;
+          min-width: 1550px;
+          border-collapse: collapse;
+        }
+
+        .data-table th {
+          padding: 12px 16px;
+          background: #fafafa;
+          border-bottom: 1px solid #e5e7eb;
+          color: #6b7280;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        .data-table td {
+          padding: 14px 16px;
+          border-bottom: 1px solid #f0f0f0;
+          color: #374151;
+          font-size: 13px;
+          vertical-align: middle;
+        }
+
+        .data-table tbody tr:last-child td {
+          border-bottom: 0;
+        }
+
+        .data-table tbody tr:hover {
+          background: #fafafa;
+        }
+
+        .cell-primary {
+          color: #111827;
+          font-weight: 600;
+        }
+
+        .cell-secondary {
+          margin-top: 4px;
+          color: #9ca3af;
+          font-size: 11px;
+        }
+
+        .movement-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 25px;
+          padding: 0 9px;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .inline-link {
+          color: #2563eb;
+          text-decoration: none;
+          font-weight: 600;
+        }
+
+        .inline-link:hover {
+          text-decoration: underline;
+        }
+
+        .muted {
+          color: #9ca3af;
+          font-size: 12px;
+        }
+
+        .numeric-cell {
+          text-align: right;
+          white-space: nowrap;
+        }
+
+        .transaction-id {
+          font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            "Liberation Mono",
+            monospace;
+          font-size: 12px;
+        }
+
+        .loading-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 340px;
+          gap: 12px;
+          color: #6b7280;
+          font-size: 13px;
+        }
+
+        .loading-spinner {
+          width: 24px;
+          height: 24px;
+          border: 3px solid #e5e7eb;
+          border-top-color: #6b7280;
+          border-radius: 50%;
+          animation: inventory-movements-spin 0.8s linear infinite;
+        }
+
+        @keyframes inventory-movements-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 340px;
+          padding: 40px 24px;
+          text-align: center;
+        }
+
+        .empty-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 48px;
+          height: 48px;
+          margin-bottom: 14px;
+          border-radius: 12px;
+          background: #f3f4f6;
+          color: #6b7280;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+        }
+
+        .empty-state h3 {
+          margin: 0;
+          color: #111827;
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .empty-state p {
+          max-width: 520px;
+          margin: 7px 0 18px;
+          color: #6b7280;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .audit-info {
+          padding: 0;
+        }
+
+        .audit-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 18px 22px;
+        }
+
+        .audit-row > div {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .audit-row strong {
+          color: #111827;
+          font-size: 13px;
+        }
+
+        .audit-row span {
+          color: #6b7280;
+          font-size: 12px;
+        }
+
+        @media (max-width: 1400px) {
+          .filters {
+            grid-template-columns:
+              minmax(260px, 1.7fr)
+              repeat(3, minmax(150px, 1fr))
+              140px
+              140px
+              auto;
+          }
+        }
+
+        @media (max-width: 1100px) {
+          .stats-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .secondary-stats {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .filters {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .search-wrapper {
+            grid-column: 1 / -1;
+          }
+
+          .clear-button {
+            justify-self: start;
+          }
+        }
+
+        @media (max-width: 700px) {
+          .page-content {
+            padding: 18px;
+          }
+
+          .page-header {
+            flex-direction: column;
+          }
+
+          .page-actions {
+            width: 100%;
+          }
+
+          .page-actions > * {
+            width: 100%;
+          }
+
+          .stats-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .secondary-stats {
+            grid-template-columns: 1fr;
+          }
+
+          .filters {
+            grid-template-columns: 1fr;
+          }
+
+          .search-wrapper {
+            grid-column: auto;
+          }
+
+          .filters-header {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .error-card,
+          .audit-row {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .audit-row .secondary-button {
+            width: 100%;
+          }
+        }
+
+        @media print {
+          .page-actions,
+          .filters,
+          .audit-info {
+            display: none !important;
+          }
+
+          .page-content {
+            padding: 0;
+          }
+
+          .content-card,
+          .stat-card {
+            box-shadow: none;
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }

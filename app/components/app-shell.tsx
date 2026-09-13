@@ -455,7 +455,7 @@ function getWorkspaceSections(): NavSection[] {
           label: "Documents",
           href: "/documents",
           icon: "documents",
-          available: false,
+          available: true,
           keywords: [
             "document",
             "documents",

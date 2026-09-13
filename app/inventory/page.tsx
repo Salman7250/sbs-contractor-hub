@@ -6,2262 +6,1878 @@ import {
   useMemo,
   useState,
 } from "react";
-import Link from "next/link";
-
+import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
-
-/* -------------------------------------------------------------------------- */
-/* Types                                                                      */
-/* -------------------------------------------------------------------------- */
-
-type InventoryRow = {
-  id: string;
-  company_id: string;
-  product_id: string;
-  variant_id: string;
-  quantity: number;
-  reserved_quantity: number;
-  reorder_level: number;
-  reorder_quantity: number;
-  warehouse_id: string | null;
-  location_id: string | null;
-  created_at: string;
-  updated_at: string;
-};
 
 type Product = {
   id: string;
   name: string;
   brand: string | null;
   category: string | null;
-  tracking_mode:
-    | "none"
-    | "quantity"
-    | "batch"
-    | "serial"
-    | null;
-  track_inventory: boolean;
+  tracking_mode: string | null;
+  status: string | null;
 };
 
-type ProductVariant = {
+type Variant = {
   id: string;
   product_id: string;
-  name: string;
+  name: string | null;
   sku: string | null;
-  barcode: string | null;
-  cost_price: number | string | null;
-  selling_price: number | string | null;
-  is_active: boolean;
+  cost_price: number | null;
+  selling_price: number | null;
+  is_active: boolean | null;
+};
+
+type Batch = {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  lot_number: string;
+  received_at: string | null;
+  quantity_received: number;
+  unit_cost: number | null;
+  total_cost: number | null;
+  status: string | null;
+};
+
+type BatchStock = {
+  id: string;
+  batch_id: string;
+  product_id: string;
+  variant_id: string | null;
+  warehouse_id: string;
+  location_id: string;
+  quantity: number;
+  reserved_quantity: number;
 };
 
 type Warehouse = {
   id: string;
   name: string;
-  code: string;
-  is_active: boolean;
+  code: string | null;
 };
 
-type WarehouseLocation = {
+type Location = {
   id: string;
   warehouse_id: string;
   name: string;
-  code: string;
-  is_active: boolean;
+  code: string | null;
 };
 
-type Movement = {
-  id: string;
+type ReorderRow = {
   product_id: string;
-  variant_id: string;
-  warehouse_id: string | null;
-  location_id: string | null;
-  movement_type: string;
+  variant_id: string | null;
+  reorder_level: number | null;
+};
+
+type InventoryRow = {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  productName: string;
+  variantName: string;
+  sku: string;
+  brand: string;
+  category: string;
+  trackingMode: string;
+  batchCount: number;
+  lotNumber: string;
+  warehouseName: string;
+  locationName: string;
   quantity: number;
-  quantity_before: number;
-  quantity_after: number;
-  reason: string | null;
-  created_at: string;
+  reserved: number;
+  available: number;
+  unitCost: number;
+  stockValue: number;
+  reorderLevel: number;
+  status: "in-stock" | "low-stock" | "out-of-stock";
 };
 
-type InventoryItem = InventoryRow & {
-  product: Product | null;
-  variant: ProductVariant | null;
-  warehouse: Warehouse | null;
-  location: WarehouseLocation | null;
-};
+const PAGE_SIZE = 50;
 
-type InventoryStatus =
-  | "all"
-  | "in_stock"
-  | "low_stock"
-  | "out_of_stock";
-
-type SortKey =
-  | "product"
-  | "quantity"
-  | "available"
-  | "value"
-  | "updated";
-
-type SortDirection = "asc" | "desc";
-
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
-
-function numberValue(
-  value: string | number | null | undefined
-) {
-  const result = Number(value);
-
-  return Number.isFinite(result) ? result : 0;
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
-function formatMoney(
-  value: number,
-  currency: string
-) {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(2)}`;
-  }
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function formatDate(value: string | null) {
   if (!value) return "—";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(undefined, {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
-  });
+  }).format(new Date(value));
 }
 
-function getAvailable(item: InventoryItem) {
-  return Math.max(
-    numberValue(item.quantity) -
-      numberValue(item.reserved_quantity),
-    0
-  );
-}
-
-function getStatus(
-  item: InventoryItem
-): Exclude<InventoryStatus, "all"> {
-  const quantity = numberValue(item.quantity);
-  const available = getAvailable(item);
-  const reorderLevel = numberValue(item.reorder_level);
-
-  if (available <= 0 || quantity <= 0) {
-    return "out_of_stock";
-  }
-
-  if (
-    available <= reorderLevel &&
-    reorderLevel > 0
-  ) {
-    return "low_stock";
-  }
-
-  return "in_stock";
-}
-
-function statusLabel(
-  status: Exclude<InventoryStatus, "all">
-) {
-  switch (status) {
-    case "in_stock":
-      return "In Stock";
-
-    case "low_stock":
-      return "Low Stock";
-
-    case "out_of_stock":
-      return "Out of Stock";
-
-    default:
-      return status;
-  }
-}
-
-function statusClasses(
-  status: Exclude<InventoryStatus, "all">
-) {
-  switch (status) {
-    case "in_stock":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-
-    case "low_stock":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-
-    case "out_of_stock":
-      return "bg-red-50 text-red-700 ring-red-200";
-
-    default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-  }
-}
-
-function trackingLabel(
-  trackingMode: Product["tracking_mode"]
-) {
-  switch (trackingMode) {
-    case "quantity":
-      return "Quantity";
-
-    case "batch":
-      return "Batch";
-
+function normalizeTrackingMode(value: string | null) {
+  switch (value) {
     case "serial":
       return "Serial";
-
+    case "batch":
+      return "Batch";
+    case "quantity":
+      return "Quantity";
     case "none":
-      return "Not tracked";
-
+      return "Not Tracked";
     default:
       return "Unknown";
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Icon                                                                       */
-/* -------------------------------------------------------------------------- */
-
-type IconName =
-  | "search"
-  | "filter"
-  | "package"
-  | "warehouse"
-  | "layers"
-  | "warning"
-  | "alert"
-  | "check"
-  | "arrow"
-  | "refresh"
-  | "plus"
-  | "chevron"
-  | "box"
-  | "serial"
-  | "external";
-
-function Icon({
-  name,
-  size = 18,
-}: {
-  name: IconName;
-  size?: number;
-}) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    className: "shrink-0",
-  };
-
-  switch (name) {
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
-        </svg>
-      );
-
-    case "filter":
-      return (
-        <svg {...common}>
-          <path d="M4 6h16" />
-          <path d="M7 12h10" />
-          <path d="M10 18h4" />
-        </svg>
-      );
-
-    case "package":
-      return (
-        <svg {...common}>
-          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-          <path d="m4 7.5 8 4.5 8-4.5" />
-          <path d="M12 12v9" />
-        </svg>
-      );
-
-    case "warehouse":
-      return (
-        <svg {...common}>
-          <path d="M3 10 12 4l9 6" />
-          <path d="M5 9v10h14V9" />
-          <path d="M9 19v-5h6v5" />
-          <path d="M8 11h.01M12 11h.01M16 11h.01" />
-        </svg>
-      );
-
-    case "layers":
-      return (
-        <svg {...common}>
-          <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-          <path d="m3 12 9 5 9-5" />
-          <path d="m3 16 9 5 9-5" />
-        </svg>
-      );
-
-    case "warning":
-      return (
-        <svg {...common}>
-          <path d="M12 3 2.5 20h19L12 3Z" />
-          <path d="M12 9v5" />
-          <path d="M12 17h.01" />
-        </svg>
-      );
-
-    case "alert":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 8v5" />
-          <path d="M12 16h.01" />
-        </svg>
-      );
-
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="m5 12 4 4L19 6" />
-        </svg>
-      );
-
-    case "arrow":
-      return (
-        <svg {...common}>
-          <path d="M5 12h14" />
-          <path d="m13 6 6 6-6 6" />
-        </svg>
-      );
-
-    case "refresh":
-      return (
-        <svg {...common}>
-          <path d="M20 11a8 8 0 0 0-14.7-4L4 9" />
-          <path d="M4 4v5h5" />
-          <path d="M4 13a8 8 0 0 0 14.7 4L20 15" />
-          <path d="M20 20v-5h-5" />
-        </svg>
-      );
-
-    case "plus":
-      return (
-        <svg {...common}>
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
-      );
-
-    case "chevron":
-      return (
-        <svg {...common}>
-          <path d="m9 18 6-6-6-6" />
-        </svg>
-      );
-
-    case "box":
-      return (
-        <svg {...common}>
-          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-          <path d="M4 7.5 12 12l8-4.5" />
-        </svg>
-      );
-
+function getTrackingClass(value: string) {
+  switch (value.toLowerCase()) {
     case "serial":
-      return (
-        <svg {...common}>
-          <rect
-            x="4"
-            y="5"
-            width="16"
-            height="14"
-            rx="2"
-          />
-          <path d="M8 9v6M11 9v6M14 9v6M17 9v6" />
-        </svg>
-      );
-
-    case "external":
-      return (
-        <svg {...common}>
-          <path d="M14 5h5v5" />
-          <path d="m19 5-8 8" />
-          <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-        </svg>
-      );
-
+      return "tracking serial";
+    case "batch":
+      return "tracking batch";
+    case "quantity":
+      return "tracking quantity";
     default:
-      return null;
+      return "tracking";
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Stat Card                                                                  */
-/* -------------------------------------------------------------------------- */
-
-function StatCard({
-  label,
-  value,
-  description,
-  icon,
-}: {
-  label: string;
-  value: string;
-  description: string;
-  icon: IconName;
-}) {
-  return (
-    <div
-      className="rounded-xl bg-white p-5"
-      style={{
-        border: "1px solid #e2e8f0",
-      }}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-slate-500">
-            {label}
-          </div>
-
-          <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-            {value}
-          </div>
-
-          <div className="mt-1 text-xs text-slate-400">
-            {description}
-          </div>
-        </div>
-
-        <div className="rounded-lg bg-slate-50 p-2.5 text-slate-500">
-          <Icon name={icon} size={19} />
-        </div>
-      </div>
-    </div>
-  );
+function getStatusLabel(status: InventoryRow["status"]) {
+  switch (status) {
+    case "in-stock":
+      return "In Stock";
+    case "low-stock":
+      return "Low Stock";
+    case "out-of-stock":
+      return "Out of Stock";
+    default:
+      return status;
+  }
 }
-
-/* -------------------------------------------------------------------------- */
-/* Page                                                                       */
-/* -------------------------------------------------------------------------- */
 
 export default function InventoryPage() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+
+  const [companyId, setCompanyId] = useState<string | null>(null);
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batchStock, setBatchStock] = useState<BatchStock[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [reorderRows, setReorderRows] = useState<ReorderRow[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [currency, setCurrency] = useState("USD");
-
-  const [inventory, setInventory] = useState<
-    InventoryItem[]
-  >([]);
-
-  const [products, setProducts] = useState<Product[]>([]);
-  const [variants, setVariants] = useState<ProductVariant[]>(
-    []
-  );
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(
-    []
-  );
-  const [movements, setMovements] = useState<Movement[]>([]);
-
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState<InventoryStatus>("all");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
+  const [trackingFilter, setTrackingFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const [warehouseFilter, setWarehouseFilter] =
-    useState("all");
-
-  const [sortKey, setSortKey] =
-    useState<SortKey>("product");
-
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>("asc");
+  const [page, setPage] = useState(1);
 
   const loadInventory = useCallback(
     async (showRefresh = false) => {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setErrorMessage("");
-
       try {
-        const {
-          data: {
-            user,
-          },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          throw new Error(
-            "You must be signed in to view inventory."
-          );
+        if (showRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
         }
 
+        setErrorMessage("");
+
         const {
-          data: membership,
-          error: membershipError,
-        } = await supabase
-          .from("company_members")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) {
+          throw new Error(authError.message);
+        }
+
+        if (!user) {
+          throw new Error("You are not authenticated.");
+        }
+
+        const { data: membership, error: membershipError } =
+          await supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
 
         if (membershipError) {
-          throw membershipError;
+          throw new Error(membershipError.message);
         }
 
         if (!membership?.company_id) {
           throw new Error(
-            "No company membership was found for this account."
+            "No active company was found for your account.",
           );
         }
 
-        const companyId = membership.company_id;
+        const currentCompanyId = membership.company_id;
+        setCompanyId(currentCompanyId);
 
         const [
-          companyResult,
-          inventoryResult,
           productsResult,
           variantsResult,
+          batchesResult,
+          batchStockResult,
           warehousesResult,
           locationsResult,
-          movementsResult,
+          reorderResult,
         ] = await Promise.all([
-          supabase
-            .from("companies")
-            .select("currency")
-            .eq("id", companyId)
-            .maybeSingle(),
-
-          /*
-           * IMPORTANT:
-           * Never filter real inventory rows using product tracking
-           * metadata here.
-           *
-           * The inventory table is the authoritative quantity/balance
-           * ledger. Every real row must survive enrichment even if
-           * product metadata is temporarily incomplete.
-           */
-          supabase
-            .from("inventory")
-            .select(
-              `
-                id,
-                company_id,
-                product_id,
-                variant_id,
-                quantity,
-                reserved_quantity,
-                reorder_level,
-                reorder_quantity,
-                warehouse_id,
-                location_id,
-                created_at,
-                updated_at
-              `
-            )
-            .eq("company_id", companyId),
-
           supabase
             .from("products")
             .select(
-              `
-                id,
-                name,
-                brand,
-                category,
-                tracking_mode,
-                track_inventory
-              `
+              "id,name,brand,category,tracking_mode,status",
             )
-            .eq("company_id", companyId)
-            .eq("status", "active"),
+            .eq("company_id", currentCompanyId),
 
           supabase
             .from("product_variants")
             .select(
-              `
-                id,
-                product_id,
-                name,
-                sku,
-                barcode,
-                cost_price,
-                selling_price,
-                is_active
-              `
+              "id,product_id,name,sku,cost_price,selling_price,is_active",
             )
-            .eq("company_id", companyId)
+            .eq("company_id", currentCompanyId)
             .eq("is_active", true),
 
           supabase
-            .from("warehouses")
+            .from("inventory_batches")
             .select(
-              `
-                id,
-                name,
-                code,
-                is_active
-              `
+              "id,product_id,variant_id,lot_number,received_at,quantity_received,unit_cost,total_cost,status",
             )
-            .eq("company_id", companyId)
+            .eq("company_id", currentCompanyId)
+            .neq("status", "cancelled"),
+
+          supabase
+            .from("inventory_batch_stock")
+            .select(
+              "id,batch_id,product_id,variant_id,warehouse_id,location_id,quantity,reserved_quantity",
+            )
+            .eq("company_id", currentCompanyId),
+
+          supabase
+            .from("warehouses")
+            .select("id,name,code")
+            .eq("company_id", currentCompanyId)
             .eq("is_active", true)
             .order("name"),
 
           supabase
             .from("warehouse_locations")
-            .select(
-              `
-                id,
-                warehouse_id,
-                name,
-                code,
-                is_active
-              `
-            )
-            .eq("company_id", companyId)
+            .select("id,warehouse_id,name,code")
+            .eq("company_id", currentCompanyId)
             .eq("is_active", true)
             .order("name"),
 
           supabase
-            .from("inventory_movements")
+            .from("inventory")
             .select(
-              `
-                id,
-                product_id,
-                variant_id,
-                warehouse_id,
-                location_id,
-                movement_type,
-                quantity,
-                quantity_before,
-                quantity_after,
-                reason,
-                created_at
-              `
+              "product_id,variant_id,reorder_level",
             )
-            .eq("company_id", companyId)
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(8),
+            .eq("company_id", currentCompanyId),
         ]);
 
-        if (companyResult.error) {
-          throw companyResult.error;
-        }
+        const errors = [
+          productsResult.error,
+          variantsResult.error,
+          batchesResult.error,
+          batchStockResult.error,
+          warehousesResult.error,
+          locationsResult.error,
+          reorderResult.error,
+        ].filter(Boolean);
 
-        if (inventoryResult.error) {
-          throw inventoryResult.error;
-        }
-
-        if (productsResult.error) {
-          throw productsResult.error;
-        }
-
-        if (variantsResult.error) {
-          throw variantsResult.error;
-        }
-
-        if (warehousesResult.error) {
-          throw warehousesResult.error;
-        }
-
-        if (locationsResult.error) {
-          throw locationsResult.error;
-        }
-
-        if (movementsResult.error) {
-          throw movementsResult.error;
-        }
-
-        const productRows =
-          (productsResult.data ?? []) as Product[];
-
-        const variantRows =
-          (variantsResult.data ?? []) as ProductVariant[];
-
-        const warehouseRows =
-          (warehousesResult.data ?? []) as Warehouse[];
-
-        const locationRows =
-          (locationsResult.data ??
-            []) as WarehouseLocation[];
-
-        /*
-         * Preserve every real inventory row.
-         */
-        const inventoryRows =
-          (inventoryResult.data ?? []) as InventoryRow[];
-
-        const productMap = new Map(
-          productRows.map((product) => [
-            product.id,
-            product,
-          ])
-        );
-
-        const variantMap = new Map(
-          variantRows.map((variant) => [
-            variant.id,
-            variant,
-          ])
-        );
-
-        const warehouseMap = new Map(
-          warehouseRows.map((warehouse) => [
-            warehouse.id,
-            warehouse,
-          ])
-        );
-
-        const locationMap = new Map(
-          locationRows.map((location) => [
-            location.id,
-            location,
-          ])
-        );
-
-        /*
-         * These are the products whose quantity can be represented
-         * by the inventory quantity ledger.
-         *
-         * Serial products are intentionally excluded because their
-         * authoritative stock lives in serialized_units.
-         *
-         * Products with tracking_mode = none are also excluded because
-         * they are not inventory-tracked.
-         */
-        const trackedProductIds = new Set(
-          productRows
-            .filter(
-              (product) =>
-                product.tracking_mode === "quantity" ||
-                product.tracking_mode === "batch"
-            )
-            .map((product) => product.id)
-        );
-
-        /*
-         * Preserve ALL existing inventory rows first.
-         */
-        const enrichedRealInventory =
-          inventoryRows.map((row) => ({
-            ...row,
-            product:
-              productMap.get(row.product_id) ?? null,
-            variant:
-              variantMap.get(row.variant_id) ?? null,
-            warehouse:
-              row.warehouse_id
-                ? warehouseMap.get(row.warehouse_id) ??
-                  null
-                : null,
-            location:
-              row.location_id
-                ? locationMap.get(row.location_id) ??
-                  null
-                : null,
-          }));
-
-        /*
-         * Add virtual zero-stock rows for tracked variants that do
-         * not yet have an inventory row.
-         *
-         * This allows a newly-created quantity/batch product to appear
-         * in Inventory as Out of Stock before its first receipt.
-         *
-         * We deliberately do NOT create database rows here.
-         */
-        const existingInventoryVariantIds =
-          new Set(
-            inventoryRows.map(
-              (row) => row.variant_id
-            )
+        if (errors.length > 0) {
+          throw new Error(
+            errors[0]?.message ||
+              "Failed to load inventory.",
           );
-
-        const zeroInventoryRows: InventoryItem[] =
-          [];
-
-        for (const variant of variantRows) {
-          const product =
-            productMap.get(variant.product_id);
-
-          if (!product) {
-            continue;
-          }
-
-          if (
-            !trackedProductIds.has(
-              variant.product_id
-            )
-          ) {
-            continue;
-          }
-
-          if (
-            existingInventoryVariantIds.has(
-              variant.id
-            )
-          ) {
-            continue;
-          }
-
-          zeroInventoryRows.push({
-            id: `virtual-${variant.id}`,
-            company_id: companyId,
-            product_id: variant.product_id,
-            variant_id: variant.id,
-            quantity: 0,
-            reserved_quantity: 0,
-            reorder_level: 0,
-            reorder_quantity: 0,
-            warehouse_id: null,
-            location_id: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            product,
-            variant,
-            warehouse: null,
-            location: null,
-          });
         }
 
-        const enrichedInventory = [
-          ...enrichedRealInventory,
-          ...zeroInventoryRows,
-        ];
-
-        setCurrency(
-          typeof companyResult.data?.currency ===
-            "string"
-            ? companyResult.data.currency
-            : "USD"
-        );
-
-        setProducts(productRows);
-        setVariants(variantRows);
-        setWarehouses(warehouseRows);
-        setInventory(enrichedInventory);
-
-        setMovements(
-          (movementsResult.data ?? []) as Movement[]
-        );
+        setProducts(productsResult.data ?? []);
+        setVariants(variantsResult.data ?? []);
+        setBatches(batchesResult.data ?? []);
+        setBatchStock(batchStockResult.data ?? []);
+        setWarehouses(warehousesResult.data ?? []);
+        setLocations(locationsResult.data ?? []);
+        setReorderRows(reorderResult.data ?? []);
       } catch (error) {
-        console.error(
-          "Inventory load error:",
-          error
-        );
+        console.error("INVENTORY LOAD ERROR:", error);
 
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Unable to load inventory."
+            : "Failed to load inventory.",
         );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [supabase]
+    [supabase],
   );
 
   useEffect(() => {
-    // Initial inventory data load.
-    // The function performs async Supabase requests and updates local state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadInventory();
+    const timer = setTimeout(() => {
+      void loadInventory();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [loadInventory]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Derived data                                                             */
-  /* ------------------------------------------------------------------------ */
+  const productMap = useMemo(() => {
+    const map = new Map<string, Product>();
 
-  const productMap = useMemo(
-    () =>
-      new Map(
-        products.map((product) => [
-          product.id,
-          product,
-        ])
-      ),
-    [products]
-  );
-
-  const variantMap = useMemo(
-    () =>
-      new Map(
-        variants.map((variant) => [
-          variant.id,
-          variant,
-        ])
-      ),
-    [variants]
-  );
-
-  const warehouseMap = useMemo(
-    () =>
-      new Map(
-        warehouses.map((warehouse) => [
-          warehouse.id,
-          warehouse,
-        ])
-      ),
-    [warehouses]
-  );
-
-  const totalUnits = useMemo(
-    () =>
-      inventory.reduce(
-        (sum, item) =>
-          sum + numberValue(item.quantity),
-        0
-      ),
-    [inventory]
-  );
-
-  const totalReserved = useMemo(
-    () =>
-      inventory.reduce(
-        (sum, item) =>
-          sum +
-          numberValue(item.reserved_quantity),
-        0
-      ),
-    [inventory]
-  );
-
-  const totalAvailable = Math.max(
-    totalUnits - totalReserved,
-    0
-  );
-
-  const inventoryValue = useMemo(
-    () =>
-      inventory.reduce((sum, item) => {
-        const cost = numberValue(
-          item.variant?.cost_price
-        );
-
-        return (
-          sum +
-          numberValue(item.quantity) * cost
-        );
-      }, 0),
-    [inventory]
-  );
-
-  const lowStockCount = useMemo(
-    () =>
-      inventory.filter(
-        (item) =>
-          getStatus(item) === "low_stock"
-      ).length,
-    [inventory]
-  );
-
-  const outOfStockCount = useMemo(
-    () =>
-      inventory.filter(
-        (item) =>
-          getStatus(item) === "out_of_stock"
-      ).length,
-    [inventory]
-  );
-
-  const filteredInventory = useMemo(() => {
-    const normalizedSearch =
-      search.trim().toLowerCase();
-
-    const rows = inventory.filter((item) => {
-      const product = item.product;
-      const variant = item.variant;
-
-      const searchMatch =
-        !normalizedSearch ||
-        product?.name
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        product?.brand
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-        variant?.name
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        variant?.sku
-          ?.toLowerCase()
-          .includes(normalizedSearch) ||
-        variant?.barcode
-          ?.toLowerCase()
-          .includes(normalizedSearch);
-
-      const statusMatch =
-        statusFilter === "all" ||
-        getStatus(item) === statusFilter;
-
-      const warehouseMatch =
-        warehouseFilter === "all" ||
-        item.warehouse_id === warehouseFilter;
-
-      return (
-        searchMatch &&
-        statusMatch &&
-        warehouseMatch
-      );
-    });
-
-    rows.sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortKey) {
-        case "product":
-          comparison = (
-            a.product?.name ?? ""
-          ).localeCompare(
-            b.product?.name ?? ""
-          );
-
-          if (comparison === 0) {
-            comparison = (
-              a.variant?.name ?? ""
-            ).localeCompare(
-              b.variant?.name ?? ""
-            );
-          }
-
-          break;
-
-        case "quantity":
-          comparison =
-            numberValue(a.quantity) -
-            numberValue(b.quantity);
-          break;
-
-        case "available":
-          comparison =
-            getAvailable(a) -
-            getAvailable(b);
-          break;
-
-        case "value":
-          comparison =
-            numberValue(a.quantity) *
-              numberValue(
-                a.variant?.cost_price
-              ) -
-            numberValue(b.quantity) *
-              numberValue(
-                b.variant?.cost_price
-              );
-          break;
-
-        case "updated":
-          comparison =
-            new Date(a.updated_at).getTime() -
-            new Date(b.updated_at).getTime();
-          break;
-      }
-
-      return sortDirection === "asc"
-        ? comparison
-        : -comparison;
-    });
-
-    return rows;
-  }, [
-    inventory,
-    search,
-    statusFilter,
-    warehouseFilter,
-    sortKey,
-    sortDirection,
-  ]);
-
-  const recentMovements = useMemo(
-    () =>
-      movements.map((movement) => ({
-        ...movement,
-        product:
-          productMap.get(
-            movement.product_id
-          ) ?? null,
-        variant:
-          variantMap.get(
-            movement.variant_id
-          ) ?? null,
-        warehouse:
-          movement.warehouse_id
-            ? warehouseMap.get(
-                movement.warehouse_id
-              ) ?? null
-            : null,
-      })),
-    [
-      movements,
-      productMap,
-      variantMap,
-      warehouseMap,
-    ]
-  );
-
-  /* ------------------------------------------------------------------------ */
-  /* Sorting                                                                  */
-  /* ------------------------------------------------------------------------ */
-
-  function changeSort(nextKey: SortKey) {
-    if (sortKey === nextKey) {
-      setSortDirection((current) =>
-        current === "asc" ? "desc" : "asc"
-      );
-      return;
+    for (const product of products) {
+      map.set(product.id, product);
     }
 
-    setSortKey(nextKey);
-    setSortDirection("asc");
-  }
+    return map;
+  }, [products]);
 
-  function sortIndicator(key: SortKey) {
-    if (sortKey !== key) return "";
+  const variantMap = useMemo(() => {
+    const map = new Map<string, Variant>();
 
-    return sortDirection === "asc"
-      ? " ↑"
-      : " ↓";
-  }
+    for (const variant of variants) {
+      map.set(variant.id, variant);
+    }
 
-  /* ------------------------------------------------------------------------ */
-  /* Loading                                                                  */
-  /* ------------------------------------------------------------------------ */
+    return map;
+  }, [variants]);
+
+  const batchMap = useMemo(() => {
+    const map = new Map<string, Batch>();
+
+    for (const batch of batches) {
+      map.set(batch.id, batch);
+    }
+
+    return map;
+  }, [batches]);
+
+  const warehouseMap = useMemo(() => {
+    const map = new Map<string, Warehouse>();
+
+    for (const warehouse of warehouses) {
+      map.set(warehouse.id, warehouse);
+    }
+
+    return map;
+  }, [warehouses]);
+
+  const locationMap = useMemo(() => {
+    const map = new Map<string, Location>();
+
+    for (const location of locations) {
+      map.set(location.id, location);
+    }
+
+    return map;
+  }, [locations]);
+
+  const reorderMap = useMemo(() => {
+    const map = new Map<string, number>();
+
+    for (const row of reorderRows) {
+      const key = `${row.product_id}:${row.variant_id ?? "null"}`;
+
+      const current = map.get(key);
+
+      if (
+        current === undefined ||
+        (row.reorder_level ?? 0) > current
+      ) {
+        map.set(
+          key,
+          Math.max(0, row.reorder_level ?? 0),
+        );
+      }
+    }
+
+    return map;
+  }, [reorderRows]);
+
+  const inventoryRows = useMemo<InventoryRow[]>(() => {
+    return batchStock
+      .map((stock) => {
+        const product = productMap.get(stock.product_id);
+        const variant = stock.variant_id
+          ? variantMap.get(stock.variant_id)
+          : undefined;
+        const batch = batchMap.get(stock.batch_id);
+        const warehouse = warehouseMap.get(
+          stock.warehouse_id,
+        );
+        const location = locationMap.get(
+          stock.location_id,
+        );
+
+        if (!product || !batch) {
+          return null;
+        }
+
+        const quantity = Math.max(0, stock.quantity ?? 0);
+        const reserved = Math.max(
+          0,
+          stock.reserved_quantity ?? 0,
+        );
+        const available = Math.max(
+          0,
+          quantity - reserved,
+        );
+
+        const unitCost = Number(
+          batch.unit_cost ??
+            variant?.cost_price ??
+            0,
+        );
+
+        const reorderLevel =
+          reorderMap.get(
+            `${stock.product_id}:${
+              stock.variant_id ?? "null"
+            }`,
+          ) ?? 0;
+
+        let status: InventoryRow["status"] =
+          "in-stock";
+
+        if (available <= 0) {
+          status = "out-of-stock";
+        } else if (
+          reorderLevel > 0 &&
+          available <= reorderLevel
+        ) {
+          status = "low-stock";
+        }
+
+        return {
+          id: stock.id,
+          productId: stock.product_id,
+          variantId: stock.variant_id,
+          productName: product.name,
+          variantName:
+            variant?.name ||
+            (stock.variant_id
+              ? "Variant"
+              : "Default"),
+          sku: variant?.sku || "—",
+          brand: product.brand || "—",
+          category: product.category || "—",
+          trackingMode: normalizeTrackingMode(
+            product.tracking_mode,
+          ),
+          batchCount: 1,
+          lotNumber: batch.lot_number,
+          warehouseName:
+            warehouse?.name || "Unknown Warehouse",
+          locationName:
+            location?.name || "Unknown Location",
+          quantity,
+          reserved,
+          available,
+          unitCost,
+          stockValue: quantity * unitCost,
+          reorderLevel,
+          status,
+        };
+      })
+      .filter(
+        (row): row is InventoryRow => row !== null,
+      );
+  }, [
+    batchStock,
+    productMap,
+    variantMap,
+    batchMap,
+    warehouseMap,
+    locationMap,
+    reorderMap,
+  ]);
+
+  const stats = useMemo(() => {
+    const totalUnits = inventoryRows.reduce(
+      (sum, row) => sum + row.quantity,
+      0,
+    );
+
+    const availableUnits = inventoryRows.reduce(
+      (sum, row) => sum + row.available,
+      0,
+    );
+
+    const reservedUnits = inventoryRows.reduce(
+      (sum, row) => sum + row.reserved,
+      0,
+    );
+
+    const inventoryValue = inventoryRows.reduce(
+      (sum, row) => sum + row.stockValue,
+      0,
+    );
+
+    const lowStockProducts = new Set(
+      inventoryRows
+        .filter((row) => row.status === "low-stock")
+        .map(
+          (row) =>
+            `${row.productId}:${row.variantId ?? "null"}`,
+        ),
+    ).size;
+
+    const outOfStockProducts = new Set(
+      inventoryRows
+        .filter(
+          (row) => row.status === "out-of-stock",
+        )
+        .map(
+          (row) =>
+            `${row.productId}:${row.variantId ?? "null"}`,
+        ),
+    ).size;
+
+    return {
+      totalUnits,
+      availableUnits,
+      reservedUnits,
+      inventoryValue,
+      lowStockProducts,
+      outOfStockProducts,
+    };
+  }, [inventoryRows]);
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return inventoryRows.filter((row) => {
+      if (query) {
+        const haystack = [
+          row.productName,
+          row.variantName,
+          row.sku,
+          row.brand,
+          row.category,
+          row.lotNumber,
+          row.warehouseName,
+          row.locationName,
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(query)) {
+          return false;
+        }
+      }
+
+      if (
+        warehouseFilter !== "all" &&
+        row.warehouseName !== warehouseFilter
+      ) {
+        return false;
+      }
+
+      if (
+        trackingFilter !== "all" &&
+        row.trackingMode !== trackingFilter
+      ) {
+        return false;
+      }
+
+      if (
+        statusFilter !== "all" &&
+        row.status !== statusFilter
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    inventoryRows,
+    search,
+    warehouseFilter,
+    trackingFilter,
+    statusFilter,
+  ]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / PAGE_SIZE),
+  );
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+
+    return filteredRows.slice(
+      start,
+      start + PAGE_SIZE,
+    );
+  }, [filteredRows, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    search,
+    warehouseFilter,
+    trackingFilter,
+    statusFilter,
+  ]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setWarehouseFilter("all");
+    setTrackingFilter("all");
+    setStatusFilter("all");
+  };
+
+  const hasFilters =
+    search ||
+    warehouseFilter !== "all" ||
+    trackingFilter !== "all" ||
+    statusFilter !== "all";
 
   if (loading) {
     return (
       <AppShell>
-        <div className="min-h-screen bg-slate-50">
-          <div className="mx-auto max-w-[1600px] px-6 py-8">
-            <div className="animate-pulse">
-              <div className="h-8 w-48 rounded bg-slate-200" />
-
-              <div className="mt-3 h-4 w-80 rounded bg-slate-200" />
-
-              <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {Array.from({
-                  length: 4,
-                }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-32 rounded-xl bg-white"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div
-                className="mt-6 h-96 rounded-xl bg-white"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              />
-            </div>
+        <div className="page-content">
+          <div className="loading-state">
+            <div className="loading-spinner" />
+            <p>Loading Inventory...</p>
           </div>
         </div>
       </AppShell>
     );
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Render                                                                   */
-  /* ------------------------------------------------------------------------ */
+  if (errorMessage) {
+    return (
+      <AppShell>
+        <div className="page-content">
+          <div className="error-card">
+            <div className="error-icon">!</div>
+
+            <div>
+              <h2>
+                Unable to load inventory
+              </h2>
+              <p>{errorMessage}</p>
+            </div>
+
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() =>
+                void loadInventory()
+              }
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-[1600px] px-6 py-8">
-          {/* Header --------------------------------------------------------- */}
+      <div className="page-content inventory-page">
+        <style jsx>{`
+          .inventory-page {
+            min-width: 0;
+          }
 
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-slate-900 p-2.5 text-white">
-                  <Icon name="package" size={21} />
-                </div>
+          .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 24px;
+          }
 
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-                    Inventory
-                  </h1>
+          .header-copy {
+            min-width: 0;
+          }
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    Monitor stock, availability,
-                    warehouses, and inventory value.
-                  </p>
-                </div>
-              </div>
+          .eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+
+          .eyebrow-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #16a34a;
+            box-shadow:
+              0 0 0 4px #dcfce7;
+          }
+
+          .page-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 30px;
+            line-height: 1.15;
+            font-weight: 750;
+            letter-spacing: -0.025em;
+          }
+
+          .page-subtitle {
+            margin: 8px 0 0;
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
+          .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+          }
+
+          .secondary-button,
+          .primary-button {
+            min-height: 40px;
+            padding: 0 15px;
+            border-radius: 9px;
+            border: 1px solid #d1d5db;
+            background: #fff;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition:
+              border-color 0.15s ease,
+              background 0.15s ease,
+              transform 0.15s ease;
+          }
+
+          .secondary-button:hover {
+            border-color: #94a3b8;
+            background: #f8fafc;
+          }
+
+          .secondary-button:active,
+          .primary-button:active {
+            transform: translateY(1px);
+          }
+
+          .primary-button {
+            border-color: #166534;
+            background: #166534;
+            color: #fff;
+          }
+
+          .primary-button:hover {
+            background: #14532d;
+          }
+
+          .stats-grid {
+            display: grid;
+            grid-template-columns:
+              repeat(6, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 22px;
+          }
+
+          .stat-card {
+            min-width: 0;
+            padding: 17px 18px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow:
+              0 1px 2px rgba(15, 23, 42, 0.03);
+          }
+
+          .stat-label {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 650;
+            white-space: nowrap;
+          }
+
+          .stat-value {
+            margin-top: 8px;
+            color: #0f172a;
+            font-size: 24px;
+            line-height: 1.1;
+            font-weight: 750;
+            letter-spacing: -0.02em;
+          }
+
+          .stat-detail {
+            margin-top: 6px;
+            color: #94a3b8;
+            font-size: 11px;
+          }
+
+          .stat-card.warning .stat-value {
+            color: #b45309;
+          }
+
+          .stat-card.danger .stat-value {
+            color: #dc2626;
+          }
+
+          .toolbar-card {
+            padding: 16px;
+            margin-bottom: 18px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow:
+              0 1px 2px rgba(15, 23, 42, 0.03);
+          }
+
+          .toolbar {
+            display: grid;
+            grid-template-columns:
+              minmax(260px, 1.7fr)
+              repeat(3, minmax(150px, 0.7fr))
+              auto;
+            gap: 10px;
+            align-items: center;
+          }
+
+          .search-wrap {
+            position: relative;
+            min-width: 0;
+          }
+
+          .search-icon {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            width: 15px;
+            height: 15px;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            pointer-events: none;
+          }
+
+          .search-input,
+          .filter-select {
+            width: 100%;
+            height: 42px;
+            border: 1px solid #dbe1e8;
+            border-radius: 9px;
+            background: #fff;
+            color: #1e293b;
+            outline: none;
+            font-size: 13px;
+          }
+
+          .search-input {
+            padding: 0 13px 0 39px;
+          }
+
+          .filter-select {
+            padding: 0 34px 0 12px;
+          }
+
+          .search-input:focus,
+          .filter-select:focus {
+            border-color: #94a3b8;
+            box-shadow:
+              0 0 0 3px
+                rgba(22, 101, 52, 0.08);
+          }
+
+          .clear-button {
+            height: 40px;
+            padding: 0 12px;
+            border: 0;
+            border-radius: 8px;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+          }
+
+          .clear-button:hover {
+            background: #e2e8f0;
+          }
+
+          .content-card {
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow:
+              0 1px 2px rgba(15, 23, 42, 0.03);
+          }
+
+          .content-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 20px;
+            border-bottom: 1px solid #eef0f3;
+          }
+
+          .content-header-copy h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 750;
+          }
+
+          .content-header-copy p {
+            margin: 4px 0 0;
+            color: #94a3b8;
+            font-size: 12px;
+          }
+
+          .result-count {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 650;
+          }
+
+          .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1180px;
+          }
+
+          th {
+            padding: 11px 16px;
+            background: #f8fafc;
+            color: #64748b;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 11px;
+            font-weight: 750;
+            text-align: left;
+            white-space: nowrap;
+          }
+
+          td {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+            font-size: 13px;
+            vertical-align: middle;
+          }
+
+          tbody tr {
+            transition: background 0.12s ease;
+          }
+
+          tbody tr:hover {
+            background: #fafafa;
+          }
+
+          tbody tr:last-child td {
+            border-bottom: 0;
+          }
+
+          .product-cell {
+            min-width: 220px;
+          }
+
+          .product-name {
+            color: #0f172a;
+            font-weight: 700;
+          }
+
+          .product-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+            color: #94a3b8;
+            font-size: 11px;
+          }
+
+          .variant-name {
+            color: #475569;
+            font-size: 12px;
+            margin-top: 3px;
+          }
+
+          .sku {
+            color: #64748b;
+            font-family:
+              ui-monospace,
+              SFMono-Regular,
+              Menlo,
+              Monaco,
+              Consolas,
+              monospace;
+            font-size: 11px;
+          }
+
+          .tracking {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 0 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+          }
+
+          .tracking.serial {
+            border-color: #dbeafe;
+            background: #eff6ff;
+            color: #2563eb;
+          }
+
+          .tracking.batch {
+            border-color: #ede9fe;
+            background: #f5f3ff;
+            color: #7c3aed;
+          }
+
+          .tracking.quantity {
+            border-color: #dcfce7;
+            background: #f0fdf4;
+            color: #15803d;
+          }
+
+          .lot-button {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #166534;
+            font-family:
+              ui-monospace,
+              SFMono-Regular,
+              Menlo,
+              Monaco,
+              Consolas,
+              monospace;
+            font-size: 11px;
+            font-weight: 750;
+            cursor: pointer;
+          }
+
+          .lot-button:hover {
+            text-decoration: underline;
+          }
+
+          .location-cell {
+            min-width: 180px;
+          }
+
+          .warehouse-name {
+            color: #334155;
+            font-weight: 650;
+          }
+
+          .location-name {
+            margin-top: 3px;
+            color: #94a3b8;
+            font-size: 11px;
+          }
+
+          .number-cell {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+          }
+
+          .available-number {
+            color: #0f172a;
+            font-weight: 750;
+          }
+
+          .reserved-number {
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .cost-cell,
+          .value-cell {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+          }
+
+          .value-cell {
+            color: #0f172a;
+            font-weight: 700;
+          }
+
+          .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 25px;
+            padding: 0 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 750;
+            white-space: nowrap;
+          }
+
+          .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+          }
+
+          .status-in-stock {
+            background: #ecfdf5;
+            color: #15803d;
+          }
+
+          .status-low-stock {
+            background: #fffbeb;
+            color: #b45309;
+          }
+
+          .status-out-of-stock {
+            background: #fef2f2;
+            color: #dc2626;
+          }
+
+          .empty-state {
+            padding: 64px 24px;
+            text-align: center;
+          }
+
+          .empty-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 14px;
+            border-radius: 14px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 22px;
+            font-weight: 750;
+          }
+
+          .empty-state h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 16px;
+            font-weight: 750;
+          }
+
+          .empty-state p {
+            max-width: 440px;
+            margin: 7px auto 0;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1.6;
+          }
+
+          .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-top: 1px solid #eef0f3;
+          }
+
+          .pagination-info {
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          .pagination-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+
+          .page-button {
+            min-width: 34px;
+            height: 34px;
+            padding: 0 9px;
+            border: 1px solid #dbe1e8;
+            border-radius: 8px;
+            background: #fff;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+          }
+
+          .page-button:hover:not(:disabled) {
+            background: #f8fafc;
+          }
+
+          .page-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+          }
+
+          .page-number {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            height: 34px;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+          }
+
+          .loading-state {
+            min-height: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: #64748b;
+          }
+
+          .loading-spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #166534;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+          }
+
+          .loading-state p {
+            margin: 0;
+            font-size: 13px;
+          }
+
+          .error-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 20px;
+            border: 1px solid #fecaca;
+            border-radius: 14px;
+            background: #fff;
+          }
+
+          .error-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: #fef2f2;
+            color: #dc2626;
+            font-weight: 800;
+          }
+
+          .error-card h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 15px;
+          }
+
+          .error-card p {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          @keyframes spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+
+          @media (max-width: 1450px) {
+            .stats-grid {
+              grid-template-columns:
+                repeat(3, minmax(0, 1fr));
+            }
+
+            .toolbar {
+              grid-template-columns:
+                minmax(220px, 1.5fr)
+                repeat(3, minmax(140px, 1fr))
+                auto;
+            }
+          }
+
+          @media (max-width: 1050px) {
+            .page-header {
+              flex-direction: column;
+            }
+
+            .header-actions {
+              width: 100%;
+            }
+
+            .header-actions button {
+              flex: 1;
+            }
+
+            .toolbar {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+            }
+
+            .search-wrap {
+              grid-column: 1 / -1;
+            }
+          }
+
+          @media (max-width: 700px) {
+            .stats-grid {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+            }
+
+            .toolbar {
+              grid-template-columns: 1fr;
+            }
+
+            .search-wrap {
+              grid-column: auto;
+            }
+
+            .pagination {
+              flex-direction: column;
+              align-items: flex-start;
+            }
+
+            .page-title {
+              font-size: 25px;
+            }
+          }
+        `}</style>
+
+        <div className="page-header">
+          <div className="header-copy">
+            <div className="eyebrow">
+              <span className="eyebrow-dot" />
+              Products & Inventory
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                href="/inventory/receiving"
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                <Icon name="plus" size={16} />
-                Receive Stock
-              </Link>
+            <h1 className="page-title">
+              Inventory
+            </h1>
 
-              <Link
-                href="/inventory/adjustments"
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              >
-                <Icon name="layers" size={16} />
-                Adjust Stock
-              </Link>
+            <p className="page-subtitle">
+              Monitor stock, batches, locations,
+              reservations, and inventory value from
+              one workspace.
+            </p>
+          </div>
 
-              <Link
-                href="/serial-numbers"
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
-              >
-                <Icon name="serial" size={16} />
-                Serial Numbers
-              </Link>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                void loadInventory(true)
+              }
+              disabled={refreshing}
+            >
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
 
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() =>
+                router.push(
+                  "/inventory/receiving",
+                )
+              }
+            >
+              Receive Stock
+            </button>
+          </div>
+        </div>
+
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">
+              Total Stock
+            </div>
+            <div className="stat-value">
+              {formatNumber(stats.totalUnits)}
+            </div>
+            <div className="stat-detail">
+              Physical units across all batches
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Available
+            </div>
+            <div className="stat-value">
+              {formatNumber(stats.availableUnits)}
+            </div>
+            <div className="stat-detail">
+              Ready for allocation or sale
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Reserved
+            </div>
+            <div className="stat-value">
+              {formatNumber(stats.reservedUnits)}
+            </div>
+            <div className="stat-detail">
+              Currently held for orders
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Inventory Value
+            </div>
+            <div className="stat-value">
+              {formatMoney(stats.inventoryValue)}
+            </div>
+            <div className="stat-detail">
+              Quantity × batch unit cost
+            </div>
+          </div>
+
+          <div className="stat-card warning">
+            <div className="stat-label">
+              Low Stock
+            </div>
+            <div className="stat-value">
+              {formatNumber(
+                stats.lowStockProducts,
+              )}
+            </div>
+            <div className="stat-detail">
+              Products at or below reorder level
+            </div>
+          </div>
+
+          <div className="stat-card danger">
+            <div className="stat-label">
+              Out of Stock
+            </div>
+            <div className="stat-value">
+              {formatNumber(
+                stats.outOfStockProducts,
+              )}
+            </div>
+            <div className="stat-detail">
+              Products with no available stock
+            </div>
+          </div>
+        </div>
+
+        <div className="toolbar-card">
+          <div className="toolbar">
+            <div className="search-wrap">
+              <svg
+                className="search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                />
+                <path d="m20 20-4-4" />
+              </svg>
+
+              <input
+                type="search"
+                className="search-input"
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search product, SKU, batch, warehouse..."
+              />
+            </div>
+
+            <select
+              className="filter-select"
+              value={warehouseFilter}
+              onChange={(event) =>
+                setWarehouseFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All Warehouses
+              </option>
+
+              {warehouses.map((warehouse) => (
+                <option
+                  key={warehouse.id}
+                  value={warehouse.name}
+                >
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="filter-select"
+              value={trackingFilter}
+              onChange={(event) =>
+                setTrackingFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All Tracking
+              </option>
+              <option value="Serial">
+                Serial
+              </option>
+              <option value="Batch">
+                Batch
+              </option>
+              <option value="Quantity">
+                Quantity
+              </option>
+            </select>
+
+            <select
+              className="filter-select"
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value="all">
+                All Status
+              </option>
+              <option value="in-stock">
+                In Stock
+              </option>
+              <option value="low-stock">
+                Low Stock
+              </option>
+              <option value="out-of-stock">
+                Out of Stock
+              </option>
+            </select>
+
+            {hasFilters ? (
               <button
                 type="button"
-                onClick={() =>
-                  void loadInventory(true)
-                }
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  border:
-                    "1px solid #e2e8f0",
-                }}
+                className="clear-button"
+                onClick={clearFilters}
               >
-                <Icon name="refresh" size={16} />
-
-                {refreshing
-                  ? "Refreshing..."
-                  : "Refresh"}
+                Clear
               </button>
-            </div>
-          </div>
-
-          {/* Error ---------------------------------------------------------- */}
-
-          {errorMessage ? (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <div className="flex items-start gap-3">
-                <Icon name="alert" size={18} />
-
-                <div>
-                  <div className="font-semibold">
-                    Unable to load inventory
-                  </div>
-
-                  <div className="mt-1">
-                    {errorMessage}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Stats ---------------------------------------------------------- */}
-
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Inventory Value"
-              value={formatMoney(
-                inventoryValue,
-                currency
-              )}
-              description="Current stock at cost"
-              icon="package"
-            />
-
-            <StatCard
-              label="Total Units"
-              value={totalUnits.toLocaleString()}
-              description={`${totalAvailable.toLocaleString()} available`}
-              icon="layers"
-            />
-
-            <StatCard
-              label="Low Stock"
-              value={lowStockCount.toLocaleString()}
-              description="Items at or below reorder level"
-              icon="warning"
-            />
-
-            <StatCard
-              label="Out of Stock"
-              value={outOfStockCount.toLocaleString()}
-              description={`${totalReserved.toLocaleString()} units reserved`}
-              icon="alert"
-            />
-          </div>
-
-          {/* Warehouse summary ---------------------------------------------- */}
-
-          <div
-            className="mt-6 rounded-xl bg-white p-5"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">
-                  Warehouses
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Stock currently recorded across
-                  your active warehouses.
-                </p>
-              </div>
-
-              <div className="text-sm text-slate-400">
-                {warehouses.length} active{" "}
-                {warehouses.length === 1
-                  ? "warehouse"
-                  : "warehouses"}
-              </div>
-            </div>
-
-            {warehouses.length === 0 ? (
-              <div className="mt-5 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                <Icon
-                  name="warehouse"
-                  size={24}
-                />
-
-                <div className="mt-2 text-sm font-medium text-slate-700">
-                  No active warehouses
-                </div>
-
-                <div className="mt-1 text-xs text-slate-400">
-                  Create a warehouse before receiving
-                  and allocating physical stock.
-                </div>
-              </div>
             ) : (
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {warehouses.map((warehouse) => {
-                  const warehouseInventory =
-                    inventory.filter(
-                      (item) =>
-                        item.warehouse_id ===
-                        warehouse.id
-                    );
-
-                  const units =
-                    warehouseInventory.reduce(
-                      (sum, item) =>
-                        sum +
-                        numberValue(
-                          item.quantity
-                        ),
-                      0
-                    );
-
-                  const available =
-                    warehouseInventory.reduce(
-                      (sum, item) =>
-                        sum +
-                        getAvailable(item),
-                      0
-                    );
-
-                  return (
-                    <button
-                      key={warehouse.id}
-                      type="button"
-                      onClick={() =>
-                        setWarehouseFilter(
-                          warehouse.id
-                        )
-                      }
-                      className={`rounded-lg p-4 text-left transition ${
-                        warehouseFilter ===
-                        warehouse.id
-                          ? "ring-2 ring-slate-900"
-                          : ""
-                      }`}
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
-                            <Icon
-                              name="warehouse"
-                              size={17}
-                            />
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-slate-900">
-                              {warehouse.name}
-                            </div>
-
-                            <div className="mt-0.5 text-xs text-slate-400">
-                              {warehouse.code}
-                            </div>
-                          </div>
-                        </div>
-
-                        <Icon
-                          name="chevron"
-                          size={16}
-                        />
-                      </div>
-
-                      <div className="mt-4 flex items-end justify-between">
-                        <div>
-                          <div className="text-lg font-semibold text-slate-950">
-                            {units.toLocaleString()}
-                          </div>
-
-                          <div className="text-xs text-slate-400">
-                            total units
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="text-sm font-medium text-slate-700">
-                            {available.toLocaleString()}
-                          </div>
-
-                          <div className="text-xs text-slate-400">
-                            available
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <div />
             )}
           </div>
+        </div>
 
-          {/* Inventory table ------------------------------------------------ */}
-
-          <div
-            className="mt-6 overflow-hidden rounded-xl bg-white"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
-          >
-            <div className="border-b border-slate-200 p-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Stock
-                  </h2>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    {filteredInventory.length.toLocaleString()}{" "}
-                    stock records shown
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <div className="relative min-w-[260px]">
-                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
-                      <Icon
-                        name="search"
-                        size={17}
-                      />
-                    </div>
-
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(event) =>
-                        setSearch(
-                          event.target.value
-                        )
-                      }
-                      placeholder="Search products, SKU..."
-                      className="w-full rounded-lg bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-slate-200"
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    />
-                  </div>
-
-                  <select
-                    value={warehouseFilter}
-                    onChange={(event) =>
-                      setWarehouseFilter(
-                        event.target.value
-                      )
-                    }
-                    className="rounded-lg bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  >
-                    <option value="all">
-                      All Warehouses
-                    </option>
-
-                    {warehouses.map(
-                      (warehouse) => (
-                        <option
-                          key={warehouse.id}
-                          value={warehouse.id}
-                        >
-                          {warehouse.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  <select
-                    value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(
-                        event.target
-                          .value as InventoryStatus
-                      )
-                    }
-                    className="rounded-lg bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
-                    style={{
-                      border:
-                        "1px solid #e2e8f0",
-                    }}
-                  >
-                    <option value="all">
-                      All Status
-                    </option>
-
-                    <option value="in_stock">
-                      In Stock
-                    </option>
-
-                    <option value="low_stock">
-                      Low Stock
-                    </option>
-
-                    <option value="out_of_stock">
-                      Out of Stock
-                    </option>
-                  </select>
-                </div>
-              </div>
+        <section className="content-card">
+          <div className="content-header">
+            <div className="content-header-copy">
+              <h2>Current Stock</h2>
+              <p>
+                Batch-level inventory across all
+                warehouses and locations.
+              </p>
             </div>
 
-            {filteredInventory.length === 0 ? (
-              <div className="p-12 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                  <Icon
-                    name="package"
-                    size={22}
-                  />
-                </div>
+            <div className="result-count">
+              {formatNumber(
+                filteredRows.length,
+              )}{" "}
+              records
+            </div>
+          </div>
 
-                <h3 className="mt-4 text-sm font-semibold text-slate-900">
-                  No inventory records found
-                </h3>
-
-                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-                  {inventory.length === 0
-                    ? "Inventory will appear here once stock is received or added through an inventory transaction."
-                    : "Try changing your search or filters."}
-                </p>
-
-                {inventory.length === 0 ? (
-                  <div className="mt-5 flex flex-wrap justify-center gap-3">
-                    <Link
-                      href="/inventory/receiving"
-                      className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
-                    >
-                      <Icon
-                        name="plus"
-                        size={16}
-                      />
-
-                      Receive Stock
-                    </Link>
-
-                    <Link
-                      href="/inventory/adjustments"
-                      className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    >
-                      <Icon
-                        name="layers"
-                        size={16}
-                      />
-
-                      Adjust Stock
-                    </Link>
-
-                    <Link
-                      href="/products"
-                      className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    >
-                      <Icon
-                        name="package"
-                        size={16}
-                      />
-
-                      View Products
-                    </Link>
-
-                    <Link
-                      href="/serial-numbers"
-                      className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      style={{
-                        border:
-                          "1px solid #e2e8f0",
-                      }}
-                    >
-                      <Icon
-                        name="serial"
-                        size={16}
-                      />
-
-                      Serialized Stock
-                    </Link>
-                  </div>
-                ) : null}
+          {paginatedRows.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">
+                📦
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-[1050px] w-full">
+
+              <h3>
+                {inventoryRows.length === 0
+                  ? "No inventory yet"
+                  : "No matching inventory"}
+              </h3>
+
+              <p>
+                {inventoryRows.length === 0
+                  ? "Inventory will appear here after stock is received into a batch."
+                  : "Try changing your search or clearing the filters."}
+              </p>
+
+              {inventoryRows.length === 0 ? (
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{
+                    marginTop: 18,
+                  }}
+                  onClick={() =>
+                    router.push(
+                      "/inventory/receiving",
+                    )
+                  }
+                >
+                  Receive Stock
+                </button>
+              ) : (
+                hasFilters && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{
+                      marginTop: 18,
+                    }}
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </button>
+                )
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="table-wrap">
+                <table>
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/70">
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            changeSort("product")
-                          }
-                          className="hover:text-slate-900"
-                        >
-                          Product
-                          {sortIndicator(
-                            "product"
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Tracking
-                      </th>
-
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            changeSort("quantity")
-                          }
-                          className="hover:text-slate-900"
-                        >
-                          Qty
-                          {sortIndicator(
-                            "quantity"
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            changeSort("available")
-                          }
-                          className="hover:text-slate-900"
-                        >
-                          Available
-                          {sortIndicator(
-                            "available"
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Warehouse / Location
-                      </th>
-
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            changeSort("value")
-                          }
-                          className="hover:text-slate-900"
-                        >
-                          Stock Value
-                          {sortIndicator(
-                            "value"
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Status
-                      </th>
-
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            changeSort("updated")
-                          }
-                          className="hover:text-slate-900"
-                        >
-                          Updated
-                          {sortIndicator(
-                            "updated"
-                          )}
-                        </button>
-                      </th>
+                    <tr>
+                      <th>Product</th>
+                      <th>Tracking</th>
+                      <th>Batch / Lot</th>
+                      <th>Warehouse / Location</th>
+                      <th>Stock</th>
+                      <th>Unit Cost</th>
+                      <th>Stock Value</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {filteredInventory.map(
-                      (item) => {
-                        const product =
-                          item.product;
-
-                        const variant =
-                          item.variant;
-
-                        const status =
-                          getStatus(item);
-
-                        const available =
-                          getAvailable(item);
-
-                        const stockValue =
-                          numberValue(
-                            item.quantity
-                          ) *
-                          numberValue(
-                            variant?.cost_price
-                          );
-
-                        return (
-                          <tr
-                            key={item.id}
-                            className="border-b border-slate-100 transition hover:bg-slate-50/70"
-                          >
-                            <td className="px-5 py-4">
-                              <div className="flex min-w-[260px] items-start gap-3">
-                                <div className="mt-0.5 rounded-lg bg-slate-100 p-2 text-slate-500">
-                                  <Icon
-                                    name="box"
-                                    size={17}
-                                  />
-                                </div>
-
-                                <div className="min-w-0">
-                                  <Link
-                                    href={`/inventory/${item.product_id}`}
-                                    className="font-medium text-slate-900 hover:text-slate-600"
-                                  >
-                                    {product?.name ??
-                                      "Unknown Product"}
-                                  </Link>
-
-                                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
-                                    {product?.brand ? (
-                                      <span>
-                                        {
-                                          product.brand
-                                        }
-                                      </span>
-                                    ) : null}
-
-                                    {variant?.name ? (
-                                      <>
-                                        <span>
-                                          •
-                                        </span>
-
-                                        <span>
-                                          {
-                                            variant.name
-                                          }
-                                        </span>
-                                      </>
-                                    ) : null}
-
-                                    {variant?.sku ? (
-                                      <>
-                                        <span>
-                                          •
-                                        </span>
-
-                                        <span>
-                                          SKU:{" "}
-                                          {
-                                            variant.sku
-                                          }
-                                        </span>
-                                      </>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td className="px-5 py-4">
-                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                                {trackingLabel(
-                                  product?.tracking_mode ??
-                                    null
-                                )}
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-4 text-right">
-                              <span className="text-sm font-semibold text-slate-900">
-                                {numberValue(
-                                  item.quantity
-                                ).toLocaleString()}
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-4 text-right">
-                              <div className="text-sm font-semibold text-slate-900">
-                                {available.toLocaleString()}
-                              </div>
-
-                              {numberValue(
-                                item.reserved_quantity
-                              ) > 0 ? (
-                                <div className="mt-1 text-xs text-amber-600">
-                                  {numberValue(
-                                    item.reserved_quantity
-                                  ).toLocaleString()}{" "}
-                                  reserved
-                                </div>
-                              ) : null}
-                            </td>
-
-                            <td className="px-5 py-4">
-                              <div className="text-sm font-medium text-slate-700">
-                                {item.warehouse
-                                  ?.name ??
-                                  "Unassigned"}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-400">
-                                {item.location
-                                  ? `${item.location.name} (${item.location.code})`
-                                  : "No location"}
-                              </div>
-                            </td>
-
-                            <td className="px-5 py-4 text-right">
-                              <div className="text-sm font-medium text-slate-900">
-                                {formatMoney(
-                                  stockValue,
-                                  currency
-                                )}
-                              </div>
-
-                              <div className="mt-1 text-xs text-slate-400">
-                                Cost:{" "}
-                                {formatMoney(
-                                  numberValue(
-                                    variant?.cost_price
-                                  ),
-                                  currency
-                                )}
-                              </div>
-                            </td>
-
-                            <td className="px-5 py-4 text-center">
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusClasses(
-                                  status
-                                )}`}
-                              >
-                                {statusLabel(
-                                  status
-                                )}
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-4 text-right">
-                              <span className="text-xs text-slate-500">
-                                {formatDate(
-                                  item.updated_at
-                                )}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      }
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Recent movements ----------------------------------------------- */}
-
-          <div
-            className="mt-6 rounded-xl bg-white"
-            style={{
-              border:
-                "1px solid #e2e8f0",
-            }}
-          >
-            <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">
-                  Recent Stock Movements
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Latest inventory ledger activity.
-                </p>
-              </div>
-
-              <span className="text-xs text-slate-400">
-                {movements.length} recent{" "}
-                {movements.length === 1
-                  ? "movement"
-                  : "movements"}
-              </span>
-            </div>
-
-            {recentMovements.length === 0 ? (
-              <div className="p-8 text-center">
-                <Icon
-                  name="layers"
-                  size={24}
-                />
-
-                <div className="mt-2 text-sm font-medium text-slate-700">
-                  No stock movements yet
-                </div>
-
-                <div className="mt-1 text-xs text-slate-400">
-                  Stock transactions will appear here
-                  as inventory activity occurs.
-                </div>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {recentMovements.map(
-                  (movement) => {
-                    const isIncoming =
-                      [
-                        "stock_in",
-                        "purchase",
-                        "return",
-                        "transfer_in",
-                        "adjustment_in",
-                      ].includes(
-                        movement.movement_type
-                      );
-
-                    return (
-                      <div
-                        key={movement.id}
-                        className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="flex min-w-0 items-start gap-3">
-                          <div
-                            className={`mt-0.5 rounded-lg p-2 ${
-                              isIncoming
-                                ? "bg-emerald-50 text-emerald-600"
-                                : "bg-red-50 text-red-600"
-                            }`}
-                          >
-                            <Icon
-                              name="arrow"
-                              size={17}
-                            />
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-slate-900">
-                              {movement.product
-                                ?.name ??
-                                "Unknown Product"}
+                    {paginatedRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>
+                          <div className="product-cell">
+                            <div className="product-name">
+                              {row.productName}
                             </div>
 
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                              <span>
-                                {movement.variant
-                                  ?.name ??
-                                  "Unknown Variant"}
+                            <div className="variant-name">
+                              {row.variantName}
+                            </div>
+
+                            <div className="product-meta">
+                              <span className="sku">
+                                {row.sku}
                               </span>
 
-                              <span>•</span>
-
-                              <span className="capitalize">
-                                {movement.movement_type.replace(
-                                  /_/g,
-                                  " "
-                                )}
-                              </span>
-
-                              {movement.warehouse ? (
+                              {row.brand !== "—" && (
                                 <>
+                                  <span>•</span>
                                   <span>
-                                    •
-                                  </span>
-
-                                  <span>
-                                    {
-                                      movement
-                                        .warehouse
-                                        .name
-                                    }
+                                    {row.brand}
                                   </span>
                                 </>
-                              ) : null}
-                            </div>
-
-                            {movement.reason ? (
-                              <div className="mt-1 text-xs text-slate-500">
-                                {
-                                  movement.reason
-                                }
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-6 sm:justify-end">
-                          <div className="text-right">
-                            <div
-                              className={`text-sm font-semibold ${
-                                isIncoming
-                                  ? "text-emerald-700"
-                                  : "text-red-700"
-                              }`}
-                            >
-                              {isIncoming
-                                ? "+"
-                                : "-"}
-                              {numberValue(
-                                movement.quantity
-                              ).toLocaleString()}
-                            </div>
-
-                            <div className="mt-1 text-xs text-slate-400">
-                              {
-                                movement.quantity_before
-                              }{" "}
-                              →{" "}
-                              {
-                                movement.quantity_after
-                              }
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <div className="text-xs text-slate-500">
-                              {formatDate(
-                                movement.created_at
                               )}
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={getTrackingClass(
+                              row.trackingMode,
+                            )}
+                          >
+                            {row.trackingMode}
+                          </span>
+                        </td>
+
+                        <td>
+                          <button
+                            type="button"
+                            className="lot-button"
+                            onClick={() =>
+                              router.push(
+                                `/inventory/${row.productId}`,
+                              )
+                            }
+                            title="Open product inventory"
+                          >
+                            {row.lotNumber}
+                          </button>
+                        </td>
+
+                        <td>
+                          <div className="location-cell">
+                            <div className="warehouse-name">
+                              {row.warehouseName}
+                            </div>
+
+                            <div className="location-name">
+                              {row.locationName}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="number-cell">
+                            <div className="available-number">
+                              {formatNumber(
+                                row.available,
+                              )}{" "}
+                              available
+                            </div>
+
+                            <div className="reserved-number">
+                              {formatNumber(
+                                row.reserved,
+                              )}{" "}
+                              reserved ·{" "}
+                              {formatNumber(
+                                row.quantity,
+                              )}{" "}
+                              total
+                            </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="cost-cell">
+                            {formatMoney(
+                              row.unitCost,
+                            )}
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="value-cell">
+                            {formatMoney(
+                              row.stockValue,
+                            )}
+                          </div>
+                        </td>
+
+                        <td>
+                          <span
+                            className={`status-badge status-${row.status}`}
+                          >
+                            <span className="status-dot" />
+                            {getStatusLabel(
+                              row.status,
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-          </div>
 
-          {/* Bottom navigation --------------------------------------------- */}
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Link
-              href="/inventory/receiving"
-              className="group rounded-xl bg-white p-5 transition hover:border-slate-300"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
-                  <Icon
-                    name="plus"
-                    size={18}
-                  />
+              <div className="pagination">
+                <div className="pagination-info">
+                  Showing{" "}
+                  {formatNumber(
+                    (page - 1) * PAGE_SIZE + 1,
+                  )}{" "}
+                  –{" "}
+                  {formatNumber(
+                    Math.min(
+                      page * PAGE_SIZE,
+                      filteredRows.length,
+                    ),
+                  )}{" "}
+                  of{" "}
+                  {formatNumber(
+                    filteredRows.length,
+                  )}
                 </div>
 
-                <Icon
-                  name="external"
-                  size={15}
-                />
-              </div>
+                <div className="pagination-actions">
+                  <button
+                    type="button"
+                    className="page-button"
+                    disabled={page <= 1}
+                    onClick={() =>
+                      setPage((current) =>
+                        Math.max(1, current - 1),
+                      )
+                    }
+                  >
+                    Previous
+                  </button>
 
-              <div className="mt-4 text-sm font-semibold text-slate-900">
-                Receive Stock
-              </div>
+                  <span className="page-number">
+                    {page} / {totalPages}
+                  </span>
 
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                Receive physical stock into a warehouse
-                and location through a stock receipt.
-              </div>
-            </Link>
-
-            <Link
-              href="/inventory/adjustments"
-              className="group rounded-xl bg-white p-5 transition hover:border-slate-300"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
-                  <Icon
-                    name="layers"
-                    size={18}
-                  />
+                  <button
+                    type="button"
+                    className="page-button"
+                    disabled={
+                      page >= totalPages
+                    }
+                    onClick={() =>
+                      setPage((current) =>
+                        Math.min(
+                          totalPages,
+                          current + 1,
+                        ),
+                      )
+                    }
+                  >
+                    Next
+                  </button>
                 </div>
-
-                <Icon
-                  name="external"
-                  size={15}
-                />
               </div>
-
-              <div className="mt-4 text-sm font-semibold text-slate-900">
-                Adjust Stock
-              </div>
-
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                Correct inventory quantities with
-                controlled stock adjustments and ledger
-                history.
-              </div>
-            </Link>
-
-            <Link
-              href="/products"
-              className="group rounded-xl bg-white p-5 transition hover:border-slate-300"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
-                  <Icon
-                    name="package"
-                    size={18}
-                  />
-                </div>
-
-                <Icon
-                  name="external"
-                  size={15}
-                />
-              </div>
-
-              <div className="mt-4 text-sm font-semibold text-slate-900">
-                Product Catalog
-              </div>
-
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                Manage products, variants, SKUs,
-                pricing, and inventory tracking modes.
-              </div>
-            </Link>
-
-            <Link
-              href="/serial-numbers"
-              className="group rounded-xl bg-white p-5 transition hover:border-slate-300"
-              style={{
-                border:
-                  "1px solid #e2e8f0",
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
-                  <Icon
-                    name="serial"
-                    size={18}
-                  />
-                </div>
-
-                <Icon
-                  name="external"
-                  size={15}
-                />
-              </div>
-
-              <div className="mt-4 text-sm font-semibold text-slate-900">
-                Serial Numbers
-              </div>
-
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                Track serialized units, warranty,
-                ownership, repair, RMA, and status.
-              </div>
-            </Link>
-          </div>
-        </div>
+            </>
+          )}
+        </section>
       </div>
     </AppShell>
   );

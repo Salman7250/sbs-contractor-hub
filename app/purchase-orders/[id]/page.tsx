@@ -1,72 +1,47 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
-
-type Supplier = {
-  id: string;
-  legal_name: string;
-  display_name: string;
-  email: string | null;
-  phone: string | null;
-  currency: string;
-  payment_terms_days: number;
-};
-
-type Warehouse = {
-  id: string;
-  name: string;
-  code: string | null;
-  is_active: boolean;
-  is_default: boolean;
-};
-
-type Location = {
-  id: string;
-  warehouse_id: string;
-  name: string;
-  code: string | null;
-  location_type: string;
-  is_active: boolean;
-};
 
 type PurchaseOrder = {
   id: string;
   company_id: string;
-  supplier_id: string;
+  supplier_id: string | null;
   po_number: string;
-  status:
-    | "draft"
-    | "sent"
-    | "confirmed"
-    | "partially_received"
-    | "received"
-    | "cancelled";
-  currency: string;
-  order_date: string;
+  status: string;
+  currency: string | null;
+  order_date: string | null;
   expected_date: string | null;
   warehouse_id: string | null;
   supplier_reference: string | null;
-  subtotal: number;
-  discount_amount: number;
-  tax_amount: number;
-  shipping_amount: number;
-  total_amount: number;
+  subtotal: number | null;
+  discount_amount: number | null;
+  tax_amount: number | null;
+  shipping_amount: number | null;
+  total_amount: number | null;
   notes: string | null;
   terms: string | null;
-  created_at: string;
-  updated_at: string;
+  created_by: string | null;
+  approved_by: string | null;
   sent_at: string | null;
   approved_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type PurchaseOrderItem = {
   id: string;
-  product_id: string;
-  variant_id: string;
+  company_id: string;
+  purchase_order_id: string;
+  product_id: string | null;
+  variant_id: string | null;
   supplier_product_id: string | null;
   product_name: string;
   variant_name: string | null;
@@ -79,749 +54,846 @@ type PurchaseOrderItem = {
   discount_amount: number;
   tax_amount: number;
   line_total: number;
-  product?: {
-    tracking_mode: string | null;
-  } | null;
+  created_at: string;
+  updated_at: string;
 };
 
-type Receipt = {
+type Supplier = {
   id: string;
+  supplier_number: string | null;
+  legal_name: string | null;
+  display_name: string | null;
+  status: string | null;
+  supplier_type: string | null;
+  tax_id: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  currency: string | null;
+  payment_terms_days: number | null;
+  credit_limit: number | null;
+  default_lead_time_days: number | null;
+  minimum_order_amount: number | null;
+  rating: number | null;
+  notes: string | null;
+};
+
+type Product = {
+  id: string;
+  name: string;
+  brand: string | null;
+  tracking_mode: string | null;
+};
+
+type Variant = {
+  id: string;
+  product_id: string;
+  name: string | null;
+  sku: string | null;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+  code: string;
+};
+
+type WarehouseLocation = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  code: string;
+};
+
+type StockReceipt = {
+  id: string;
+  company_id: string;
+  purchase_order_id: string | null;
   receipt_number: string;
   supplier_name: string | null;
   reference_number: string | null;
   notes: string | null;
   status: string;
-  received_at: string;
+  received_by: string | null;
+  received_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
-type ReceiveLine = {
-  purchase_order_item_id: string;
+type StockReceiptItem = {
+  id: string;
+  company_id: string;
+  receipt_id: string;
+  product_id: string | null;
+  variant_id: string | null;
   quantity: number;
-  serial_numbers: string[];
+  unit_cost: number;
+  purchase_order_item_id: string | null;
+  warehouse_id: string | null;
+  location_id: string | null;
+  batch_id: string | null;
 };
 
-function money(value: number, currency: string) {
+function toNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatCurrency(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: currency || "USD",
+    currency: currency || "AED",
     maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  }).format(toNumber(value));
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
+function formatDate(
+  value: string | null | undefined,
+): string {
+  if (!value) {
+    return "—";
+  }
 
-  return new Date(`${value}T00:00:00`).toLocaleDateString(
-    "en-US",
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }
-  );
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "—";
+function formatDateTime(
+  value: string | null | undefined,
+): string {
+  if (!value) {
+    return "—";
+  }
 
-  return new Date(value).toLocaleString("en-US", {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
+  }).format(date);
 }
 
-function statusLabel(status: string) {
-  switch (status) {
-    case "partially_received":
-      return "Partially Received";
-    case "confirmed":
-      return "Confirmed";
-    case "received":
-      return "Received";
-    case "cancelled":
-      return "Cancelled";
-    case "sent":
-      return "Sent";
+function formatStatus(
+  value: string | null | undefined,
+): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    );
+}
+
+function getTrackingLabel(
+  trackingMode: string | null | undefined,
+): string {
+  switch (trackingMode) {
+    case "serial":
+      return "Serial";
+
+    case "batch":
+      return "Batch / Lot";
+
+    case "quantity":
+      return "Quantity";
+
+    case "none":
+      return "Non-stock";
+
     default:
-      return "Draft";
+      return "Unknown";
   }
 }
 
-function statusClass(status: string) {
+function getStatusClass(
+  status: string | null | undefined,
+): string {
   switch (status) {
-    case "received":
-      return "status received";
-
-    case "partially_received":
-      return "status partial";
+    case "draft":
+      return "status-draft";
 
     case "confirmed":
-      return "status confirmed";
+      return "status-confirmed";
 
-    case "sent":
-      return "status sent";
+    case "partially_received":
+    case "partial":
+      return "status-partial";
+
+    case "received":
+      return "status-received";
 
     case "cancelled":
-      return "status cancelled";
+      return "status-cancelled";
 
     default:
-      return "status draft";
+      return "status-neutral";
   }
 }
 
 export default function PurchaseOrderDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
+  const params = useParams();
 
-  const purchaseOrderId = String(params.id);
+  const purchaseOrderId = String(
+    params.id || "",
+  );
 
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const supabase = useMemo(
+    () => createClient(),
+    [],
+  );
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
   const [purchaseOrder, setPurchaseOrder] =
     useState<PurchaseOrder | null>(null);
 
-  const [supplier, setSupplier] = useState<Supplier | null>(
-    null
-  );
-
-  const [items, setItems] = useState<PurchaseOrderItem[]>(
-    []
-  );
-
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-
-  const [warehouses, setWarehouses] = useState<Warehouse[]>(
-    []
-  );
-
-  const [locations, setLocations] = useState<Location[]>(
-    []
-  );
-
-  const [errorMessage, setErrorMessage] = useState("");
-
-  const [showReceiveModal, setShowReceiveModal] =
-    useState(false);
-
-  const [receiveWarehouseId, setReceiveWarehouseId] =
-    useState("");
-
-  const [receiveLocationId, setReceiveLocationId] =
-    useState("");
-
-  const [receiveNotes, setReceiveNotes] = useState("");
-
-  const [receiveLines, setReceiveLines] = useState<
-    ReceiveLine[]
+  const [items, setItems] = useState<
+    PurchaseOrderItem[]
   >([]);
 
-  useEffect(() => {
-    loadPurchaseOrder();
-  }, [purchaseOrderId]);
+  const [supplier, setSupplier] =
+    useState<Supplier | null>(null);
 
-  async function loadPurchaseOrder() {
-    try {
-      setLoading(true);
-      setErrorMessage("");
+  const [products, setProducts] = useState<
+    Record<string, Product>
+  >({});
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+  const [variants, setVariants] = useState<
+    Record<string, Variant>
+  >({});
 
-      if (userError) throw userError;
+  const [warehouse, setWarehouse] =
+    useState<Warehouse | null>(null);
 
-      if (!user) {
-        router.push("/login");
-        return;
+  const [locations, setLocations] = useState<
+    Record<string, WarehouseLocation>
+  >({});
+
+  const [receipts, setReceipts] = useState<
+    StockReceipt[]
+  >([]);
+
+  const [receiptItems, setReceiptItems] = useState<
+    StockReceiptItem[]
+  >([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const loadPage = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      const { data: membership, error: membershipError } =
-        await supabase
+      setErrorMessage("");
+
+      try {
+        if (!purchaseOrderId) {
+          throw new Error(
+            "Purchase order ID is missing.",
+          );
+        }
+
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) {
+          throw authError;
+        }
+
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
+
+        const {
+          data: membership,
+          error: membershipError,
+        } = await supabase
           .from("company_members")
           .select("company_id")
           .eq("user_id", user.id)
           .limit(1)
           .maybeSingle();
 
-      if (membershipError) throw membershipError;
+        if (membershipError) {
+          throw membershipError;
+        }
 
-      if (!membership?.company_id) {
-        throw new Error(
-          "No company is associated with your account."
-        );
-      }
+        if (!membership?.company_id) {
+          throw new Error(
+            "No company membership was found.",
+          );
+        }
 
-      const currentCompanyId = membership.company_id;
+        const companyId =
+          membership.company_id;
 
-      setCompanyId(currentCompanyId);
-
-      const { data: poData, error: poError } =
-        await supabase
+        const {
+          data: loadedPurchaseOrder,
+          error: purchaseOrderError,
+        } = await supabase
           .from("purchase_orders")
-          .select("*")
-          .eq("id", purchaseOrderId)
-          .eq("company_id", currentCompanyId)
-          .single();
-
-      if (poError) throw poError;
-
-      const po = poData as PurchaseOrder;
-
-      setPurchaseOrder(po);
-
-      const [
-        supplierResult,
-        itemsResult,
-        receiptsResult,
-        warehousesResult,
-      ] = await Promise.all([
-        supabase
-          .from("suppliers")
           .select(
             `
               id,
-              legal_name,
-              display_name,
-              email,
-              phone,
+              company_id,
+              supplier_id,
+              po_number,
+              status,
               currency,
-              payment_terms_days
-            `
-          )
-          .eq("id", po.supplier_id)
-          .eq("company_id", currentCompanyId)
-          .single(),
-
-        supabase
-          .from("purchase_order_items")
-          .select(
-            `
-              id,
-              product_id,
-              variant_id,
-              supplier_product_id,
-              product_name,
-              variant_name,
-              sku,
-              supplier_sku,
-              description,
-              quantity,
-              received_quantity,
-              unit_cost,
+              order_date,
+              expected_date,
+              warehouse_id,
+              supplier_reference,
+              subtotal,
               discount_amount,
               tax_amount,
-              line_total,
-              product:products(
-                tracking_mode
-              )
-            `
-          )
-          .eq("purchase_order_id", purchaseOrderId)
-          .eq("company_id", currentCompanyId)
-          .order("created_at"),
-
-        supabase
-          .from("stock_receipts")
-          .select(
-            `
-              id,
-              receipt_number,
-              supplier_name,
-              reference_number,
+              shipping_amount,
+              total_amount,
               notes,
-              status,
-              received_at
-            `
+              terms,
+              created_by,
+              approved_by,
+              sent_at,
+              approved_at,
+              created_at,
+              updated_at
+            `,
           )
-          .eq("purchase_order_id", purchaseOrderId)
-          .eq("company_id", currentCompanyId)
-          .order("received_at", {
-            ascending: false,
-          }),
+          .eq("id", purchaseOrderId)
+          .eq("company_id", companyId)
+          .single();
 
-        supabase
-          .from("warehouses")
-          .select(
-            `
-              id,
-              name,
-              code,
-              is_active,
-              is_default
-            `
-          )
-          .eq("company_id", currentCompanyId)
-          .eq("is_active", true)
-          .order("name"),
-      ]);
+        if (purchaseOrderError) {
+          throw purchaseOrderError;
+        }
 
-      if (supplierResult.error) {
-        throw supplierResult.error;
-      }
+        const po =
+          loadedPurchaseOrder as PurchaseOrder;
 
-      if (itemsResult.error) {
-        throw itemsResult.error;
-      }
+        const [
+          itemsResult,
+          supplierResult,
+          warehouseResult,
+          receiptsResult,
+          productsResult,
+          variantsResult,
+          locationsResult,
+        ] = await Promise.all([
+          supabase
+            .from("purchase_order_items")
+            .select(
+              `
+                id,
+                company_id,
+                purchase_order_id,
+                product_id,
+                variant_id,
+                supplier_product_id,
+                product_name,
+                variant_name,
+                sku,
+                supplier_sku,
+                description,
+                quantity,
+                received_quantity,
+                unit_cost,
+                discount_amount,
+                tax_amount,
+                line_total,
+                created_at,
+                updated_at
+              `,
+            )
+            .eq("company_id", companyId)
+            .eq(
+              "purchase_order_id",
+              purchaseOrderId,
+            )
+            .order("created_at", {
+              ascending: true,
+            }),
 
-      if (receiptsResult.error) {
-        throw receiptsResult.error;
-      }
+          po.supplier_id
+            ? supabase
+                .from("suppliers")
+                .select(
+                  `
+                    id,
+                    supplier_number,
+                    legal_name,
+                    display_name,
+                    status,
+                    supplier_type,
+                    tax_id,
+                    website,
+                    email,
+                    phone,
+                    currency,
+                    payment_terms_days,
+                    credit_limit,
+                    default_lead_time_days,
+                    minimum_order_amount,
+                    rating,
+                    notes
+                  `,
+                )
+                .eq(
+                  "company_id",
+                  companyId,
+                )
+                .eq(
+                  "id",
+                  po.supplier_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
 
-      if (warehousesResult.error) {
-        throw warehousesResult.error;
-      }
+          po.warehouse_id
+            ? supabase
+                .from("warehouses")
+                .select(
+                  "id, name, code",
+                )
+                .eq(
+                  "company_id",
+                  companyId,
+                )
+                .eq(
+                  "id",
+                  po.warehouse_id,
+                )
+                .maybeSingle()
+            : Promise.resolve({
+                data: null,
+                error: null,
+              }),
 
-      setSupplier(
-        (supplierResult.data ?? null) as Supplier | null
-      );
+          supabase
+            .from("stock_receipts")
+            .select(
+              `
+                id,
+                company_id,
+                purchase_order_id,
+                receipt_number,
+                supplier_name,
+                reference_number,
+                notes,
+                status,
+                received_by,
+                received_at,
+                created_at,
+                updated_at
+              `,
+            )
+            .eq("company_id", companyId)
+            .eq(
+              "purchase_order_id",
+              purchaseOrderId,
+            )
+            .order("created_at", {
+              ascending: false,
+            }),
 
-      const normalizedItems: PurchaseOrderItem[] = (
-        itemsResult.data ?? []
-      ).map((item: any) => ({
-        id: item.id,
-        product_id: item.product_id,
-        variant_id: item.variant_id,
-        supplier_product_id:
-          item.supplier_product_id ?? null,
-        product_name: item.product_name,
-        variant_name: item.variant_name ?? null,
-        sku: item.sku ?? null,
-        supplier_sku: item.supplier_sku ?? null,
-        description: item.description ?? null,
-        quantity: Number(item.quantity ?? 0),
-        received_quantity: Number(
-          item.received_quantity ?? 0
-        ),
-        unit_cost: Number(item.unit_cost ?? 0),
-        discount_amount: Number(
-          item.discount_amount ?? 0
-        ),
-        tax_amount: Number(item.tax_amount ?? 0),
-        line_total: Number(item.line_total ?? 0),
-        product: Array.isArray(item.product)
-          ? item.product[0] ?? null
-          : item.product ?? null,
-      }));
+          supabase
+            .from("products")
+            .select(
+              `
+                id,
+                name,
+                brand,
+                tracking_mode
+              `,
+            )
+            .eq("company_id", companyId),
 
-      setItems(normalizedItems);
+          supabase
+            .from("product_variants")
+            .select(
+              `
+                id,
+                product_id,
+                name,
+                sku
+              `,
+            )
+            .eq("company_id", companyId),
 
-      setReceipts(
-        (receiptsResult.data ?? []) as Receipt[]
-      );
+          supabase
+            .from("warehouse_locations")
+            .select(
+              `
+                id,
+                warehouse_id,
+                name,
+                code
+              `,
+            )
+            .eq("company_id", companyId)
+            .eq("is_active", true),
+        ]);
 
-      const warehouseList =
-        (warehousesResult.data ??
-          []) as Warehouse[];
+        if (itemsResult.error) {
+          throw itemsResult.error;
+        }
 
-      setWarehouses(warehouseList);
+        if (supplierResult.error) {
+          throw supplierResult.error;
+        }
 
-      const defaultWarehouse =
-        warehouseList.find(
-          (warehouse) =>
-            warehouse.id === po.warehouse_id
-        ) ||
-        warehouseList.find(
-          (warehouse) => warehouse.is_default
-        ) ||
-        warehouseList[0];
+        if (warehouseResult.error) {
+          throw warehouseResult.error;
+        }
 
-      if (defaultWarehouse) {
-        setReceiveWarehouseId(
-          defaultWarehouse.id
+        if (receiptsResult.error) {
+          throw receiptsResult.error;
+        }
+
+        if (productsResult.error) {
+          throw productsResult.error;
+        }
+
+        if (variantsResult.error) {
+          throw variantsResult.error;
+        }
+
+        if (locationsResult.error) {
+          throw locationsResult.error;
+        }
+
+        const loadedItems =
+          (itemsResult.data ||
+            []) as PurchaseOrderItem[];
+
+        const loadedReceipts =
+          (receiptsResult.data ||
+            []) as StockReceipt[];
+
+        const productMap: Record<
+          string,
+          Product
+        > = {};
+
+        for (const product of (productsResult.data ||
+          []) as Product[]) {
+          productMap[product.id] =
+            product;
+        }
+
+        const variantMap: Record<
+          string,
+          Variant
+        > = {};
+
+        for (const variant of (variantsResult.data ||
+          []) as Variant[]) {
+          variantMap[variant.id] =
+            variant;
+        }
+
+        const locationMap: Record<
+          string,
+          WarehouseLocation
+        > = {};
+
+        for (const location of (locationsResult.data ||
+          []) as WarehouseLocation[]) {
+          locationMap[location.id] =
+            location;
+        }
+
+        let loadedReceiptItems: StockReceiptItem[] =
+          [];
+
+        if (
+          loadedReceipts.length >
+          0
+        ) {
+          const receiptIds =
+            loadedReceipts.map(
+              (receipt) =>
+                receipt.id,
+            );
+
+          const {
+            data,
+            error,
+          } = await supabase
+            .from("stock_receipt_items")
+            .select(
+              `
+                id,
+                company_id,
+                receipt_id,
+                product_id,
+                variant_id,
+                quantity,
+                unit_cost,
+                purchase_order_item_id,
+                warehouse_id,
+                location_id,
+                batch_id
+              `,
+            )
+            .eq(
+              "company_id",
+              companyId,
+            )
+            .in(
+              "receipt_id",
+              receiptIds,
+            );
+
+          if (error) {
+            throw error;
+          }
+
+          loadedReceiptItems =
+            (data ||
+              []) as StockReceiptItem[];
+        }
+
+        setPurchaseOrder(po);
+        setItems(loadedItems);
+
+        setSupplier(
+          (supplierResult.data ||
+            null) as Supplier | null,
         );
 
-        await loadLocations(
-          currentCompanyId,
-          defaultWarehouse.id
+        setWarehouse(
+          (warehouseResult.data ||
+            null) as Warehouse | null,
         );
+
+        setProducts(productMap);
+        setVariants(variantMap);
+        setLocations(locationMap);
+        setReceipts(loadedReceipts);
+        setReceiptItems(
+          loadedReceiptItems,
+        );
+      } catch (error) {
+        console.error(
+          "Purchase order detail load error:",
+          error,
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load this purchase order.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (error: any) {
-      console.error(error);
+    },
+    [
+      purchaseOrderId,
+      router,
+      supabase,
+    ],
+  );
 
-      setErrorMessage(
-        error?.message ||
-          "Failed to load purchase order."
+  useEffect(() => {
+    const timer =
+      window.setTimeout(() => {
+        void loadPage();
+      }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadPage]);
+
+  const totals = useMemo(() => {
+    const ordered =
+      items.reduce(
+        (sum, item) =>
+          sum +
+          toNumber(item.quantity),
+        0,
       );
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  async function loadLocations(
-    currentCompanyId: string,
-    warehouseId: string
-  ) {
-    const { data, error } = await supabase
-      .from("warehouse_locations")
-      .select(
-        `
-          id,
-          warehouse_id,
-          name,
-          code,
-          location_type,
-          is_active
-        `
-      )
-      .eq("company_id", currentCompanyId)
-      .eq("warehouse_id", warehouseId)
-      .eq("is_active", true)
-      .order("name");
-
-    if (error) throw error;
-
-    setLocations((data ?? []) as Location[]);
-
-    if (data && data.length > 0) {
-      setReceiveLocationId(data[0].id);
-    } else {
-      setReceiveLocationId("");
-    }
-  }
-
-  async function handleWarehouseChange(
-    warehouseId: string
-  ) {
-    setReceiveWarehouseId(warehouseId);
-    setReceiveLocationId("");
-    setLocations([]);
-
-    if (!companyId || !warehouseId) return;
-
-    try {
-      await loadLocations(
-        companyId,
-        warehouseId
+    const received =
+      items.reduce(
+        (sum, item) =>
+          sum +
+          toNumber(
+            item.received_quantity,
+          ),
+        0,
       );
-    } catch (error: any) {
-      setErrorMessage(
-        error?.message ||
-          "Failed to load warehouse locations."
-      );
-    }
-  }
 
-  function getRemaining(item: PurchaseOrderItem) {
-    return Math.max(
-      0,
-      item.quantity - item.received_quantity
+    const remaining =
+      items.reduce(
+        (sum, item) =>
+          sum +
+          Math.max(
+            toNumber(item.quantity) -
+              toNumber(
+                item.received_quantity,
+              ),
+            0,
+          ),
+        0,
+      );
+
+    const value =
+      items.reduce(
+        (sum, item) =>
+          sum +
+          toNumber(item.line_total),
+        0,
+      );
+
+    return {
+      ordered,
+      received,
+      remaining,
+      value,
+    };
+  }, [items]);
+
+  const receiptQuantity = useMemo(
+    () =>
+      receiptItems.reduce(
+        (sum, item) =>
+          sum +
+          toNumber(item.quantity),
+        0,
+      ),
+    [receiptItems],
+  );
+
+  const receivingProgress = useMemo(() => {
+    if (totals.ordered <= 0) {
+      return 0;
+    }
+
+    return Math.min(
+      100,
+      (totals.received /
+        totals.ordered) *
+        100,
     );
-  }
+  }, [
+    totals.ordered,
+    totals.received,
+  ]);
 
-  const totalOrdered = items.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  );
-
-  const totalReceived = items.reduce(
-    (sum, item) =>
-      sum + item.received_quantity,
-    0
-  );
-
-  const totalRemaining = Math.max(
-    0,
-    totalOrdered - totalReceived
-  );
-
-  const receivedPercentage =
-    totalOrdered > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (totalReceived / totalOrdered) *
-              100
-          )
-        )
-      : 0;
+  const isFullyReceived =
+    totals.ordered > 0 &&
+    totals.remaining <= 0;
 
   const canReceive =
-    purchaseOrder &&
-    !["received", "cancelled"].includes(
-      purchaseOrder.status
-    ) &&
-    totalRemaining > 0;
+    !isFullyReceived &&
+    purchaseOrder?.status !==
+      "cancelled";
 
-  function openReceiveModal() {
-    setErrorMessage("");
-
-    const initialLines: ReceiveLine[] =
-      items
-        .filter((item) => getRemaining(item) > 0)
-        .map((item) => ({
-          purchase_order_item_id: item.id,
-          quantity: 0,
-          serial_numbers: [],
-        }));
-
-    setReceiveLines(initialLines);
-
-    setShowReceiveModal(true);
-  }
-
-  function updateReceiveQuantity(
-    itemId: string,
-    quantity: number
-  ) {
-    const item = items.find(
-      (current) => current.id === itemId
-    );
-
-    if (!item) return;
-
-    const remaining = getRemaining(item);
-
-    setReceiveLines((current) =>
-      current.map((line) =>
-        line.purchase_order_item_id === itemId
-          ? {
-              ...line,
-              quantity: Math.min(
-                remaining,
-                Math.max(
-                  0,
-                  Math.floor(quantity || 0)
-                )
-              ),
-              serial_numbers:
-                line.serial_numbers.slice(
-                  0,
-                  Math.min(
-                    remaining,
-                    Math.max(
-                      0,
-                      Math.floor(quantity || 0)
-                    )
-                  )
-                ),
-            }
-          : line
-      )
+  function getSupplierName(): string {
+    return (
+      supplier?.display_name ||
+      supplier?.legal_name ||
+      "No supplier"
     );
   }
 
-  function updateSerialNumbers(
-    itemId: string,
-    value: string
-  ) {
-    const serials = value
-      .split(/\r?\n/)
-      .map((serial) => serial.trim())
-      .filter(Boolean);
+  function getTrackingMode(
+    item: PurchaseOrderItem,
+  ): string {
+    if (!item.product_id) {
+      return "none";
+    }
 
-    setReceiveLines((current) =>
-      current.map((line) =>
-        line.purchase_order_item_id === itemId
-          ? {
-              ...line,
-              serial_numbers: serials,
-              quantity:
-                line.quantity === 0
-                  ? serials.length
-                  : line.quantity,
-            }
-          : line
-      )
+    return (
+      products[item.product_id]
+        ?.tracking_mode || "none"
     );
   }
 
-  async function handleReceive() {
-    if (!companyId || !purchaseOrder) return;
-
-    setErrorMessage("");
-
-    if (!receiveWarehouseId) {
-      setErrorMessage(
-        "Please select a receiving warehouse."
-      );
-      return;
-    }
-
-    if (!receiveLocationId) {
-      setErrorMessage(
-        "Please select a receiving location."
-      );
-      return;
-    }
-
-    const activeLines = receiveLines.filter(
-      (line) => line.quantity > 0
+  function getRemainingQuantity(
+    item: PurchaseOrderItem,
+  ): number {
+    return Math.max(
+      toNumber(item.quantity) -
+        toNumber(
+          item.received_quantity,
+        ),
+      0,
     );
-
-    if (activeLines.length === 0) {
-      setErrorMessage(
-        "Enter a quantity for at least one item."
-      );
-      return;
-    }
-
-    for (const line of activeLines) {
-      const item = items.find(
-        (current) =>
-          current.id ===
-          line.purchase_order_item_id
-      );
-
-      if (!item) continue;
-
-      const remaining = getRemaining(item);
-
-      if (line.quantity > remaining) {
-        setErrorMessage(
-          `Cannot receive more than the remaining quantity for ${item.product_name}.`
-        );
-        return;
-      }
-
-      const trackingMode =
-        item.product?.tracking_mode;
-
-      if (trackingMode === "serial") {
-        if (
-          line.serial_numbers.length !==
-          line.quantity
-        ) {
-          setErrorMessage(
-            `${item.product_name} requires ${line.quantity} serial number(s).`
-          );
-          return;
-        }
-
-        const normalizedSerials =
-          line.serial_numbers.map((serial) =>
-            serial.toLowerCase()
-          );
-
-        if (
-          new Set(normalizedSerials).size !==
-          normalizedSerials.length
-        ) {
-          setErrorMessage(
-            `Duplicate serial numbers found for ${item.product_name}.`
-          );
-          return;
-        }
-      }
-    }
-
-    try {
-      setActionLoading(true);
-
-      const payload = activeLines.map(
-        (line) => ({
-          purchase_order_item_id:
-            line.purchase_order_item_id,
-          quantity: line.quantity,
-          serial_numbers:
-            line.serial_numbers,
-        })
-      );
-
-      const { data, error } =
-        await supabase.rpc(
-          "receive_purchase_order",
-          {
-            p_company_id: companyId,
-            p_purchase_order_id:
-              purchaseOrder.id,
-            p_warehouse_id:
-              receiveWarehouseId,
-            p_location_id:
-              receiveLocationId,
-            p_items: payload,
-            p_notes:
-              receiveNotes.trim() || null,
-          }
-        );
-
-      if (error) throw error;
-
-      setShowReceiveModal(false);
-      setReceiveNotes("");
-      setReceiveLines([]);
-
-      await loadPurchaseOrder();
-
-      if (data) {
-        console.log(
-          "Goods receipt created:",
-          data
-        );
-      }
-    } catch (error: any) {
-      console.error(error);
-
-      setErrorMessage(
-        error?.message ||
-          "Failed to receive purchase order."
-      );
-    } finally {
-      setActionLoading(false);
-    }
   }
 
-  async function updateStatus(
-    newStatus: "sent" | "confirmed" | "cancelled"
-  ) {
-    if (!companyId || !purchaseOrder) return;
+  function goBack() {
+    router.push(
+      "/purchase-orders",
+    );
+  }
 
-    let confirmation =
-      "Are you sure you want to continue?";
-
-    if (newStatus === "sent") {
-      confirmation =
-        "Send this purchase order?";
-    }
-
-    if (newStatus === "confirmed") {
-      confirmation =
-        "Confirm this purchase order?";
-    }
-
-    if (newStatus === "cancelled") {
-      confirmation =
-        "Cancel this purchase order? This cannot be undone.";
-    }
-
-    if (!window.confirm(confirmation)) {
+  function goToReceiving() {
+    if (!purchaseOrder) {
       return;
     }
 
-    try {
-      setActionLoading(true);
-      setErrorMessage("");
+    router.push(
+      `/inventory/receiving?purchaseOrderId=${encodeURIComponent(
+        purchaseOrder.id,
+      )}`,
+    );
+  }
 
-      const { error } =
-        await supabase.rpc(
-          "update_purchase_order_status",
-          {
-            p_company_id: companyId,
-            p_purchase_order_id:
-              purchaseOrder.id,
-            p_status: newStatus,
-          }
-        );
-
-      if (error) throw error;
-
-      await loadPurchaseOrder();
-    } catch (error: any) {
-      console.error(error);
-
-      setErrorMessage(
-        error?.message ||
-          "Failed to update purchase order status."
-      );
-    } finally {
-      setActionLoading(false);
+  function goToEdit() {
+    if (!purchaseOrder) {
+      return;
     }
+
+    router.push(
+      `/purchase-orders/${purchaseOrder.id}/edit`,
+    );
   }
 
   function printPurchaseOrder() {
@@ -830,266 +902,415 @@ export default function PurchaseOrderDetailPage() {
 
   if (loading) {
     return (
-      <AppShell
-        title="Purchase Order"
-        description="View and manage purchase order details."
-      >
-        <div className="page-content">
-          <div className="loading-card">
-            Loading purchase order...
+      <AppShell>
+        <main className="page-content">
+          <div className="loading-state">
+            <strong>
+              Loading Purchase Order
+            </strong>
+
+            <span>
+              Preparing purchase order information...
+            </span>
           </div>
-        </div>
 
-        <style jsx>{`
-          .page-content {
-            padding: 28px;
-          }
+          <style jsx>{`
+            .page-content {
+              padding: 28px;
+            }
 
-          .loading-card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 40px;
-            text-align: center;
-            color: #64748b;
-          }
-        `}</style>
+            .loading-state {
+              min-height: 360px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 7px;
+              border: 1px solid #e5e7eb;
+              border-radius: 14px;
+              background: #ffffff;
+              box-shadow:
+                0 2px 8px
+                  rgba(
+                    15,
+                    23,
+                    42,
+                    0.04
+                  );
+              text-align: center;
+            }
+
+            .loading-state strong {
+              color: #111827;
+              font-size: 15px;
+            }
+
+            .loading-state span {
+              color: #6b7280;
+              font-size: 13px;
+            }
+          `}</style>
+        </main>
       </AppShell>
     );
   }
 
   if (!purchaseOrder) {
     return (
-      <AppShell
-        title="Purchase Order"
-        description="Purchase order not found."
-      >
-        <div className="page-content">
+      <AppShell>
+        <main className="page-content">
           <div className="error-card">
-            <h2>Purchase order not found</h2>
-            <p>
-              {errorMessage ||
-                "The purchase order may have been deleted or you may not have access to it."}
-            </p>
+            <div className="error-icon">
+              !
+            </div>
 
-            <Link
-              href="/purchase-orders"
-              className="primary-button"
+            <div>
+              <h2>
+                Purchase Order Not Found
+              </h2>
+
+              <p>
+                {errorMessage ||
+                  "The requested purchase order could not be loaded."}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={goBack}
             >
               Back to Purchase Orders
-            </Link>
+            </button>
           </div>
-        </div>
 
-        <style jsx>{`
-          .page-content {
-            padding: 28px;
-          }
+          <style jsx>{`
+            .page-content {
+              padding: 28px;
+            }
 
-          .error-card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 40px;
-            text-align: center;
-          }
+            .error-card {
+              min-height: 320px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 14px;
+              border: 1px solid #e5e7eb;
+              border-radius: 14px;
+              background: #ffffff;
+              text-align: center;
+            }
 
-          .error-card h2 {
-            margin: 0 0 8px;
-            color: #0f172a;
-          }
+            .error-icon {
+              width: 48px;
+              height: 48px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 12px;
+              background: #fef2f2;
+              color: #b91c1c;
+              font-size: 20px;
+              font-weight: 800;
+            }
 
-          .error-card p {
-            margin: 0 0 20px;
-            color: #64748b;
-          }
+            .error-card h2 {
+              margin: 0;
+              color: #111827;
+              font-size: 18px;
+            }
 
-          .primary-button {
-            display: inline-flex;
-            height: 40px;
-            padding: 0 16px;
-            align-items: center;
-            justify-content: center;
-            border-radius: 9px;
-            background: #0f172a;
-            color: #fff;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 600;
-          }
-        `}</style>
+            .error-card p {
+              max-width: 500px;
+              margin: 6px 0 0;
+              color: #64748b;
+              font-size: 13px;
+              line-height: 1.5;
+            }
+
+            .secondary-button {
+              min-height: 40px;
+              padding: 0 15px;
+              border: 1px solid #dbe2ea;
+              border-radius: 10px;
+              background: #ffffff;
+              color: #334155;
+              font-size: 13px;
+              font-weight: 700;
+              cursor: pointer;
+            }
+          `}</style>
+        </main>
       </AppShell>
     );
   }
 
-  const warehouse = warehouses.find(
-    (item) =>
-      item.id === purchaseOrder.warehouse_id
-  );
-
   return (
-    <AppShell
-      title={purchaseOrder.po_number}
-      description="View and manage purchase order details."
-      actions={
-        <div className="header-actions">
-          <Link
-            href="/purchase-orders"
-            className="secondary-button"
-          >
-            Back
-          </Link>
-
+    <AppShell>
+      <main className="page-content purchase-order-page">
+        <div className="top-bar">
           <button
             type="button"
-            className="secondary-button"
-            onClick={printPurchaseOrder}
+            className="back-button"
+            onClick={goBack}
           >
-            Print
+            ← Back to Purchase Orders
           </button>
 
-          {purchaseOrder.status ===
-            "draft" && (
+          <div className="top-actions">
             <button
               type="button"
-              className="primary-button"
+              className="secondary-button"
               onClick={() =>
-                updateStatus("sent")
+                void loadPage(true)
               }
-              disabled={actionLoading}
+              disabled={refreshing}
             >
-              Send PO
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
             </button>
-          )}
 
-          {purchaseOrder.status ===
-            "sent" && (
             <button
               type="button"
-              className="primary-button"
-              onClick={() =>
-                updateStatus("confirmed")
-              }
-              disabled={actionLoading}
+              className="secondary-button"
+              onClick={printPurchaseOrder}
             >
-              Confirm PO
+              Print
             </button>
-          )}
 
-          {canReceive && (
             <button
               type="button"
-              className="primary-button receive-button"
-              onClick={openReceiveModal}
-              disabled={actionLoading}
-            >
-              Receive
-            </button>
-          )}
-
-          {!["received", "cancelled"].includes(
-            purchaseOrder.status
-          ) && (
-            <button
-              type="button"
-              className="danger-button"
-              onClick={() =>
-                updateStatus("cancelled")
+              className="secondary-button"
+              onClick={goToEdit}
+              disabled={
+                purchaseOrder.status ===
+                "received"
               }
-              disabled={actionLoading}
             >
-              Cancel
+              Edit PO
             </button>
-          )}
+
+            {canReceive && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={goToReceiving}
+              >
+                Receive Stock
+              </button>
+            )}
+          </div>
         </div>
-      }
-    >
-      <div className="page-content">
+
         {errorMessage && (
-          <div className="error-banner">
-            <strong>Unable to continue</strong>
-            <span>{errorMessage}</span>
+          <div className="alert error">
+            <strong>
+              Unable to load purchase order
+            </strong>
+
+            <span>
+              {errorMessage}
+            </span>
           </div>
         )}
 
-        <div className="page-header">
-          <div>
-            <div className="breadcrumb">
-              <Link href="/purchase-orders">
-                Purchase Orders
-              </Link>
-              <span>/</span>
+        <section className="hero-card">
+          <div className="hero-main">
+            <div className="hero-icon">
+              PO
+            </div>
+
+            <div className="hero-copy">
+              <div className="eyebrow">
+                Procurement
+              </div>
+
+              <div className="title-row">
+                <h1>
+                  {purchaseOrder.po_number}
+                </h1>
+
+                <span
+                  className={`status-badge ${getStatusClass(
+                    purchaseOrder.status,
+                  )}`}
+                >
+                  {formatStatus(
+                    purchaseOrder.status,
+                  )}
+                </span>
+              </div>
+
+              <p>
+                {getSupplierName()}
+                {purchaseOrder.supplier_reference
+                  ? ` • Ref ${purchaseOrder.supplier_reference}`
+                  : ""}
+              </p>
+            </div>
+          </div>
+
+          <div className="hero-meta">
+            <div>
               <span>
-                {purchaseOrder.po_number}
+                Order Date
               </span>
+
+              <strong>
+                {formatDate(
+                  purchaseOrder.order_date,
+                )}
+              </strong>
             </div>
 
-            <div className="title-row">
-              <h1>
-                {purchaseOrder.po_number}
-              </h1>
-
-              <span
-                className={statusClass(
-                  purchaseOrder.status
-                )}
-              >
-                {statusLabel(
-                  purchaseOrder.status
-                )}
+            <div>
+              <span>
+                Expected
               </span>
+
+              <strong>
+                {formatDate(
+                  purchaseOrder.expected_date,
+                )}
+              </strong>
             </div>
 
-            <p>
-              Created{" "}
-              {formatDateTime(
-                purchaseOrder.created_at
+            <div>
+              <span>
+                Warehouse
+              </span>
+
+              <strong>
+                {warehouse?.name ||
+                  "Not assigned"}
+              </strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-label">
+              Ordered
+            </div>
+
+            <div className="stat-value">
+              {formatNumber(
+                totals.ordered,
               )}
-            </p>
-          </div>
-        </div>
+            </div>
 
-        <div className="stats-grid">
-          <div className="stat-card">
-            <span>Ordered Qty</span>
-            <strong>{totalOrdered}</strong>
+            <div className="stat-meta">
+              Total units ordered
+            </div>
           </div>
 
           <div className="stat-card">
-            <span>Received Qty</span>
-            <strong>{totalReceived}</strong>
+            <div className="stat-label">
+              Received
+            </div>
+
+            <div className="stat-value green">
+              {formatNumber(
+                totals.received,
+              )}
+            </div>
+
+            <div className="stat-meta">
+              Stock already received
+            </div>
           </div>
 
           <div className="stat-card">
-            <span>Remaining Qty</span>
-            <strong>{totalRemaining}</strong>
+            <div className="stat-label">
+              Remaining
+            </div>
+
+            <div className="stat-value amber">
+              {formatNumber(
+                totals.remaining,
+              )}
+            </div>
+
+            <div className="stat-meta">
+              Units still outstanding
+            </div>
           </div>
 
           <div className="stat-card">
-            <span>Order Value</span>
-            <strong>
-              {money(
+            <div className="stat-label">
+              PO Total
+            </div>
+
+            <div className="stat-value money">
+              {formatCurrency(
                 purchaseOrder.total_amount,
-                purchaseOrder.currency
+                purchaseOrder.currency,
               )}
-            </strong>
-          </div>
-        </div>
+            </div>
 
-        <div className="progress-card">
+            <div className="stat-meta">
+              Purchase order value
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Receipts
+            </div>
+
+            <div className="stat-value">
+              {receipts.length}
+            </div>
+
+            <div className="stat-meta">
+              Stock receipt records
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-label">
+              Receipt Units
+            </div>
+
+            <div className="stat-value">
+              {formatNumber(
+                receiptQuantity,
+              )}
+            </div>
+
+            <div className="stat-meta">
+              Units across receipts
+            </div>
+          </div>
+        </section>
+
+        <section className="progress-card">
           <div className="progress-header">
             <div>
               <strong>
                 Receiving Progress
               </strong>
+
               <span>
-                {totalReceived} of{" "}
-                {totalOrdered} units received
+                {formatNumber(
+                  totals.received,
+                )}{" "}
+                of{" "}
+                {formatNumber(
+                  totals.ordered,
+                )}{" "}
+                units received
               </span>
             </div>
 
             <strong>
-              {receivedPercentage}%
+              {Math.round(
+                receivingProgress,
+              )}
+              %
             </strong>
           </div>
 
@@ -1097,1764 +1318,1604 @@ export default function PurchaseOrderDetailPage() {
             <div
               className="progress-fill"
               style={{
-                width: `${receivedPercentage}%`,
+                width: `${receivingProgress}%`,
               }}
             />
           </div>
-        </div>
+
+          <div className="progress-footer">
+            {isFullyReceived ? (
+              <span className="complete-message">
+                ✓ Purchase order fully received
+              </span>
+            ) : (
+              <span>
+                {formatNumber(
+                  totals.remaining,
+                )}{" "}
+                units remaining to receive
+              </span>
+            )}
+
+            {canReceive && (
+              <button
+                type="button"
+                className="progress-link"
+                onClick={goToReceiving}
+              >
+                Continue Receiving →
+              </button>
+            )}
+          </div>
+        </section>
 
         <div className="content-grid">
-          <div className="main-column">
-            <section className="card">
-              <div className="card-header">
-                <div>
-                  <h2>Purchase Order Items</h2>
-                  <p>
-                    Products and quantities included
-                    in this order.
-                  </p>
-                </div>
+          <section className="content-card main-card">
+            <div className="card-header">
+              <div>
+                <h2>
+                  Purchase Order Items
+                </h2>
+
+                <p>
+                  Products, quantities, tracking
+                  and receiving status.
+                </p>
               </div>
 
+              <span className="section-count">
+                {items.length}{" "}
+                {items.length === 1
+                  ? "line"
+                  : "lines"}
+              </span>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="empty-state">
+                <strong>
+                  No purchase order items
+                </strong>
+
+                <span>
+                  This purchase order does not
+                  contain any line items.
+                </span>
+              </div>
+            ) : (
               <div className="table-wrap">
-                <table>
+                <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Product</th>
-                      <th>SKU</th>
-                      <th>Ordered</th>
-                      <th>Received</th>
-                      <th>Remaining</th>
-                      <th>Unit Cost</th>
-                      <th>Total</th>
+                      <th>
+                        Product
+                      </th>
+
+                      <th>
+                        Tracking
+                      </th>
+
+                      <th>
+                        SKU
+                      </th>
+
+                      <th className="numeric">
+                        Ordered
+                      </th>
+
+                      <th className="numeric">
+                        Received
+                      </th>
+
+                      <th className="numeric">
+                        Remaining
+                      </th>
+
+                      <th className="numeric">
+                        Unit Cost
+                      </th>
+
+                      <th className="numeric">
+                        Line Total
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {items.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="empty-table"
+                    {items.map((item) => {
+                      const product =
+                        item.product_id
+                          ? products[
+                              item.product_id
+                            ]
+                          : null;
+
+                      const variant =
+                        item.variant_id
+                          ? variants[
+                              item.variant_id
+                            ]
+                          : null;
+
+                      const remaining =
+                        getRemainingQuantity(
+                          item,
+                        );
+
+                      const trackingMode =
+                        getTrackingMode(
+                          item,
+                        );
+
+                      return (
+                        <tr
+                          key={item.id}
                         >
-                          No items found.
-                        </td>
-                      </tr>
-                    ) : (
-                      items.map((item) => {
-                        const remaining =
-                          getRemaining(item);
-
-                        const trackingMode =
-                          item.product
-                            ?.tracking_mode;
-
-                        return (
-                          <tr key={item.id}>
-                            <td>
-                              <div className="product-name">
+                          <td>
+                            <div className="product-cell">
+                              <strong>
                                 {
                                   item.product_name
                                 }
-                              </div>
+                              </strong>
 
-                              {item.variant_name && (
-                                <div className="variant-name">
+                              {(item.variant_name ||
+                                variant?.name) && (
+                                <span>
                                   {
-                                    item.variant_name
+                                    item.variant_name ||
+                                    variant?.name
                                   }
-
-                                  {trackingMode ===
-                                    "serial" && (
-                                    <span className="tracking-badge">
-                                      Serialized
-                                    </span>
-                                  )}
-                                </div>
+                                </span>
                               )}
-                            </td>
 
-                            <td>
+                              {product?.brand && (
+                                <small>
+                                  {
+                                    product.brand
+                                  }
+                                </small>
+                              )}
+
+                              {item.description && (
+                                <small>
+                                  {
+                                    item.description
+                                  }
+                                </small>
+                              )}
+                            </div>
+                          </td>
+
+                          <td>
+                            <span className="tracking-badge">
+                              {getTrackingLabel(
+                                trackingMode,
+                              )}
+                            </span>
+                          </td>
+
+                          <td>
+                            <span className="sku-text">
                               {item.sku ||
+                                variant?.sku ||
                                 "—"}
-                            </td>
+                            </span>
+                          </td>
 
-                            <td>
-                              {item.quantity}
-                            </td>
+                          <td className="numeric">
+                            {formatNumber(
+                              toNumber(
+                                item.quantity,
+                              ),
+                            )}
+                          </td>
 
-                            <td>
-                              <span className="received-number">
-                                {
-                                  item.received_quantity
-                                }
-                              </span>
-                            </td>
-
-                            <td>
-                              <span
-                                className={
-                                  remaining > 0
-                                    ? "remaining-number"
-                                    : "complete-number"
-                                }
-                              >
-                                {remaining}
-                              </span>
-                            </td>
-
-                            <td>
-                              {money(
-                                item.unit_cost,
-                                purchaseOrder.currency
+                          <td className="numeric">
+                            <strong className="received-value">
+                              {formatNumber(
+                                toNumber(
+                                  item.received_quantity,
+                                ),
                               )}
-                            </td>
+                            </strong>
+                          </td>
 
-                            <td className="line-total">
-                              {money(
+                          <td className="numeric">
+                            <strong
+                              className={
+                                remaining >
+                                0
+                                  ? "remaining-value"
+                                  : "complete-value"
+                              }
+                            >
+                              {formatNumber(
+                                remaining,
+                              )}
+                            </strong>
+                          </td>
+
+                          <td className="numeric">
+                            {formatCurrency(
+                              item.unit_cost,
+                              purchaseOrder.currency,
+                            )}
+                          </td>
+
+                          <td className="numeric">
+                            <strong>
+                              {formatCurrency(
                                 item.line_total,
-                                purchaseOrder.currency
+                                purchaseOrder.currency,
                               )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                            </strong>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+
+                  <tfoot>
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="total-label"
+                      >
+                        Totals
+                      </td>
+
+                      <td className="numeric">
+                        <strong>
+                          {formatNumber(
+                            totals.ordered,
+                          )}
+                        </strong>
+                      </td>
+
+                      <td className="numeric">
+                        <strong>
+                          {formatNumber(
+                            totals.received,
+                          )}
+                        </strong>
+                      </td>
+
+                      <td className="numeric">
+                        <strong>
+                          {formatNumber(
+                            totals.remaining,
+                          )}
+                        </strong>
+                      </td>
+
+                      <td />
+
+                      <td className="numeric">
+                        <strong>
+                          {formatCurrency(
+                            totals.value,
+                            purchaseOrder.currency,
+                          )}
+                        </strong>
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
-            </section>
+            )}
+          </section>
 
-            <section className="card">
+          <aside className="side-column">
+            <section className="content-card">
               <div className="card-header">
                 <div>
-                  <h2>Receiving History</h2>
+                  <h2>
+                    Supplier
+                  </h2>
+
                   <p>
-                    Goods receipts recorded against
-                    this purchase order.
+                    Supplier information for this
+                    purchase order.
                   </p>
                 </div>
               </div>
 
-              {receipts.length === 0 ? (
-                <div className="empty-state">
-                  <strong>
-                    No receipts yet
-                  </strong>
-
+              <div className="info-list">
+                <div>
                   <span>
-                    Received inventory will appear
-                    here after you receive this PO.
+                    Supplier
                   </span>
+
+                  <strong>
+                    {getSupplierName()}
+                  </strong>
                 </div>
-              ) : (
-                <div className="receipt-list">
-                  {receipts.map((receipt) => (
-                    <div
-                      className="receipt-row"
-                      key={receipt.id}
-                    >
-                      <div className="receipt-icon">
-                        GRN
-                      </div>
 
-                      <div className="receipt-main">
-                        <strong>
-                          {
-                            receipt.receipt_number
-                          }
-                        </strong>
+                <div>
+                  <span>
+                    Supplier Number
+                  </span>
 
-                        <span>
-                          Received{" "}
-                          {formatDateTime(
-                            receipt.received_at
-                          )}
-                        </span>
-                      </div>
+                  <strong>
+                    {supplier?.supplier_number ||
+                      "—"}
+                  </strong>
+                </div>
 
-                      <div className="receipt-reference">
-                        <span>
-                          Reference
-                        </span>
+                <div>
+                  <span>
+                    Email
+                  </span>
 
-                        <strong>
-                          {
-                            receipt.reference_number ||
-                            purchaseOrder.po_number
-                          }
-                        </strong>
-                      </div>
+                  <strong>
+                    {supplier?.email ||
+                      "—"}
+                  </strong>
+                </div>
 
-                      <span className="receipt-status">
-                        {receipt.status}
-                      </span>
-                    </div>
-                  ))}
+                <div>
+                  <span>
+                    Phone
+                  </span>
+
+                  <strong>
+                    {supplier?.phone ||
+                      "—"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Payment Terms
+                  </span>
+
+                  <strong>
+                    {toNumber(
+                      supplier?.payment_terms_days,
+                    ) > 0
+                      ? `${formatNumber(
+                          toNumber(
+                            supplier?.payment_terms_days,
+                          ),
+                        )} days`
+                      : "Prepaid"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {supplier?.currency ||
+                      purchaseOrder.currency ||
+                      "AED"}
+                  </strong>
+                </div>
+              </div>
+
+              {supplier?.website && (
+                <div className="supplier-link">
+                  <a
+                    href={
+                      supplier.website
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open supplier website →
+                  </a>
                 </div>
               )}
             </section>
 
-            {(purchaseOrder.notes ||
-              purchaseOrder.terms) && (
-              <section className="card">
-                <div className="notes-grid">
-                  {purchaseOrder.notes && (
-                    <div>
-                      <h3>Notes</h3>
-                      <p className="long-text">
-                        {purchaseOrder.notes}
-                      </p>
-                    </div>
-                  )}
-
-                  {purchaseOrder.terms && (
-                    <div>
-                      <h3>Terms & Conditions</h3>
-                      <p className="long-text">
-                        {purchaseOrder.terms}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
-
-          <aside className="side-column">
-            <section className="card info-card">
+            <section className="content-card">
               <div className="card-header">
                 <div>
-                  <h2>Supplier</h2>
+                  <h2>
+                    Order Information
+                  </h2>
+
+                  <p>
+                    Operational details and
+                    references.
+                  </p>
                 </div>
               </div>
 
-              {supplier ? (
-                <div className="supplier-info">
-                  <div className="supplier-name">
-                    {supplier.display_name}
-                  </div>
-
-                  {supplier.legal_name !==
-                    supplier.display_name && (
-                    <div className="supplier-legal">
-                      {supplier.legal_name}
-                    </div>
-                  )}
-
-                  {supplier.email && (
-                    <div className="info-line">
-                      <span>Email</span>
-                      <strong>
-                        {supplier.email}
-                      </strong>
-                    </div>
-                  )}
-
-                  {supplier.phone && (
-                    <div className="info-line">
-                      <span>Phone</span>
-                      <strong>
-                        {supplier.phone}
-                      </strong>
-                    </div>
-                  )}
-
-                  <div className="info-line">
-                    <span>Currency</span>
-                    <strong>
-                      {supplier.currency}
-                    </strong>
-                  </div>
-
-                  <div className="info-line">
-                    <span>Payment Terms</span>
-                    <strong>
-                      {supplier.payment_terms_days ||
-                        0}{" "}
-                      days
-                    </strong>
-                  </div>
-                </div>
-              ) : (
-                <div className="muted">
-                  Supplier information
-                  unavailable.
-                </div>
-              )}
-            </section>
-
-            <section className="card info-card">
-              <div className="card-header">
+              <div className="info-list">
                 <div>
-                  <h2>Order Details</h2>
-                </div>
-              </div>
+                  <span>
+                    PO Number
+                  </span>
 
-              <div className="details-list">
-                <div>
-                  <span>PO Number</span>
                   <strong>
-                    {purchaseOrder.po_number}
+                    {
+                      purchaseOrder.po_number
+                    }
                   </strong>
                 </div>
 
                 <div>
-                  <span>Order Date</span>
+                  <span>
+                    Supplier Reference
+                  </span>
+
                   <strong>
-                    {formatDate(
-                      purchaseOrder.order_date
-                    )}
+                    {
+                      purchaseOrder.supplier_reference ||
+                      "—"
+                    }
                   </strong>
                 </div>
 
                 <div>
-                  <span>Expected Delivery</span>
-                  <strong>
-                    {formatDate(
-                      purchaseOrder.expected_date
-                    )}
-                  </strong>
-                </div>
+                  <span>
+                    Warehouse
+                  </span>
 
-                <div>
-                  <span>Warehouse</span>
                   <strong>
                     {warehouse
-                      ? `${warehouse.name}${
-                          warehouse.code
-                            ? ` (${warehouse.code})`
-                            : ""
-                        }`
+                      ? `${warehouse.name} (${warehouse.code})`
                       : "Not assigned"}
                   </strong>
                 </div>
 
                 <div>
-                  <span>Supplier Reference</span>
+                  <span>
+                    Order Date
+                  </span>
+
                   <strong>
-                    {purchaseOrder.supplier_reference ||
-                      "—"}
+                    {formatDate(
+                      purchaseOrder.order_date,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Expected Date
+                  </span>
+
+                  <strong>
+                    {formatDate(
+                      purchaseOrder.expected_date,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Created
+                  </span>
+
+                  <strong>
+                    {formatDateTime(
+                      purchaseOrder.created_at,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Approved
+                  </span>
+
+                  <strong>
+                    {formatDateTime(
+                      purchaseOrder.approved_at,
+                    )}
                   </strong>
                 </div>
               </div>
             </section>
 
-            <section className="card totals-card">
+            <section className="content-card">
               <div className="card-header">
                 <div>
-                  <h2>Totals</h2>
+                  <h2>
+                    Cost Summary
+                  </h2>
+
+                  <p>
+                    Purchase order financial
+                    breakdown.
+                  </p>
                 </div>
               </div>
 
-              <div className="total-line">
-                <span>Subtotal</span>
-                <strong>
-                  {money(
-                    purchaseOrder.subtotal,
-                    purchaseOrder.currency
-                  )}
-                </strong>
-              </div>
+              <div className="cost-list">
+                <div>
+                  <span>
+                    Subtotal
+                  </span>
 
-              <div className="total-line">
-                <span>Discount</span>
-                <strong>
-                  -
-                  {money(
-                    purchaseOrder.discount_amount,
-                    purchaseOrder.currency
-                  )}
-                </strong>
-              </div>
+                  <strong>
+                    {formatCurrency(
+                      purchaseOrder.subtotal,
+                      purchaseOrder.currency,
+                    )}
+                  </strong>
+                </div>
 
-              <div className="total-line">
-                <span>Tax</span>
-                <strong>
-                  {money(
-                    purchaseOrder.tax_amount,
-                    purchaseOrder.currency
-                  )}
-                </strong>
-              </div>
+                <div>
+                  <span>
+                    Discount
+                  </span>
 
-              <div className="total-line">
-                <span>Shipping</span>
-                <strong>
-                  {money(
-                    purchaseOrder.shipping_amount,
-                    purchaseOrder.currency
-                  )}
-                </strong>
-              </div>
+                  <strong>
+                    {formatCurrency(
+                      purchaseOrder.discount_amount,
+                      purchaseOrder.currency,
+                    )}
+                  </strong>
+                </div>
 
-              <div className="total-divider" />
+                <div>
+                  <span>
+                    Tax
+                  </span>
 
-              <div className="grand-total">
-                <span>Total</span>
-                <strong>
-                  {money(
-                    purchaseOrder.total_amount,
-                    purchaseOrder.currency
-                  )}
-                </strong>
+                  <strong>
+                    {formatCurrency(
+                      purchaseOrder.tax_amount,
+                      purchaseOrder.currency,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Shipping
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      purchaseOrder.shipping_amount,
+                      purchaseOrder.currency,
+                    )}
+                  </strong>
+                </div>
+
+                <div className="cost-total">
+                  <span>
+                    Total
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      purchaseOrder.total_amount,
+                      purchaseOrder.currency,
+                    )}
+                  </strong>
+                </div>
               </div>
             </section>
           </aside>
         </div>
-      </div>
 
-      {showReceiveModal && (
-        <div className="modal-backdrop">
-          <div className="receive-modal">
-            <div className="modal-header">
-              <div>
-                <h2>Receive Purchase Order</h2>
-                <p>
-                  Record the inventory received
-                  against {purchaseOrder.po_number}.
-                </p>
-              </div>
+        <section className="content-card">
+          <div className="card-header">
+            <div>
+              <h2>
+                Receiving History
+              </h2>
 
-              <button
-                type="button"
-                className="close-button"
-                onClick={() =>
-                  setShowReceiveModal(false)
-                }
-                disabled={actionLoading}
-              >
-                ×
-              </button>
+              <p>
+                Stock receipts created against
+                this purchase order.
+              </p>
             </div>
 
-            <div className="modal-body">
-              <div className="receive-info">
-                <div>
-                  <span>Remaining</span>
-                  <strong>
-                    {totalRemaining} units
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Supplier</span>
-                  <strong>
-                    {supplier?.display_name ||
-                      "—"}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="receive-location-grid">
-                <div className="field">
-                  <label>
-                    Warehouse <span>*</span>
-                  </label>
-
-                  <select
-                    value={receiveWarehouseId}
-                    onChange={(event) =>
-                      handleWarehouseChange(
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="">
-                      Select warehouse
-                    </option>
-
-                    {warehouses.map(
-                      (warehouse) => (
-                        <option
-                          key={warehouse.id}
-                          value={warehouse.id}
-                        >
-                          {warehouse.name}
-                          {warehouse.code
-                            ? ` (${warehouse.code})`
-                            : ""}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="field">
-                  <label>
-                    Location <span>*</span>
-                  </label>
-
-                  <select
-                    value={receiveLocationId}
-                    onChange={(event) =>
-                      setReceiveLocationId(
-                        event.target.value
-                      )
-                    }
-                    disabled={
-                      !receiveWarehouseId
-                    }
-                  >
-                    <option value="">
-                      Select location
-                    </option>
-
-                    {locations.map(
-                      (location) => (
-                        <option
-                          key={location.id}
-                          value={location.id}
-                        >
-                          {location.name}
-                          {location.code
-                            ? ` (${location.code})`
-                            : ""}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  {receiveWarehouseId &&
-                    locations.length === 0 && (
-                      <small className="field-warning">
-                        No active locations exist
-                        in this warehouse.
-                      </small>
-                    )}
-                </div>
-              </div>
-
-              <div className="receive-items">
-                <div className="receive-items-header">
-                  <span>Product</span>
-                  <span>Remaining</span>
-                  <span>Receive</span>
-                </div>
-
-                {items
-                  .filter(
-                    (item) =>
-                      getRemaining(item) > 0
-                  )
-                  .map((item) => {
-                    const line =
-                      receiveLines.find(
-                        (current) =>
-                          current.purchase_order_item_id ===
-                          item.id
-                      );
-
-                    const trackingMode =
-                      item.product
-                        ?.tracking_mode;
-
-                    return (
-                      <div
-                        className="receive-item"
-                        key={item.id}
-                      >
-                        <div className="receive-product">
-                          <strong>
-                            {
-                              item.product_name
-                            }
-                          </strong>
-
-                          <span>
-                            {item.variant_name ||
-                              "Default"}
-                          </span>
-
-                          {trackingMode ===
-                            "serial" && (
-                            <span className="serial-label">
-                              Serial tracked
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="remaining-cell">
-                          {getRemaining(item)}
-                        </div>
-
-                        <div>
-                          <input
-                            className="receive-quantity"
-                            type="number"
-                            min="0"
-                            max={getRemaining(
-                              item
-                            )}
-                            step="1"
-                            value={
-                              line?.quantity || 0
-                            }
-                            onChange={(event) =>
-                              updateReceiveQuantity(
-                                item.id,
-                                Number(
-                                  event.target.value
-                                )
-                              )
-                            }
-                          />
-                        </div>
-
-                        {trackingMode ===
-                          "serial" &&
-                          (line?.quantity || 0) >
-                            0 && (
-                            <div className="serial-section">
-                              <label>
-                                Serial Numbers
-                                <span>
-                                  {" "}
-                                  ({line?.quantity}{" "}
-                                  required)
-                                </span>
-                              </label>
-
-                              <textarea
-                                rows={Math.min(
-                                  8,
-                                  Math.max(
-                                    3,
-                                    line?.quantity ||
-                                      3
-                                  )
-                                )}
-                                placeholder="Enter one serial number per line"
-                                value={(
-                                  line?.serial_numbers ||
-                                  []
-                                ).join("\n")}
-                                onChange={(event) =>
-                                  updateSerialNumbers(
-                                    item.id,
-                                    event.target
-                                      .value
-                                  )
-                                }
-                              />
-
-                              <small>
-                                Enter exactly{" "}
-                                {line?.quantity}{" "}
-                                unique serial
-                                number(s).
-                              </small>
-                            </div>
-                          )}
-                      </div>
-                    );
-                  })}
-              </div>
-
-              <div className="field">
-                <label>Receiving Notes</label>
-
-                <textarea
-                  rows={3}
-                  value={receiveNotes}
-                  onChange={(event) =>
-                    setReceiveNotes(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Optional notes about this delivery..."
-                />
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() =>
-                  setShowReceiveModal(false)
-                }
-                disabled={actionLoading}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="primary-button"
-                onClick={handleReceive}
-                disabled={actionLoading}
-              >
-                {actionLoading
-                  ? "Receiving..."
-                  : "Complete Receiving"}
-              </button>
-            </div>
+            <span className="section-count">
+              {receipts.length}{" "}
+              {receipts.length === 1
+                ? "receipt"
+                : "receipts"}
+            </span>
           </div>
-        </div>
-      )}
+
+          {receipts.length === 0 ? (
+            <div className="empty-state history-empty">
+              <strong>
+                No receipts yet
+              </strong>
+
+              <span>
+                Receiving activity for this
+                purchase order will appear here.
+              </span>
+
+              {canReceive && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={goToReceiving}
+                >
+                  Receive Stock
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>
+                      Receipt
+                    </th>
+
+                    <th>
+                      Date
+                    </th>
+
+                    <th>
+                      Reference
+                    </th>
+
+                    <th>
+                      Status
+                    </th>
+
+                    <th className="numeric">
+                      Units
+                    </th>
+
+                    <th>
+                      Notes
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {receipts.map(
+                    (receipt) => {
+                      const quantity =
+                        receiptItems
+                          .filter(
+                            (item) =>
+                              item.receipt_id ===
+                              receipt.id,
+                          )
+                          .reduce(
+                            (
+                              sum,
+                              item,
+                            ) =>
+                              sum +
+                              toNumber(
+                                item.quantity,
+                              ),
+                            0,
+                          );
+
+                      return (
+                        <tr
+                          key={
+                            receipt.id
+                          }
+                        >
+                          <td>
+                            <strong>
+                              {
+                                receipt.receipt_number
+                              }
+                            </strong>
+                          </td>
+
+                          <td>
+                            {formatDateTime(
+                              receipt.received_at ||
+                                receipt.created_at,
+                            )}
+                          </td>
+
+                          <td>
+                            {receipt.reference_number ||
+                              "—"}
+                          </td>
+
+                          <td>
+                            <span
+                              className={`status-badge ${getStatusClass(
+                                receipt.status,
+                              )}`}
+                            >
+                              {formatStatus(
+                                receipt.status,
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="numeric">
+                            <strong>
+                              {formatNumber(
+                                quantity,
+                              )}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <span className="notes-preview">
+                              {receipt.notes ||
+                                "—"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {(purchaseOrder.notes ||
+          purchaseOrder.terms) && (
+          <div className="notes-grid">
+            {purchaseOrder.notes && (
+              <section className="content-card">
+                <div className="card-header">
+                  <div>
+                    <h2>
+                      Purchase Order Notes
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="text-content">
+                  {
+                    purchaseOrder.notes
+                  }
+                </div>
+              </section>
+            )}
+
+            {purchaseOrder.terms && (
+              <section className="content-card">
+                <div className="card-header">
+                  <div>
+                    <h2>
+                      Terms & Conditions
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="text-content">
+                  {
+                    purchaseOrder.terms
+                  }
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+      </main>
 
       <style jsx>{`
         .page-content {
+          min-width: 0;
           padding: 28px;
-          background: #f8fafc;
-          min-height: calc(100vh - 80px);
         }
 
-        .header-actions {
+        .top-bar {
           display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+
+        .top-actions {
+          display: flex;
+          align-items: center;
           flex-wrap: wrap;
+          gap: 10px;
         }
 
-        .page-header {
-          max-width: 1500px;
-          margin: 0 auto 20px;
+        .back-button,
+        .secondary-button,
+        .primary-button {
+          min-height: 40px;
+          padding: 0 15px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
         }
 
-        .breadcrumb {
+        .back-button {
+          padding-left: 0;
+          border: 0;
+          background: transparent;
+          color: #475569;
+        }
+
+        .back-button:hover {
+          color: #111827;
+        }
+
+        .secondary-button {
+          border: 1px solid #dbe2ea;
+          background: #ffffff;
+          color: #334155;
+        }
+
+        .secondary-button:hover:not(
+            :disabled
+          ) {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+        }
+
+        .primary-button {
+          border: 1px solid #166534;
+          background: #166534;
+          color: #ffffff;
+        }
+
+        .primary-button:hover:not(
+            :disabled
+          ) {
+          background: #14532d;
+        }
+
+        button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .alert {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-bottom: 18px;
+          padding: 13px 15px;
+          border-radius: 10px;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .alert.error {
+          border: 1px solid #fecaca;
+          background: #fff7f7;
+          color: #991b1b;
+        }
+
+        .hero-card {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 18px;
+          padding: 22px;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          background: #ffffff;
+          box-shadow:
+            0 2px 8px
+              rgba(
+                15,
+                23,
+                42,
+                0.035
+              );
+        }
+
+        .hero-main {
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          min-width: 0;
+        }
+
+        .hero-icon {
+          width: 48px;
+          height: 48px;
+          flex: 0 0 48px;
           display: flex;
           align-items: center;
-          gap: 8px;
-          color: #94a3b8;
+          justify-content: center;
+          border-radius: 12px;
+          background: #f0fdf4;
+          color: #166534;
           font-size: 12px;
-          margin-bottom: 9px;
+          font-weight: 800;
         }
 
-        .breadcrumb a {
+        .hero-copy {
+          min-width: 0;
+        }
+
+        .eyebrow {
+          margin-bottom: 6px;
           color: #64748b;
-          text-decoration: none;
-        }
-
-        .breadcrumb a:hover {
-          color: #0f172a;
+          font-size: 11px;
+          font-weight: 750;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
         }
 
         .title-row {
           display: flex;
           align-items: center;
-          gap: 12px;
           flex-wrap: wrap;
+          gap: 10px;
         }
 
         .title-row h1 {
           margin: 0;
           color: #0f172a;
-          font-size: 25px;
-          line-height: 1.2;
-          font-weight: 800;
+          font-size: 28px;
+          line-height: 1.15;
+          font-weight: 750;
+          letter-spacing: -0.03em;
         }
 
-        .page-header p {
+        .hero-copy p {
           margin: 7px 0 0;
           color: #64748b;
           font-size: 13px;
         }
 
-        .status {
+        .hero-meta {
+          min-width: 390px;
+          display: grid;
+          grid-template-columns: repeat(
+            3,
+            minmax(0, 1fr)
+          );
+          gap: 18px;
+        }
+
+        .hero-meta > div {
+          padding-left: 18px;
+          border-left: 1px solid #eef2f7;
+        }
+
+        .hero-meta span,
+        .hero-meta strong {
+          display: block;
+        }
+
+        .hero-meta span {
+          margin-bottom: 5px;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .hero-meta strong {
+          color: #334155;
+          font-size: 12px;
+        }
+
+        .status-badge {
+          min-height: 25px;
+          padding: 0 9px;
           display: inline-flex;
           align-items: center;
-          height: 27px;
-          padding: 0 10px;
+          justify-content: center;
           border-radius: 999px;
-          font-size: 11px;
-          font-weight: 700;
+          font-size: 10px;
+          font-weight: 750;
+          white-space: nowrap;
         }
 
-        .status.draft {
+        .status-draft {
           background: #f1f5f9;
-          color: #475569;
+          color: #64748b;
         }
 
-        .status.sent {
+        .status-confirmed {
           background: #eff6ff;
           color: #1d4ed8;
         }
 
-        .status.confirmed {
-          background: #fef3c7;
-          color: #92400e;
-        }
-
-        .status.partial {
+        .status-partial {
           background: #fff7ed;
           color: #c2410c;
         }
 
-        .status.received {
+        .status-received {
           background: #ecfdf5;
-          color: #047857;
+          color: #166534;
         }
 
-        .status.cancelled {
+        .status-cancelled {
           background: #fef2f2;
           color: #b91c1c;
         }
 
+        .status-neutral {
+          background: #f8fafc;
+          color: #475569;
+        }
+
         .stats-grid {
-          max-width: 1500px;
-          margin: 0 auto 18px;
           display: grid;
           grid-template-columns: repeat(
-            4,
+            6,
             minmax(0, 1fr)
           );
           gap: 14px;
+          margin-bottom: 18px;
         }
 
         .stat-card {
-          background: #fff;
+          padding: 17px 18px;
           border: 1px solid #e5e7eb;
           border-radius: 14px;
-          padding: 18px;
-          box-shadow: 0 2px 8px
-            rgba(15, 23, 42, 0.04);
+          background: #ffffff;
+          box-shadow:
+            0 2px 8px
+              rgba(
+                15,
+                23,
+                42,
+                0.035
+              );
         }
 
-        .stat-card span {
-          display: block;
+        .stat-label {
+          margin-bottom: 8px;
           color: #64748b;
           font-size: 12px;
-          margin-bottom: 7px;
+          font-weight: 650;
         }
 
-        .stat-card strong {
-          display: block;
+        .stat-value {
           color: #0f172a;
-          font-size: 22px;
-          font-weight: 800;
+          font-size: 21px;
+          line-height: 1.1;
+          font-weight: 750;
+        }
+
+        .stat-value.green {
+          color: #166534;
+        }
+
+        .stat-value.amber {
+          color: #b45309;
+        }
+
+        .stat-value.money {
+          font-size: 19px;
+        }
+
+        .stat-meta {
+          margin-top: 6px;
+          color: #94a3b8;
+          font-size: 11px;
+          line-height: 1.4;
         }
 
         .progress-card {
-          max-width: 1500px;
-          margin: 0 auto 20px;
-          background: #fff;
+          margin-bottom: 18px;
+          padding: 18px;
           border: 1px solid #e5e7eb;
           border-radius: 14px;
-          padding: 18px;
-          box-shadow: 0 2px 8px
-            rgba(15, 23, 42, 0.04);
+          background: #ffffff;
+          box-shadow:
+            0 2px 8px
+              rgba(
+                15,
+                23,
+                42,
+                0.035
+              );
         }
 
         .progress-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 20px;
-          margin-bottom: 11px;
+          gap: 15px;
         }
 
         .progress-header div {
           display: flex;
           flex-direction: column;
-          gap: 3px;
+          gap: 4px;
         }
 
         .progress-header strong {
-          color: #0f172a;
+          color: #111827;
           font-size: 13px;
         }
 
         .progress-header span {
-          color: #64748b;
-          font-size: 12px;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .progress-header > strong {
+          color: #166534;
+          font-size: 18px;
         }
 
         .progress-track {
           height: 8px;
+          margin-top: 13px;
+          overflow: hidden;
           border-radius: 999px;
           background: #e2e8f0;
-          overflow: hidden;
         }
 
         .progress-fill {
           height: 100%;
-          background: #0f172a;
           border-radius: inherit;
-          transition: width 0.25s ease;
+          background: #166534;
+          transition: width 0.2s ease;
+        }
+
+        .progress-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          margin-top: 9px;
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .complete-message {
+          color: #166534;
+          font-weight: 700;
+        }
+
+        .progress-link {
+          border: 0;
+          padding: 0;
+          background: transparent;
+          color: #166534;
+          font-size: 11px;
+          font-weight: 750;
+          cursor: pointer;
         }
 
         .content-grid {
-          max-width: 1500px;
-          margin: 0 auto;
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 340px;
-          gap: 20px;
+          grid-template-columns:
+            minmax(0, 1fr)
+            minmax(320px, 360px);
+          gap: 18px;
+          margin-bottom: 18px;
           align-items: start;
         }
 
-        .main-column {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
+        .main-card,
+        .side-column {
           min-width: 0;
         }
 
         .side-column {
           display: flex;
           flex-direction: column;
-          gap: 20px;
-          min-width: 0;
+          gap: 18px;
         }
 
-        .card {
-          background: #fff;
+        .content-card {
+          overflow: hidden;
           border: 1px solid #e5e7eb;
           border-radius: 14px;
-          box-shadow: 0 2px 8px
-            rgba(15, 23, 42, 0.04);
-          overflow: hidden;
+          background: #ffffff;
+          box-shadow:
+            0 2px 8px
+              rgba(
+                15,
+                23,
+                42,
+                0.035
+              );
         }
 
         .card-header {
-          padding: 20px 22px;
-          border-bottom: 1px solid #f1f5f9;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 15px;
+          padding: 18px;
+          border-bottom: 1px solid #eef2f7;
         }
 
         .card-header h2 {
           margin: 0;
-          color: #0f172a;
-          font-size: 16px;
-          font-weight: 700;
+          color: #111827;
+          font-size: 15px;
+          font-weight: 750;
         }
 
         .card-header p {
           margin: 5px 0 0;
-          color: #64748b;
+          color: #94a3b8;
           font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .section-count {
+          min-height: 26px;
+          padding: 0 9px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          background: #f1f5f9;
+          color: #475569;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
         }
 
         .table-wrap {
+          width: 100%;
           overflow-x: auto;
         }
 
-        table {
+        .data-table {
           width: 100%;
-          min-width: 850px;
+          min-width: 1080px;
           border-collapse: collapse;
         }
 
-        th {
+        .data-table th {
+          padding: 11px 13px;
+          border-bottom: 1px solid #e5e7eb;
           background: #f8fafc;
           color: #64748b;
           font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          padding: 12px 14px;
+          font-weight: 750;
           text-align: left;
           white-space: nowrap;
-          border-bottom: 1px solid #e5e7eb;
         }
 
-        td {
-          padding: 14px;
-          color: #334155;
-          font-size: 13px;
-          border-bottom: 1px solid #f1f5f9;
+        .data-table td {
+          padding: 13px;
+          border-bottom: 1px solid #eef2f7;
+          color: #475569;
+          font-size: 12px;
           vertical-align: middle;
         }
 
-        tbody tr:last-child td {
+        .data-table tbody tr:last-child td {
           border-bottom: 0;
         }
 
-        .product-name {
-          color: #0f172a;
-          font-weight: 600;
-        }
-
-        .variant-name {
-          margin-top: 4px;
-          color: #64748b;
+        .data-table tfoot td {
+          padding: 13px;
+          border-top: 1px solid #e5e7eb;
+          background: #f8fafc;
+          color: #334155;
           font-size: 12px;
         }
 
+        .data-table th.numeric,
+        .data-table td.numeric {
+          text-align: right;
+        }
+
+        .total-label {
+          color: #111827 !important;
+          font-weight: 750;
+        }
+
+        .product-cell {
+          min-width: 240px;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .product-cell strong {
+          color: #111827;
+          font-size: 12px;
+        }
+
+        .product-cell span {
+          color: #64748b;
+          font-size: 11px;
+        }
+
+        .product-cell small {
+          color: #94a3b8;
+          font-size: 10px;
+        }
+
         .tracking-badge {
+          min-height: 24px;
+          padding: 0 8px;
           display: inline-flex;
-          margin-left: 7px;
-          padding: 2px 6px;
-          border-radius: 999px;
+          align-items: center;
+          border-radius: 7px;
           background: #f1f5f9;
           color: #475569;
-          font-size: 9px;
-          font-weight: 700;
-        }
-
-        .received-number {
-          color: #047857;
-          font-weight: 700;
-        }
-
-        .remaining-number {
-          color: #c2410c;
-          font-weight: 700;
-        }
-
-        .complete-number {
-          color: #047857;
-          font-weight: 700;
-        }
-
-        .line-total {
-          color: #0f172a;
+          font-size: 10px;
           font-weight: 700;
           white-space: nowrap;
         }
 
-        .empty-table {
-          padding: 35px;
-          text-align: center;
+        .sku-text {
           color: #64748b;
+          font-size: 11px;
         }
 
-        .info-card {
-          padding-bottom: 20px;
+        .received-value {
+          color: #166534;
         }
 
-        .supplier-info {
-          padding: 18px 22px 0;
+        .remaining-value {
+          color: #b45309;
         }
 
-        .supplier-name {
-          color: #0f172a;
-          font-size: 16px;
-          font-weight: 700;
+        .complete-value {
+          color: #166534;
         }
 
-        .supplier-legal {
-          color: #64748b;
-          font-size: 12px;
-          margin-top: 3px;
-          margin-bottom: 14px;
+        .info-list {
+          padding: 6px 18px 12px;
         }
 
-        .info-line {
+        .info-list > div {
           display: flex;
-          flex-direction: column;
-          gap: 3px;
-          padding: 10px 0;
-          border-bottom: 1px solid #f1f5f9;
-        }
-
-        .info-line:last-child {
-          border-bottom: 0;
-        }
-
-        .info-line span,
-        .details-list span {
-          color: #94a3b8;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          font-weight: 700;
-        }
-
-        .info-line strong {
-          color: #334155;
-          font-size: 13px;
-          overflow-wrap: anywhere;
-        }
-
-        .muted {
-          padding: 18px 22px 0;
-          color: #64748b;
-          font-size: 13px;
-        }
-
-        .details-list {
-          padding: 5px 22px 0;
-        }
-
-        .details-list > div {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 15px;
           padding: 11px 0;
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid #eef2f7;
         }
 
-        .details-list > div:last-child {
+        .info-list > div:last-child {
           border-bottom: 0;
         }
 
-        .details-list strong {
+        .info-list span {
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .info-list strong {
+          max-width: 62%;
           color: #334155;
-          font-size: 13px;
+          font-size: 11px;
+          font-weight: 700;
+          text-align: right;
           overflow-wrap: anywhere;
         }
 
-        .totals-card {
-          padding-bottom: 18px;
+        .supplier-link {
+          padding: 0 18px 16px;
         }
 
-        .total-line {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 8px 22px;
-          color: #64748b;
-          font-size: 13px;
-        }
-
-        .total-line strong {
-          color: #334155;
-          font-weight: 600;
-        }
-
-        .total-divider {
-          height: 1px;
-          background: #e5e7eb;
-          margin: 10px 22px;
-        }
-
-        .grand-total {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 7px 22px;
-        }
-
-        .grand-total span {
-          color: #0f172a;
-          font-size: 14px;
+        .supplier-link a {
+          color: #166534;
+          font-size: 11px;
           font-weight: 700;
+          text-decoration: none;
         }
 
-        .grand-total strong {
-          color: #0f172a;
-          font-size: 21px;
-          font-weight: 800;
+        .cost-list {
+          padding: 8px 18px 15px;
+        }
+
+        .cost-list > div {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          padding: 10px 0;
+          border-bottom: 1px solid #eef2f7;
+        }
+
+        .cost-list > div:last-child {
+          border-bottom: 0;
+        }
+
+        .cost-list span {
+          color: #64748b;
+          font-size: 11px;
+        }
+
+        .cost-list strong {
+          color: #334155;
+          font-size: 11px;
+        }
+
+        .cost-list .cost-total {
+          margin-top: 3px;
+          padding-top: 13px;
+          border-top: 1px solid #dbe2ea;
+        }
+
+        .cost-list .cost-total span,
+        .cost-list .cost-total strong {
+          color: #111827;
+          font-size: 13px;
+          font-weight: 750;
         }
 
         .empty-state {
-          padding: 35px 22px;
+          min-height: 230px;
           display: flex;
-          align-items: center;
           flex-direction: column;
-          gap: 5px;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          padding: 25px;
           text-align: center;
         }
 
         .empty-state strong {
-          color: #334155;
-          font-size: 13px;
+          color: #111827;
+          font-size: 14px;
         }
 
         .empty-state span {
-          color: #64748b;
+          max-width: 420px;
+          color: #94a3b8;
           font-size: 12px;
+          line-height: 1.5;
         }
 
-        .receipt-list {
-          display: flex;
-          flex-direction: column;
+        .history-empty {
+          min-height: 270px;
         }
 
-        .receipt-row {
-          display: grid;
-          grid-template-columns: 44px minmax(0, 1fr) 160px auto;
-          align-items: center;
-          gap: 14px;
-          padding: 15px 22px;
-          border-bottom: 1px solid #f1f5f9;
+        .history-empty .primary-button {
+          margin-top: 7px;
         }
 
-        .receipt-row:last-child {
-          border-bottom: 0;
-        }
-
-        .receipt-icon {
-          width: 40px;
-          height: 40px;
-          border-radius: 9px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #f1f5f9;
-          color: #475569;
-          font-size: 9px;
-          font-weight: 800;
-        }
-
-        .receipt-main {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          min-width: 0;
-        }
-
-        .receipt-main strong {
-          color: #0f172a;
-          font-size: 13px;
-        }
-
-        .receipt-main span,
-        .receipt-reference span {
+        .notes-preview {
+          display: block;
+          max-width: 300px;
           color: #64748b;
-          font-size: 11px;
-        }
-
-        .receipt-reference {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .receipt-reference strong {
-          color: #334155;
-          font-size: 12px;
-        }
-
-        .receipt-status {
-          padding: 5px 8px;
-          border-radius: 999px;
-          background: #ecfdf5;
-          color: #047857;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: capitalize;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .notes-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 25px;
-          padding: 22px;
-        }
-
-        .notes-grid h3 {
-          margin: 0 0 8px;
-          color: #0f172a;
-          font-size: 13px;
-        }
-
-        .long-text {
-          margin: 0;
-          color: #64748b;
-          font-size: 13px;
-          line-height: 1.65;
-          white-space: pre-wrap;
-        }
-
-        .primary-button,
-        .secondary-button,
-        .danger-button {
-          height: 40px;
-          padding: 0 15px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 9px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          text-decoration: none;
-          box-sizing: border-box;
-        }
-
-        .primary-button {
-          background: #0f172a;
-          color: #fff;
-          border: 1px solid #0f172a;
-        }
-
-        .primary-button:hover:not(:disabled) {
-          background: #1e293b;
-        }
-
-        .secondary-button {
-          background: #fff;
-          color: #334155;
-          border: 1px solid #d1d5db;
-        }
-
-        .secondary-button:hover:not(:disabled) {
-          background: #f8fafc;
-        }
-
-        .danger-button {
-          background: #fff;
-          color: #b91c1c;
-          border: 1px solid #fecaca;
-        }
-
-        .danger-button:hover:not(:disabled) {
-          background: #fef2f2;
-        }
-
-        .primary-button:disabled,
-        .secondary-button:disabled,
-        .danger-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .receive-button {
-          background: #047857;
-          border-color: #047857;
-        }
-
-        .receive-button:hover:not(:disabled) {
-          background: #065f46;
-        }
-
-        .error-banner {
-          max-width: 1500px;
-          margin: 0 auto 18px;
-          border: 1px solid #fecaca;
-          background: #fef2f2;
-          color: #991b1b;
-          border-radius: 10px;
-          padding: 13px 15px;
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-          font-size: 13px;
-        }
-
-        .modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 1000;
-          background: rgba(15, 23, 42, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          overflow-y: auto;
-        }
-
-        .receive-modal {
-          width: min(900px, 100%);
-          max-height: calc(100vh - 40px);
-          display: flex;
-          flex-direction: column;
-          background: #fff;
-          border-radius: 15px;
-          box-shadow: 0 20px 60px
-            rgba(15, 23, 42, 0.2);
-          overflow: hidden;
-        }
-
-        .modal-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 20px;
-          padding: 21px 23px;
-          border-bottom: 1px solid #e5e7eb;
-        }
-
-        .modal-header h2 {
-          margin: 0;
-          color: #0f172a;
-          font-size: 18px;
-        }
-
-        .modal-header p {
-          margin: 5px 0 0;
-          color: #64748b;
-          font-size: 12px;
-        }
-
-        .close-button {
-          width: 32px;
-          height: 32px;
-          border: 0;
-          background: #f8fafc;
-          border-radius: 8px;
-          color: #64748b;
-          font-size: 22px;
-          line-height: 1;
-          cursor: pointer;
-        }
-
-        .modal-body {
-          padding: 22px;
-          overflow-y: auto;
-        }
-
-        .receive-info {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          grid-template-columns:
+            repeat(
+              2,
+              minmax(0, 1fr)
+            );
+          gap: 18px;
           margin-bottom: 18px;
         }
 
-        .receive-info > div {
-          background: #f8fafc;
-          border: 1px solid #e5e7eb;
-          border-radius: 10px;
-          padding: 13px;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .receive-info span {
-          color: #94a3b8;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          font-weight: 700;
-        }
-
-        .receive-info strong {
-          color: #0f172a;
-          font-size: 14px;
-        }
-
-        .receive-location-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 14px;
-          margin-bottom: 20px;
-        }
-
-        .field {
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-
-        .field label {
-          color: #334155;
+        .text-content {
+          padding: 18px;
+          color: #475569;
           font-size: 12px;
-          font-weight: 600;
+          line-height: 1.7;
+          white-space: pre-wrap;
         }
 
-        .field label span {
-          color: #dc2626;
+        @media (max-width: 1300px) {
+          .stats-grid {
+            grid-template-columns:
+              repeat(
+                3,
+                minmax(0, 1fr)
+              );
+          }
+
+          .hero-meta {
+            min-width: 330px;
+          }
         }
 
-        .field input,
-        .field select,
-        .field textarea {
-          width: 100%;
-          box-sizing: border-box;
-          border: 1px solid #d1d5db;
-          border-radius: 9px;
-          background: #fff;
-          color: #0f172a;
-          outline: none;
-          font-size: 13px;
-        }
+        @media (max-width: 1050px) {
+          .hero-card {
+            flex-direction: column;
+          }
 
-        .field input,
-        .field select {
-          height: 40px;
-          padding: 0 11px;
-        }
+          .hero-meta {
+            width: 100%;
+            min-width: 0;
+          }
 
-        .field textarea {
-          padding: 10px 11px;
-          resize: vertical;
-        }
-
-        .field input:focus,
-        .field select:focus,
-        .field textarea:focus {
-          border-color: #94a3b8;
-          box-shadow: 0 0 0 3px
-            rgba(148, 163, 184, 0.15);
-        }
-
-        .field-warning {
-          color: #b45309;
-          font-size: 11px;
-        }
-
-        .receive-items {
-          border: 1px solid #e5e7eb;
-          border-radius: 10px;
-          overflow: hidden;
-          margin-bottom: 20px;
-        }
-
-        .receive-items-header {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 100px 100px;
-          gap: 15px;
-          padding: 11px 13px;
-          background: #f8fafc;
-          color: #64748b;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          border-bottom: 1px solid #e5e7eb;
-        }
-
-        .receive-item {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 100px 100px;
-          gap: 15px;
-          align-items: center;
-          padding: 13px;
-          border-bottom: 1px solid #f1f5f9;
-        }
-
-        .receive-item:last-child {
-          border-bottom: 0;
-        }
-
-        .receive-product {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .receive-product strong {
-          color: #0f172a;
-          font-size: 13px;
-        }
-
-        .receive-product > span:not(.serial-label) {
-          color: #64748b;
-          font-size: 11px;
-        }
-
-        .serial-label {
-          align-self: flex-start;
-          margin-top: 3px;
-          padding: 2px 6px;
-          border-radius: 999px;
-          background: #fef3c7;
-          color: #92400e;
-          font-size: 9px;
-          font-weight: 700;
-        }
-
-        .remaining-cell {
-          color: #c2410c;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .receive-quantity {
-          width: 90px;
-          height: 38px;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          padding: 0 9px;
-          font-size: 13px;
-          outline: none;
-        }
-
-        .receive-quantity:focus {
-          border-color: #94a3b8;
-        }
-
-        .serial-section {
-          grid-column: 1 / -1;
-          padding: 12px;
-          border-radius: 9px;
-          background: #f8fafc;
-          border: 1px solid #e5e7eb;
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-
-        .serial-section label {
-          color: #334155;
-          font-size: 11px;
-          font-weight: 700;
-        }
-
-        .serial-section label span {
-          color: #64748b;
-          font-weight: 500;
-        }
-
-        .serial-section textarea {
-          width: 100%;
-          box-sizing: border-box;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          padding: 9px;
-          font-size: 12px;
-          resize: vertical;
-          outline: none;
-        }
-
-        .serial-section textarea:focus {
-          border-color: #94a3b8;
-        }
-
-        .serial-section small {
-          color: #64748b;
-          font-size: 10px;
-        }
-
-        .modal-footer {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 9px;
-          padding: 16px 22px;
-          border-top: 1px solid #e5e7eb;
-          background: #fff;
-        }
-
-        @media (max-width: 1100px) {
           .content-grid {
             grid-template-columns: 1fr;
-          }
-
-          .side-column {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            align-items: start;
-          }
-
-          .totals-card {
-            grid-column: 1 / -1;
           }
         }
 
         @media (max-width: 800px) {
           .page-content {
-            padding: 18px;
+            padding: 20px;
+          }
+
+          .top-bar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .top-actions {
+            width: 100%;
+          }
+
+          .top-actions
+            .secondary-button,
+          .top-actions
+            .primary-button {
+            flex: 1;
           }
 
           .stats-grid {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns:
+              repeat(
+                2,
+                minmax(0, 1fr)
+              );
           }
 
-          .side-column,
-          .notes-grid,
-          .receive-location-grid {
+          .hero-meta {
             grid-template-columns: 1fr;
           }
 
-          .totals-card {
-            grid-column: auto;
+          .hero-meta > div {
+            padding-left: 0;
+            padding-top: 12px;
+            border-left: 0;
+            border-top: 1px solid
+              #eef2f7;
           }
 
-          .receipt-row {
-            grid-template-columns: 40px minmax(0, 1fr);
-          }
-
-          .receipt-reference,
-          .receipt-status {
-            grid-column: 2;
-          }
-
-          .receive-items-header,
-          .receive-item {
-            grid-template-columns: minmax(0, 1fr) 80px 90px;
-          }
-
-          .header-actions {
-            width: 100%;
+          .notes-grid {
+            grid-template-columns: 1fr;
           }
         }
 
-        @media (max-width: 600px) {
-          .page-content {
-            padding: 14px;
-          }
-
+        @media (max-width: 560px) {
           .stats-grid {
             grid-template-columns: 1fr;
           }
 
-          .header-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+          .top-actions {
+            flex-direction: column;
           }
 
-          .header-actions .primary-button,
-          .header-actions .secondary-button,
-          .header-actions .danger-button {
+          .top-actions
+            .secondary-button,
+          .top-actions
+            .primary-button {
             width: 100%;
+            flex: none;
           }
 
-          .title-row h1 {
-            font-size: 21px;
-          }
-
-          .card-header {
-            padding: 17px;
-          }
-
-          .receive-info {
-            grid-template-columns: 1fr;
-          }
-
-          .receive-items {
-            border-radius: 9px;
-          }
-
-          .receive-items-header {
-            display: none;
-          }
-
-          .receive-item {
-            grid-template-columns: 1fr 80px 90px;
-            padding: 14px;
-          }
-
-          .serial-section {
-            grid-column: 1 / -1;
-          }
-
-          .modal-backdrop {
-            padding: 8px;
-          }
-
-          .receive-modal {
-            max-height: calc(100vh - 16px);
-          }
-
-          .modal-body {
-            padding: 15px;
-          }
-
-          .modal-footer {
-            padding: 13px 15px;
+          .progress-footer {
+            align-items: flex-start;
+            flex-direction: column;
           }
         }
 
         @media print {
-          :global(body) {
-            background: #fff !important;
-          }
-
-          .page-content {
-            padding: 0 !important;
-            background: #fff !important;
-          }
-
-          .header-actions,
-          .error-banner,
-          .progress-card,
-          .modal-backdrop {
+          .top-bar,
+          .progress-link {
             display: none !important;
           }
 
-          .stats-grid {
-            grid-template-columns: repeat(4, 1fr);
+          .page-content {
+            padding: 0;
+          }
+
+          .hero-card,
+          .stat-card,
+          .progress-card,
+          .content-card {
+            box-shadow: none;
           }
 
           .content-grid {
-            grid-template-columns: 1fr 300px;
-          }
-
-          .card,
-          .stat-card {
-            box-shadow: none !important;
-            break-inside: avoid;
-          }
-
-          .side-column {
-            display: flex;
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
