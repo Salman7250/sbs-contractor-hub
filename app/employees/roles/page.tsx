@@ -54,6 +54,7 @@ const MODULE_LABELS: Record<string, string> = {
   reports: "Reports & Analytics",
   employees: "Employees",
   documents: "Documents",
+  service_jobs: "Service Jobs",
   settings: "Settings",
 };
 
@@ -75,6 +76,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 const SYSTEM_ROLE_NAMES = new Set([
   "Employee",
+  "Accountant",
   "Manager",
   "Company Admin",
 ]);

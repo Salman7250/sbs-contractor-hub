@@ -13,143 +13,195 @@ import { createClient } from "@/lib/supabase/client";
 type Customer = {
   id: string;
   name: string | null;
+  email: string | null;
+};
+
+type ProductVariant = {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  cost_price: number;
+  selling_price: number;
+  is_default: boolean;
+  is_active: boolean;
 };
 
 type Product = {
   id: string;
   name: string;
-  brand: string | null;
   category: string | null;
+  brand: string | null;
+  product_type: string;
+  status: string;
+  tracking_mode: string;
+  product_variants?: ProductVariant[];
 };
 
-type Variant = {
+type SaleLine = {
   id: string;
   product_id: string;
-  name: string;
-  sku: string | null;
-  selling_price: number;
-  cost_price: number;
-};
-
-type SaleItem = {
-  id: string;
-  product_id: string;
-  variant_id: string | null;
+  variant_id: string;
   product_name: string;
-  variant_name: string | null;
-  sku: string | null;
+  variant_name: string;
+  sku: string;
+  tracking_mode: string;
   quantity: number;
   unit_price: number;
   unit_cost: number;
+  discount_amount: number;
+  tax_rate: number;
 };
 
-type PaymentStatus =
-  | "unpaid"
-  | "partially_paid"
-  | "paid";
+type RegionalSettings = {
+  base_currency: string;
+  currency_symbol: string;
+  currency_symbol_position: string;
+  decimal_places: number;
+  thousands_separator: string;
+  decimal_separator: string;
+};
 
-type FulfillmentStatus =
-  | "unfulfilled"
-  | "partially_fulfilled"
-  | "fulfilled";
-
-function formatCurrency(
-  amount: number,
-  currency = "USD"
+function formatMoney(
+  value: number,
+  currency: string,
+  settings?: RegionalSettings | null,
 ) {
+  const amount = Number(value || 0);
+
   try {
-    return new Intl.NumberFormat("en-US", {
+    if (
+      settings &&
+      currency === settings.base_currency
+    ) {
+      const decimalPlaces = Number(
+        settings.decimal_places ?? 2,
+      );
+
+      const fixed = amount.toFixed(decimalPlaces);
+      const [integerPart, decimalPart] =
+        fixed.split(".");
+
+      const formattedInteger = integerPart.replace(
+        /\B(?=(\d{3})+(?!\d))/g,
+        settings.thousands_separator || ",",
+      );
+
+      const numberPart =
+        decimalPlaces > 0
+          ? `${formattedInteger}${
+              settings.decimal_separator || "."
+            }${decimalPart}`
+          : formattedInteger;
+
+      return settings.currency_symbol_position ===
+        "after"
+        ? `${numberPart} ${settings.currency_symbol}`
+        : `${settings.currency_symbol}${numberPart}`;
+    }
+
+    return new Intl.NumberFormat(undefined, {
       style: "currency",
-      currency,
-      minimumFractionDigits: 2,
+      currency: currency || "USD",
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return `${currency} ${amount.toFixed(2)}`;
+    return `${currency || "USD"} ${amount.toFixed(2)}`;
   }
 }
 
+function createLineId() {
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 9)}`;
+}
+
+function createOrderNumber() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(
+    2,
+    "0",
+  );
+  const day = String(now.getDate()).padStart(2, "0");
+  const time = String(now.getTime()).slice(-6);
+
+  return `SO-${year}${month}${day}-${time}`;
+}
+
+function getCustomerLabel(customer: Customer) {
+  return (
+    customer.name ||
+    customer.email ||
+    "Unnamed customer"
+  );
+}
+
 export default function NewSalePage() {
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
-  const supabase = useMemo(
-    () => createClient(),
-    []
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const [companyId, setCompanyId] = useState<
+    string | null
+  >(null);
+
+  const [customers, setCustomers] = useState<Customer[]>(
+    [],
   );
 
-  const [customers, setCustomers] =
-    useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>(
+    [],
+  );
 
-  const [products, setProducts] =
-    useState<Product[]>([]);
+  const [regionalSettings, setRegionalSettings] =
+    useState<RegionalSettings | null>(null);
 
-  const [variants, setVariants] =
-    useState<Variant[]>([]);
+  const [customerId, setCustomerId] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [status, setStatus] = useState("draft");
+  const [notes, setNotes] = useState("");
 
-  const [items, setItems] =
-    useState<SaleItem[]>([]);
-
-  const [customerId, setCustomerId] =
-    useState("");
-
-  const [productSearch, setProductSearch] =
-    useState("");
-
+  const [searchProduct, setSearchProduct] = useState("");
   const [selectedProductId, setSelectedProductId] =
     useState("");
-
   const [selectedVariantId, setSelectedVariantId] =
     useState("");
 
+  const [quantity, setQuantity] = useState("1");
+  const [unitPrice, setUnitPrice] = useState("0");
   const [discountAmount, setDiscountAmount] =
     useState("0");
-
-  const [taxAmount, setTaxAmount] =
-    useState("0");
-
+  const [taxRate, setTaxRate] = useState("0");
   const [shippingAmount, setShippingAmount] =
     useState("0");
 
-  const [paymentStatus, setPaymentStatus] =
-    useState<PaymentStatus>("unpaid");
+  const [lines, setLines] = useState<SaleLine[]>([]);
 
-  const [fulfillmentStatus, setFulfillmentStatus] =
-    useState<FulfillmentStatus>("unfulfilled");
-
-  const [notes, setNotes] = useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [successMessage, setSuccessMessage] =
-    useState<string | null>(null);
-
-  const loadData = useCallback(
-    async () => {
+  const loadData = useCallback(async () => {
+    try {
       setLoading(true);
-      setError(null);
+      setErrorMessage("");
 
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
-        setError(
-          "Your session could not be verified."
+      if (!user) {
+        throw new Error(
+          "You must be signed in to create a sale.",
         );
-        setLoading(false);
-        return;
       }
 
       const {
-        data: membership,
+        data: membershipData,
         error: membershipError,
       } = await supabase
         .from("company_members")
@@ -158,797 +210,1040 @@ export default function NewSalePage() {
         .limit(1)
         .maybeSingle();
 
-      if (
-        membershipError ||
-        !membership?.company_id
-      ) {
-        setError(
-          "Your company workspace could not be found."
-        );
-        setLoading(false);
-        return;
+      if (membershipError) {
+        throw membershipError;
       }
 
-      const companyId =
-        membership.company_id;
+      if (!membershipData?.company_id) {
+        throw new Error(
+          "No company membership was found.",
+        );
+      }
+
+      const currentCompanyId =
+        membershipData.company_id;
+
+      setCompanyId(currentCompanyId);
 
       const [
         customersResult,
         productsResult,
         variantsResult,
+        regionalResult,
       ] = await Promise.all([
         supabase
           .from("customers")
-          .select("id, name")
-          .eq("company_id", companyId)
-          .order("name", {
-            ascending: true,
-          }),
+          .select("id, name, email")
+          .eq("company_id", currentCompanyId)
+          .order("name", { ascending: true }),
 
         supabase
           .from("products")
           .select(
-            "id, name, brand, category"
+            `
+              id,
+              name,
+              category,
+              brand,
+              product_type,
+              status,
+              tracking_mode
+            `,
           )
-          .eq("company_id", companyId)
+          .eq("company_id", currentCompanyId)
           .eq("status", "active")
-          .order("name", {
-            ascending: true,
-          }),
+          .order("name", { ascending: true }),
 
         supabase
           .from("product_variants")
           .select(
-            "id, product_id, name, sku, selling_price, cost_price"
+            `
+              id,
+              product_id,
+              name,
+              sku,
+              barcode,
+              cost_price,
+              selling_price,
+              is_default,
+              is_active
+            `,
           )
-          .eq("company_id", companyId)
+          .eq("company_id", currentCompanyId)
           .eq("is_active", true)
-          .order("name", {
-            ascending: true,
-          }),
+          .order("name", { ascending: true }),
+
+        supabase
+          .from("company_regional_settings")
+          .select(
+            `
+              base_currency,
+              currency_symbol,
+              currency_symbol_position,
+              decimal_places,
+              thousands_separator,
+              decimal_separator
+            `,
+          )
+          .eq("company_id", currentCompanyId)
+          .maybeSingle(),
       ]);
 
       if (customersResult.error) {
-        console.error(
-          "Customers loading error:",
-          customersResult.error
-        );
+        throw customersResult.error;
       }
 
       if (productsResult.error) {
-        console.error(
-          "Products loading error:",
-          productsResult.error
-        );
+        throw productsResult.error;
       }
 
       if (variantsResult.error) {
-        console.error(
-          "Variants loading error:",
-          variantsResult.error
-        );
+        throw variantsResult.error;
       }
+
+      if (regionalResult.error) {
+        throw regionalResult.error;
+      }
+
+      const variants =
+        (variantsResult.data || []) as ProductVariant[];
+
+      const productsWithVariants: Product[] = (
+        productsResult.data || []
+      ).map((product: any) => ({
+        ...product,
+        product_variants: variants.filter(
+          (variant) =>
+            variant.product_id === product.id,
+        ),
+      }));
 
       setCustomers(
-        (customersResult.data ||
-          []) as Customer[]
+        (customersResult.data || []) as Customer[],
       );
 
-      setProducts(
-        (productsResult.data ||
-          []) as Product[]
+      setProducts(productsWithVariants);
+
+      if (regionalResult.data) {
+        const settings =
+          regionalResult.data as RegionalSettings;
+
+        setRegionalSettings(settings);
+
+        setCurrency(
+          settings.base_currency || "USD",
+        );
+      }
+    } catch (error: any) {
+      console.error(
+        "New Sale load error:",
+        error,
       );
 
-      setVariants(
-        (variantsResult.data ||
-          []) as Variant[]
+      setErrorMessage(
+        error?.message ||
+          "Unable to load the New Sale page.",
       );
-
+    } finally {
       setLoading(false);
-    },
-    [supabase]
-  );
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    // This effect intentionally starts the asynchronous sales data synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
+    loadData();
   }, [loadData]);
 
-  const selectedProduct =
-    products.find(
+  const selectedProduct = useMemo(() => {
+    return products.find(
       (product) =>
-        product.id === selectedProductId
-    ) || null;
-
-  const productVariants =
-    variants.filter(
-      (variant) =>
-        variant.product_id ===
-        selectedProductId
+        product.id === selectedProductId,
     );
+  }, [products, selectedProductId]);
 
-  const filteredProducts =
-    useMemo(() => {
-      const query =
-        productSearch
-          .trim()
-          .toLowerCase();
-
-      if (!query) {
-        return products.slice(0, 30);
-      }
-
-      return products
-        .filter((product) => {
-          return (
-            product.name
-              .toLowerCase()
-              .includes(query) ||
-            product.brand
-              ?.toLowerCase()
-              .includes(query) ||
-            product.category
-              ?.toLowerCase()
-              .includes(query)
-          );
-        })
-        .slice(0, 30);
-    }, [products, productSearch]);
-
-  const selectedVariant =
-    productVariants.find(
+  const selectedVariant = useMemo(() => {
+    return selectedProduct?.product_variants?.find(
       (variant) =>
-        variant.id === selectedVariantId
-    ) || null;
+        variant.id === selectedVariantId,
+    );
+  }, [selectedProduct, selectedVariantId]);
+
+  const filteredProducts = useMemo(() => {
+    const search = searchProduct
+      .trim()
+      .toLowerCase();
+
+    if (!search) {
+      return products.slice(0, 50);
+    }
+
+    return products
+      .filter((product) => {
+        const productMatch =
+          product.name
+            .toLowerCase()
+            .includes(search) ||
+          product.brand
+            ?.toLowerCase()
+            .includes(search) ||
+          product.category
+            ?.toLowerCase()
+            .includes(search);
+
+        const variantMatch =
+          product.product_variants?.some(
+            (variant) =>
+              variant.name
+                .toLowerCase()
+                .includes(search) ||
+              variant.sku
+                ?.toLowerCase()
+                .includes(search) ||
+              variant.barcode
+                ?.toLowerCase()
+                .includes(search),
+          );
+
+        return productMatch || variantMatch;
+      })
+      .slice(0, 50);
+  }, [products, searchProduct]);
 
   const subtotal = useMemo(() => {
-    return items.reduce(
-      (sum, item) =>
+    return lines.reduce(
+      (sum, line) =>
         sum +
-        item.quantity *
-          item.unit_price,
-      0
-    );
-  }, [items]);
-
-  const discount =
-    Math.max(
+        Number(line.quantity || 0) *
+          Number(line.unit_price || 0),
       0,
-      Number(discountAmount) || 0
     );
+  }, [lines]);
 
-  const tax =
-    Math.max(
+  const totalDiscount = useMemo(() => {
+    return lines.reduce(
+      (sum, line) =>
+        sum + Number(line.discount_amount || 0),
       0,
-      Number(taxAmount) || 0
     );
+  }, [lines]);
 
-  const shipping =
-    Math.max(
-      0,
-      Number(shippingAmount) || 0
-    );
+  const taxAmount = useMemo(() => {
+    return lines.reduce((sum, line) => {
+      const lineSubtotal =
+        Number(line.quantity || 0) *
+        Number(line.unit_price || 0);
+
+      const taxable = Math.max(
+        0,
+        lineSubtotal -
+          Number(line.discount_amount || 0),
+      );
+
+      return (
+        sum +
+        taxable *
+          (Number(line.tax_rate || 0) / 100)
+      );
+    }, 0);
+  }, [lines]);
+
+  const shipping = Number(shippingAmount || 0);
 
   const total = Math.max(
     0,
     subtotal -
-      discount +
-      tax +
-      shipping
+      totalDiscount +
+      taxAmount +
+      shipping,
   );
 
-  function selectProduct(
-    productId: string
-  ) {
+  const totalCost = useMemo(() => {
+    return lines.reduce(
+      (sum, line) =>
+        sum +
+        Number(line.quantity || 0) *
+          Number(line.unit_cost || 0),
+      0,
+    );
+  }, [lines]);
+
+  const estimatedGrossProfit =
+    total - totalCost;
+
+  const selectProduct = (productId: string) => {
     setSelectedProductId(productId);
-    setSelectedVariantId("");
-  }
 
-  function addItem() {
+    const product = products.find(
+      (item) => item.id === productId,
+    );
+
+    const defaultVariant =
+      product?.product_variants?.find(
+        (variant) => variant.is_default,
+      ) ||
+      product?.product_variants?.[0];
+
+    if (defaultVariant) {
+      setSelectedVariantId(defaultVariant.id);
+
+      setUnitPrice(
+        String(
+          defaultVariant.selling_price || 0,
+        ),
+      );
+    } else {
+      setSelectedVariantId("");
+      setUnitPrice("0");
+    }
+  };
+
+  const selectVariant = (variantId: string) => {
+    setSelectedVariantId(variantId);
+
+    const variant =
+      selectedProduct?.product_variants?.find(
+        (item) => item.id === variantId,
+      );
+
+    if (variant) {
+      setUnitPrice(
+        String(
+          variant.selling_price || 0,
+        ),
+      );
+    }
+  };
+
+  const addLine = () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+
     if (!selectedProduct) {
-      setError(
-        "Please select a product first."
+      setErrorMessage(
+        "Please select a product.",
       );
       return;
     }
 
-    if (productVariants.length > 0) {
-      if (!selectedVariant) {
-        setError(
-          "Please select a product variant."
-        );
-        return;
-      }
-    }
-
-    setError(null);
-
-    const existingItemIndex =
-      items.findIndex(
-        (item) =>
-          item.product_id ===
-            selectedProduct.id &&
-          item.variant_id ===
-            (selectedVariant?.id ||
-              null)
+    if (!selectedVariant) {
+      setErrorMessage(
+        "Please select a product variant.",
       );
-
-    if (existingItemIndex >= 0) {
-      setItems((current) =>
-        current.map(
-          (item, index) =>
-            index ===
-            existingItemIndex
-              ? {
-                  ...item,
-                  quantity:
-                    item.quantity + 1,
-                }
-              : item
-        )
-      );
-
       return;
     }
 
-    const newItem: SaleItem = {
-      id: crypto.randomUUID(),
-      product_id:
-        selectedProduct.id,
-      variant_id:
-        selectedVariant?.id || null,
-      product_name:
-        selectedProduct.name,
-      variant_name:
-        selectedVariant?.name ||
-        null,
-      sku:
-        selectedVariant?.sku ||
-        null,
-      quantity: 1,
-      unit_price:
-        Number(
-          selectedVariant?.selling_price ||
-            0
-        ),
-      unit_cost:
-        Number(
-          selectedVariant?.cost_price ||
-            0
-        ),
-    };
+    const parsedQuantity = Number(quantity);
+    const parsedPrice = Number(unitPrice);
+    const parsedDiscount =
+      Number(discountAmount);
+    const parsedTaxRate = Number(taxRate);
 
-    setItems((current) => [
-      ...current,
-      newItem,
-    ]);
+    if (
+      !Number.isFinite(parsedQuantity) ||
+      parsedQuantity <= 0
+    ) {
+      setErrorMessage(
+        "Quantity must be greater than zero.",
+      );
+      return;
+    }
 
+    if (
+      !Number.isFinite(parsedPrice) ||
+      parsedPrice < 0
+    ) {
+      setErrorMessage(
+        "Unit price cannot be negative.",
+      );
+      return;
+    }
+
+    if (
+      !Number.isFinite(parsedDiscount) ||
+      parsedDiscount < 0
+    ) {
+      setErrorMessage(
+        "Discount cannot be negative.",
+      );
+      return;
+    }
+
+    if (
+      !Number.isFinite(parsedTaxRate) ||
+      parsedTaxRate < 0 ||
+      parsedTaxRate > 100
+    ) {
+      setErrorMessage(
+        "Tax rate must be between 0 and 100.",
+      );
+      return;
+    }
+
+    const existingLineIndex = lines.findIndex(
+      (line) =>
+        line.product_id ===
+          selectedProduct.id &&
+        line.variant_id ===
+          selectedVariant.id,
+    );
+
+    if (existingLineIndex >= 0) {
+      const nextLines = [...lines];
+      const existing =
+        nextLines[existingLineIndex];
+
+      nextLines[existingLineIndex] = {
+        ...existing,
+        quantity:
+          Number(existing.quantity || 0) +
+          parsedQuantity,
+        unit_price: parsedPrice,
+        discount_amount:
+          Number(
+            existing.discount_amount || 0,
+          ) + parsedDiscount,
+        tax_rate: parsedTaxRate,
+      };
+
+      setLines(nextLines);
+    } else {
+      setLines([
+        ...lines,
+        {
+          id: createLineId(),
+          product_id: selectedProduct.id,
+          variant_id: selectedVariant.id,
+          product_name:
+            selectedProduct.name,
+          variant_name:
+            selectedVariant.name,
+          sku: selectedVariant.sku || "",
+          tracking_mode:
+            selectedProduct.tracking_mode ||
+            "none",
+          quantity: parsedQuantity,
+          unit_price: parsedPrice,
+          unit_cost:
+            Number(
+              selectedVariant.cost_price,
+            ) || 0,
+          discount_amount:
+            parsedDiscount,
+          tax_rate: parsedTaxRate,
+        },
+      ]);
+    }
+
+    setQuantity("1");
+    setDiscountAmount("0");
+    setTaxRate("0");
+    setSearchProduct("");
     setSelectedProductId("");
     setSelectedVariantId("");
-    setProductSearch("");
-  }
+    setUnitPrice("0");
+  };
 
-  function updateQuantity(
-    itemId: string,
-    quantity: number
-  ) {
-    const safeQuantity =
-      Math.max(
-        1,
-        Number.isFinite(quantity)
-          ? quantity
-          : 1
-      );
-
-    setItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              quantity:
-                safeQuantity,
-            }
-          : item
-      )
-    );
-  }
-
-  function updatePrice(
-    itemId: string,
-    price: number
-  ) {
-    const safePrice =
-      Math.max(
-        0,
-        Number.isFinite(price)
-          ? price
-          : 0
-      );
-
-    setItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              unit_price:
-                safePrice,
-            }
-          : item
-      )
-    );
-  }
-
-  function removeItem(
-    itemId: string
-  ) {
-    setItems((current) =>
+  const removeLine = (lineId: string) => {
+    setLines((current) =>
       current.filter(
-        (item) =>
-          item.id !== itemId
-      )
+        (line) => line.id !== lineId,
+      ),
     );
-  }
+  };
 
-  async function saveSale() {
-    setError(null);
-    setSuccessMessage(null);
+  const updateLine = (
+    lineId: string,
+    field:
+      | "quantity"
+      | "unit_price"
+      | "discount_amount"
+      | "tax_rate",
+    value: string,
+  ) => {
+    const numericValue = Number(value);
 
-    if (items.length === 0) {
-      setError(
-        "Add at least one product to the sale."
-      );
-      return;
-    }
+    setLines((current) =>
+      current.map((line) =>
+        line.id === lineId
+          ? {
+              ...line,
+              [field]: Number.isFinite(
+                numericValue,
+              )
+                ? Math.max(0, numericValue)
+                : 0,
+            }
+          : line,
+      ),
+    );
+  };
 
-    setSaving(true);
-
+  const saveSale = async () => {
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      setSaving(true);
+      setErrorMessage("");
+      setSuccessMessage("");
 
-      if (userError || !user) {
+      if (!companyId) {
         throw new Error(
-          "Your session could not be verified."
+          "Company context is missing.",
         );
       }
 
-      const {
-        data: membership,
-        error: membershipError,
-      } = await supabase
-        .from("company_members")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+      if (lines.length === 0) {
+        throw new Error(
+          "Add at least one product to the sale.",
+        );
+      }
+
+      if (!currency) {
+        throw new Error(
+          "A transaction currency is required.",
+        );
+      }
 
       if (
-        membershipError ||
-        !membership?.company_id
+        !/^[A-Z]{3}$/.test(
+          currency.toUpperCase(),
+        )
       ) {
         throw new Error(
-          "Your company workspace could not be found."
+          "Currency must be a valid 3-letter currency code.",
         );
       }
 
-      const companyId =
-        membership.company_id;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      const orderNumber = `SO-${Date.now()}`;
-
-      const { data: order, error: orderError } =
-        await supabase
-          .from("orders")
-          .insert({
-            company_id: companyId,
-            customer_id:
-              customerId || null,
-            order_number:
-              orderNumber,
-            status: "confirmed",
-            payment_status:
-              paymentStatus,
-            fulfillment_status:
-              fulfillmentStatus,
-            currency: "USD",
-            subtotal,
-            discount_amount:
-              discount,
-            tax_amount: tax,
-            shipping_amount:
-              shipping,
-            total_amount: total,
-            notes:
-              notes.trim() ||
-              null,
-          })
-          .select("id")
-          .single();
-
-      if (orderError || !order) {
-        console.error(
-          "Order creation error:",
-          orderError
-        );
-
+      if (!user) {
         throw new Error(
-          orderError?.message ||
-            "The sale could not be created."
+          "You must be signed in to create a sale.",
         );
       }
 
-      const orderItems = items.map(
-        (item) => {
+      const orderNumber =
+        createOrderNumber();
+
+      const {
+        data: order,
+        error: orderError,
+      } = await supabase
+        .from("orders")
+        .insert({
+          company_id: companyId,
+          customer_id:
+            customerId || null,
+          order_number: orderNumber,
+          status,
+          payment_status: "unpaid",
+          fulfillment_status:
+            "unfulfilled",
+          currency:
+            currency.toUpperCase(),
+          subtotal,
+          discount_amount:
+            totalDiscount,
+          tax_amount: taxAmount,
+          shipping_amount: shipping,
+          total_amount: total,
+          notes:
+            notes.trim() || null,
+        })
+        .select("id")
+        .single();
+
+      if (orderError) {
+        throw orderError;
+      }
+
+      if (!order?.id) {
+        throw new Error(
+          "The sales order was created but no order ID was returned.",
+        );
+      }
+
+      const orderItems = lines.map(
+        (line) => {
           const lineSubtotal =
-            item.quantity *
-            item.unit_price;
+            Number(line.quantity || 0) *
+            Number(
+              line.unit_price || 0,
+            );
+
+          const taxable = Math.max(
+            0,
+            lineSubtotal -
+              Number(
+                line.discount_amount || 0,
+              ),
+          );
+
+          const lineTax =
+            taxable *
+            (Number(
+              line.tax_rate || 0,
+            ) / 100);
+
+          const lineTotal =
+            taxable + lineTax;
 
           return {
             company_id: companyId,
             order_id: order.id,
             product_id:
-              item.product_id,
+              line.product_id,
             variant_id:
-              item.variant_id,
+              line.variant_id,
             product_name:
-              item.product_name,
+              line.product_name,
             variant_name:
-              item.variant_name,
-            sku: item.sku,
+              line.variant_name,
+            sku:
+              line.sku || null,
             quantity:
-              item.quantity,
+              Number(
+                line.quantity || 0,
+              ),
             unit_price:
-              item.unit_price,
+              Number(
+                line.unit_price || 0,
+              ),
             unit_cost:
-              item.unit_cost,
-            discount_amount: 0,
-            tax_amount: 0,
-            line_total:
-              lineSubtotal,
+              Number(
+                line.unit_cost || 0,
+              ),
+            discount_amount:
+              Number(
+                line.discount_amount || 0,
+              ),
+            tax_amount: lineTax,
+            line_total: lineTotal,
           };
-        }
+        },
       );
 
-      const {
-        error: itemsError,
-      } = await supabase
-        .from("order_items")
-        .insert(orderItems);
+      const { error: itemsError } =
+        await supabase
+          .from("order_items")
+          .insert(orderItems);
 
       if (itemsError) {
-        console.error(
-          "Order items creation error:",
-          itemsError
-        );
-
-        // Attempt to clean up the order
-        // because the line items failed.
         await supabase
           .from("orders")
           .delete()
           .eq("id", order.id)
           .eq(
             "company_id",
-            companyId
+            companyId,
           );
 
-        throw new Error(
-          itemsError.message ||
-            "The sale items could not be created."
-        );
+        throw itemsError;
       }
 
+      setSuccessMessage(
+        `Sales order ${orderNumber} created successfully.`,
+      );
+
       router.push(
-        `/sales/${order.id}`
+        `/sales/${order.id}`,
       );
-    } catch (caughtError) {
+    } catch (error: any) {
       console.error(
-        "Save sale error:",
-        caughtError
+        "Create sales order error:",
+        error,
       );
 
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "The sale could not be created."
+      setErrorMessage(
+        error?.message ||
+          "Unable to create the sales order.",
       );
-
+    } finally {
       setSaving(false);
     }
-  }
+  };
+
+  const clearForm = () => {
+    setCustomerId("");
+    setCurrency(
+      regionalSettings?.base_currency ||
+        "USD",
+    );
+    setStatus("draft");
+    setNotes("");
+    setShippingAmount("0");
+    setLines([]);
+    setSearchProduct("");
+    setSelectedProductId("");
+    setSelectedVariantId("");
+    setQuantity("1");
+    setUnitPrice("0");
+    setDiscountAmount("0");
+    setTaxRate("0");
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
 
   if (loading) {
     return (
-      <AppShell
-        title="New Sale"
-        description="Create a new customer sale and order."
-      >
-        <div className="new-sale-state">
-          <div className="new-sale-spinner" />
-          <strong>
-            Loading sales workspace...
-          </strong>
-          <span>
-            Getting your customers and
-            products.
-          </span>
+      <AppShell>
+        <div className="min-h-screen bg-slate-50">
+          <div className="mx-auto max-w-[1600px] px-6 py-8 lg:px-11">
+            <div className="animate-pulse">
+              <div className="h-8 w-48 rounded bg-slate-200" />
+
+              <div className="mt-12 h-5 w-64 rounded bg-slate-200" />
+
+              <div className="mt-5 h-14 w-80 rounded bg-slate-200" />
+
+              <div className="mt-5 h-7 w-[700px] max-w-full rounded bg-slate-200" />
+
+              <div className="mt-10 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+                <div className="h-[650px] rounded-2xl bg-white" />
+                <div className="h-[650px] rounded-2xl bg-white" />
+              </div>
+            </div>
+          </div>
         </div>
-
-        <style jsx>{`
-          .new-sale-state {
-            min-height: 420px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-          }
-
-          .new-sale-state strong {
-            color: #465163;
-            font-size: 14px;
-          }
-
-          .new-sale-state span {
-            margin-top: 6px;
-            color: #9aa2af;
-            font-size: 11px;
-          }
-
-          .new-sale-spinner {
-            width: 30px;
-            height: 30px;
-            margin-bottom: 14px;
-            border: 2px solid #e4e8ee;
-            border-top-color: #697386;
-            border-radius: 50%;
-            animation: spin 0.75s linear infinite;
-          }
-
-          @keyframes spin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
       </AppShell>
     );
   }
 
   return (
-    <AppShell
-      title="New Sale"
-      description="Create a new customer sale and order."
-      actions={
-        <div className="new-sale-header-actions">
-          <button
-            type="button"
-            className="new-sale-cancel"
-            onClick={() =>
-              router.push("/sales")
-            }
-            disabled={saving}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            className="new-sale-save"
-            onClick={saveSale}
-            disabled={
-              saving ||
-              items.length === 0
-            }
-          >
-            {saving
-              ? "Creating..."
-              : "Create Sale"}
-          </button>
-        </div>
-      }
-    >
-      <div className="new-sale-page">
-        {error && (
-          <div className="new-sale-error">
-            <span className="error-icon">
-              !
-            </span>
-
-            <span>{error}</span>
-
+    <AppShell>
+      <div className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-[1600px] px-6 py-8 lg:px-11">
+          {/* Header */}
+          <div className="mb-10">
             <button
               type="button"
               onClick={() =>
-                setError(null)
+                router.push("/sales")
               }
+              className="mb-10 inline-flex items-center gap-3 text-[24px] font-semibold text-slate-500 transition hover:text-slate-900"
             >
-              ×
+              <svg
+                className="h-7 w-7"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 12H5"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m12 19-7-7 7-7"
+                />
+              </svg>
+
+              Back to Sales
             </button>
+
+            <div className="flex items-center gap-3">
+              <span className="h-3.5 w-3.5 rounded-full bg-green-700" />
+
+              <span className="text-[24px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                Sales Management
+              </span>
+            </div>
+
+            <h1 className="mt-5 text-5xl font-bold tracking-tight text-slate-950">
+              New Sale
+            </h1>
+
+            <p className="mt-4 text-[22px] text-slate-500">
+              Create a sales order and prepare it for inventory fulfillment.
+            </p>
           </div>
-        )}
 
-        {successMessage && (
-          <div className="new-sale-success">
-            {successMessage}
-          </div>
-        )}
-
-        <div className="new-sale-layout">
-          <main className="new-sale-main">
-            <section className="new-sale-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Customer
-                  </h2>
-
-                  <p>
-                    Choose the customer for
-                    this sale.
-                  </p>
-                </div>
-              </div>
-
-              <div className="new-sale-card-body">
-                <label
-                  className="new-sale-label"
-                  htmlFor="customer"
+          {/* Messages */}
+          {errorMessage && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="mt-0.5 h-5 w-5 shrink-0 text-red-600"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
                 >
-                  Customer
-                </label>
-
-                <select
-                  id="customer"
-                  value={customerId}
-                  onChange={(event) =>
-                    setCustomerId(
-                      event.target.value
-                    )
-                  }
-                >
-                  <option value="">
-                    Walk-in Customer
-                  </option>
-
-                  {customers.map(
-                    (customer) => (
-                      <option
-                        key={customer.id}
-                        value={customer.id}
-                      >
-                        {customer.name ||
-                          "Unnamed Customer"}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            </section>
-
-            <section className="new-sale-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Products
-                  </h2>
-
-                  <p>
-                    Add products and variants
-                    to this sale.
-                  </p>
-                </div>
-              </div>
-
-              <div className="new-sale-product-picker">
-                <div className="new-sale-field">
-                  <label>
-                    Search Product
-                  </label>
-
-                  <input
-                    type="search"
-                    value={productSearch}
-                    onChange={(event) => {
-                      setProductSearch(
-                        event.target
-                          .value
-                      );
-                      setSelectedProductId(
-                        ""
-                      );
-                      setSelectedVariantId(
-                        ""
-                      );
-                    }}
-                    placeholder="Search products..."
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
                   />
 
-                  {productSearch.trim() &&
-                    !selectedProduct && (
-                      <div className="product-results">
-                        {filteredProducts.length ===
-                        0 ? (
-                          <div className="product-result-empty">
-                            No products found.
-                          </div>
-                        ) : (
-                          filteredProducts.map(
-                            (product) => (
-                              <button
-                                key={
-                                  product.id
-                                }
-                                type="button"
-                                className="product-result"
-                                onClick={() => {
-                                  selectProduct(
-                                    product.id
-                                  );
-                                  setProductSearch(
-                                    product.name
-                                  );
-                                }}
-                              >
-                                <span>
-                                  <strong>
-                                    {
-                                      product.name
-                                    }
-                                  </strong>
+                  <path
+                    strokeLinecap="round"
+                    d="M12 8v4M12 16h.01"
+                  />
+                </svg>
 
-                                  {product.brand && (
-                                    <small>
-                                      {
-                                        product.brand
-                                      }
-                                    </small>
-                                  )}
-                                </span>
+                <div>
+                  <p className="text-sm font-semibold text-red-800">
+                    Unable to create sale
+                  </p>
 
-                                <span className="result-arrow">
-                                  →
-                                </span>
-                              </button>
-                            )
-                          )
-                        )}
-                      </div>
-                    )}
+                  <p className="mt-1 text-sm text-red-700">
+                    {errorMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+            {/* Main */}
+            <div className="space-y-6">
+              {/* Order Information */}
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    Order Information
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Customer, transaction currency, and order status.
+                  </p>
                 </div>
 
-                {selectedProduct && (
-                  <div className="new-sale-field">
-                    <label>
-                      Variant
+                <div className="grid gap-5 p-6 md:grid-cols-3">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Customer
                     </label>
 
-                    {productVariants.length ===
-                    0 ? (
-                      <div className="no-variant">
-                        This product has no active
-                        variants.
-                      </div>
-                    ) : (
+                    <select
+                      value={customerId}
+                      onChange={(event) =>
+                        setCustomerId(
+                          event.target.value,
+                        )
+                      }
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    >
+                      <option value="">
+                        Walk-in customer
+                      </option>
+
+                      {customers.map(
+                        (customer) => (
+                          <option
+                            key={
+                              customer.id
+                            }
+                            value={
+                              customer.id
+                            }
+                          >
+                            {getCustomerLabel(
+                              customer,
+                            )}
+
+                            {customer.email &&
+                            customer.name
+                              ? ` — ${customer.email}`
+                              : ""}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Currency
+                    </label>
+
+                    <input
+                      value={currency}
+                      onChange={(event) =>
+                        setCurrency(
+                          event.target.value
+                            .toUpperCase()
+                            .slice(0, 3),
+                        )
+                      }
+                      maxLength={3}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium uppercase text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    />
+
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Default:{" "}
+                      {regionalSettings
+                        ?.base_currency ||
+                        "USD"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Order Status
+                    </label>
+
+                    <select
+                      value={status}
+                      onChange={(event) =>
+                        setStatus(
+                          event.target.value,
+                        )
+                      }
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    >
+                      <option value="draft">
+                        Draft
+                      </option>
+
+                      <option value="pending">
+                        Pending
+                      </option>
+
+                      <option value="confirmed">
+                        Confirmed
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              {/* Add Products */}
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    Add Products
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Select a variant, enter pricing, and add it to the order.
+                  </p>
+                </div>
+
+                <div className="p-6">
+                  <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+                    <div className="min-w-0">
+                      <label className="mb-2 block text-sm font-medium text-slate-700">
+                        Product Search
+                      </label>
+
+                      <input
+                        value={searchProduct}
+                        onChange={(event) => {
+                          setSearchProduct(
+                            event.target.value,
+                          );
+
+                          if (
+                            selectedProductId
+                          ) {
+                            setSelectedProductId(
+                              "",
+                            );
+
+                            setSelectedVariantId(
+                              "",
+                            );
+
+                            setUnitPrice("0");
+                          }
+                        }}
+                        placeholder="Search product, brand, category, SKU, or barcode..."
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                      />
+
+                      {searchProduct &&
+                        !selectedProductId && (
+                          <div className="relative z-20 mt-2 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                            {filteredProducts.length ===
+                            0 ? (
+                              <div className="px-4 py-4 text-sm text-slate-500">
+                                No matching products found.
+                              </div>
+                            ) : (
+                              filteredProducts.map(
+                                (product) => (
+                                  <button
+                                    key={
+                                      product.id
+                                    }
+                                    type="button"
+                                    onClick={() =>
+                                      selectProduct(
+                                        product.id,
+                                      )
+                                    }
+                                    className="block w-full border-b border-slate-100 px-4 py-3 text-left transition last:border-0 hover:bg-slate-50"
+                                  >
+                                    <div className="flex min-w-0 items-center justify-between gap-4">
+                                      <div className="min-w-0">
+                                        <p className="whitespace-nowrap text-sm font-semibold text-slate-800">
+                                          {
+                                            product.name
+                                          }
+                                        </p>
+
+                                        <p className="mt-1 whitespace-nowrap text-xs text-slate-400">
+                                          {product.brand ||
+                                            "No brand"}
+
+                                          {" · "}
+
+                                          {product.category ||
+                                            "Uncategorized"}
+                                        </p>
+                                      </div>
+
+                                      <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500">
+                                        {product.tracking_mode ===
+                                        "none"
+                                          ? "Not Tracked"
+                                          : "Tracked"}
+                                      </span>
+                                    </div>
+                                  </button>
+                                ),
+                              )
+                            )}
+                          </div>
+                        )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <label className="mb-2 block text-sm font-medium text-slate-700">
+                        Variant
+                      </label>
+
                       <select
                         value={
                           selectedVariantId
                         }
+                        disabled={
+                          !selectedProduct
+                        }
                         onChange={(event) =>
-                          setSelectedVariantId(
+                          selectVariant(
                             event.target
-                              .value
+                              .value,
                           )
                         }
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-400"
                       >
                         <option value="">
-                          Select variant
+                          {selectedProduct
+                            ? "Select variant"
+                            : "Select product first"}
                         </option>
 
-                        {productVariants.map(
+                        {selectedProduct?.product_variants?.map(
                           (variant) => (
                             <option
                               key={
@@ -958,1178 +1253,834 @@ export default function NewSalePage() {
                                 variant.id
                               }
                             >
-                              {variant.name}
+                              {
+                                variant.name
+                              }
+
                               {variant.sku
                                 ? ` — ${variant.sku}`
-                                : ""}{" "}
-                              —{" "}
-                              {formatCurrency(
-                                Number(
-                                  variant.selling_price
-                                )
-                              )}
+                                : ""}
                             </option>
-                          )
+                          ),
                         )}
                       </select>
-                    )}
-                  </div>
-                )}
 
-                <button
-                  type="button"
-                  className="add-product-button"
-                  onClick={addItem}
-                  disabled={
-                    !selectedProduct ||
-                    (productVariants.length >
-                      0 &&
-                      !selectedVariant)
-                  }
-                >
-                  <span>+</span>
-                  Add Product
-                </button>
-              </div>
-
-              <div className="new-sale-items">
-                {items.length === 0 ? (
-                  <div className="empty-items">
-                    <div className="empty-items-icon">
-                      +
+                      {selectedVariant && (
+                        <p className="mt-1.5 text-xs text-slate-400">
+                          Cost:{" "}
+                          {formatMoney(
+                            selectedVariant.cost_price,
+                            currency,
+                            regionalSettings,
+                          )}
+                        </p>
+                      )}
                     </div>
-
-                    <strong>
-                      No products added
-                    </strong>
-
-                    <span>
-                      Search for a product above
-                      to add it to the sale.
-                    </span>
                   </div>
-                ) : (
-                  <>
-                    <div className="items-table-header">
-                      <span>
-                        Product
-                      </span>
-                      <span>
-                        Quantity
-                      </span>
-                      <span>
-                        Price
-                      </span>
-                      <span>
-                        Total
-                      </span>
-                      <span />
-                    </div>
 
-                    {items.map((item) => (
-                      <div
-                        className="sale-item"
-                        key={item.id}
-                      >
-                        <div className="sale-item-product">
-                          <div className="sale-item-icon">
-                            {item.product_name
-                              .slice(
-                                0,
-                                1
-                              )
-                              .toUpperCase()}
+                  {selectedProduct &&
+                    selectedVariant && (
+                      <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="whitespace-normal break-words text-base font-semibold leading-6 text-slate-900">
+                              {
+                                selectedProduct.name
+                              }
+                            </p>
+
+                            <p className="mt-1 whitespace-normal break-words text-sm text-slate-500">
+                              {
+                                selectedVariant.name
+                              }
+
+                              {selectedVariant.sku
+                                ? ` · SKU ${selectedVariant.sku}`
+                                : ""}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`inline-flex w-fit shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                              selectedProduct.tracking_mode ===
+                              "none"
+                                ? "border-slate-200 bg-white text-slate-600"
+                                : "border-blue-200 bg-blue-50 text-blue-700"
+                            }`}
+                          >
+                            {selectedProduct.tracking_mode ===
+                            "none"
+                              ? "Not Tracked"
+                              : "Tracked"}
+                          </span>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                              Quantity
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={quantity}
+                              onChange={(event) =>
+                                setQuantity(
+                                  event.target
+                                    .value,
+                                )
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            />
                           </div>
 
                           <div>
-                            <strong>
-                              {
-                                item.product_name
+                            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                              Unit Price
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={unitPrice}
+                              onChange={(event) =>
+                                setUnitPrice(
+                                  event.target
+                                    .value,
+                                )
                               }
-                            </strong>
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            />
+                          </div>
 
-                            <span>
-                              {item.variant_name ||
-                                "Default"}
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                              Discount
+                            </label>
 
-                              {item.sku
-                                ? ` · ${item.sku}`
-                                : ""}
-                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={
+                                discountAmount
+                              }
+                              onChange={(event) =>
+                                setDiscountAmount(
+                                  event.target
+                                    .value,
+                                )
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+                              Tax %
+                            </label>
+
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={taxRate}
+                              onChange={(event) =>
+                                setTaxRate(
+                                  event.target
+                                    .value,
+                                )
+                              }
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            />
                           </div>
                         </div>
 
-                        <div className="sale-item-quantity">
+                        <div className="mt-4 flex justify-end">
                           <button
                             type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                item.quantity -
-                                  1
-                              )
-                            }
-                            disabled={
-                              item.quantity <=
-                              1
-                            }
+                            onClick={addLine}
+                            className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                           >
-                            −
-                          </button>
-
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={
-                              item.quantity
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              updateQuantity(
-                                item.id,
-                                Number(
-                                  event
-                                    .target
-                                    .value
-                                )
-                              )
-                            }
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.id,
-                                item.quantity +
-                                  1
-                              )
-                            }
-                          >
-                            +
+                            Add Item
                           </button>
                         </div>
+                      </div>
+                    )}
+                </div>
+              </section>
 
-                        <div className="sale-item-price">
-                          <span>
-                            $
-                          </span>
+              {/* Order Items */}
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    Order Items
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Review quantities, prices, discounts, and taxes before creating the order.
+                  </p>
+                </div>
+
+                {lines.length === 0 ? (
+                  <div className="px-6 py-14 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                      <svg
+                        className="h-6 w-6"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 3h12v18H6z"
+                        />
+
+                        <path
+                          strokeLinecap="round"
+                          d="M9 7h6M9 11h6M9 15h4"
+                        />
+                      </svg>
+                    </div>
+
+                    <h3 className="mt-4 text-sm font-semibold text-slate-900">
+                      No products added
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      Search for a product above to add items to this sale.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[1150px] w-full table-auto">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50/70">
+                            <th className="min-w-[320px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Product
+                            </th>
+
+                            <th className="w-[100px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Qty
+                            </th>
+
+                            <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Price
+                            </th>
+
+                            <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Discount
+                            </th>
+
+                            <th className="w-[110px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Tax
+                            </th>
+
+                            <th className="w-[160px] px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Total
+                            </th>
+
+                            <th className="w-14 px-3 py-3" />
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100">
+                          {lines.map(
+                            (line) => {
+                              const lineSubtotal =
+                                Number(
+                                  line.quantity ||
+                                    0,
+                                ) *
+                                Number(
+                                  line.unit_price ||
+                                    0,
+                                );
+
+                              const taxable =
+                                Math.max(
+                                  0,
+                                  lineSubtotal -
+                                    Number(
+                                      line.discount_amount ||
+                                        0,
+                                    ),
+                                );
+
+                              const lineTax =
+                                taxable *
+                                (Number(
+                                  line.tax_rate ||
+                                    0,
+                                ) /
+                                  100);
+
+                              const lineTotal =
+                                taxable +
+                                lineTax;
+
+                              return (
+                                <tr
+                                  key={
+                                    line.id
+                                  }
+                                  className="transition hover:bg-slate-50/50"
+                                >
+                                  <td className="min-w-[320px] px-6 py-4 align-middle">
+                                    <div className="min-w-0">
+                                      <p className="whitespace-nowrap text-sm font-semibold text-slate-800">
+                                        {
+                                          line.product_name
+                                        }
+                                      </p>
+
+                                      <div className="mt-1 flex flex-nowrap items-center gap-2 overflow-hidden">
+                                        <span className="whitespace-nowrap text-xs text-slate-400">
+                                          {
+                                            line.variant_name
+                                          }
+                                        </span>
+
+                                        {line.sku && (
+                                          <>
+                                            <span className="shrink-0 text-slate-300">
+                                              ·
+                                            </span>
+
+                                            <span className="whitespace-nowrap text-xs text-slate-400">
+                                              SKU{" "}
+                                              {
+                                                line.sku
+                                              }
+                                            </span>
+                                          </>
+                                        )}
+
+                                        <span
+                                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                            line.tracking_mode ===
+                                            "none"
+                                              ? "border-slate-200 bg-slate-50 text-slate-500"
+                                              : "border-blue-200 bg-blue-50 text-blue-700"
+                                          }`}
+                                        >
+                                          {line.tracking_mode ===
+                                          "none"
+                                            ? "Not Tracked"
+                                            : "Tracked"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="px-4 py-4 align-middle">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        line.quantity
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateLine(
+                                          line.id,
+                                          "quantity",
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-right text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                                    />
+                                  </td>
+
+                                  <td className="px-4 py-4 align-middle">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        line.unit_price
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateLine(
+                                          line.id,
+                                          "unit_price",
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      className="h-9 w-28 rounded-lg border border-slate-200 px-2 text-right text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                                    />
+                                  </td>
+
+                                  <td className="px-4 py-4 align-middle">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        line.discount_amount
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateLine(
+                                          line.id,
+                                          "discount_amount",
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      className="h-9 w-28 rounded-lg border border-slate-200 px-2 text-right text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                                    />
+                                  </td>
+
+                                  <td className="px-4 py-4 align-middle">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      step="0.01"
+                                      value={
+                                        line.tax_rate
+                                      }
+                                      onChange={(
+                                        event,
+                                      ) =>
+                                        updateLine(
+                                          line.id,
+                                          "tax_rate",
+                                          event
+                                            .target
+                                            .value,
+                                        )
+                                      }
+                                      className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-right text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                                    />
+                                  </td>
+
+                                  <td className="px-5 py-4 text-right align-middle">
+                                    <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
+                                      {formatMoney(
+                                        lineTotal,
+                                        currency,
+                                        regionalSettings,
+                                      )}
+                                    </p>
+                                  </td>
+
+                                  <td className="px-3 py-4 align-middle">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        removeLine(
+                                          line.id,
+                                        )
+                                      }
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                                      aria-label="Remove item"
+                                    >
+                                      <svg
+                                        className="h-4 w-4"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          d="M6 6l12 12M18 6 6 18"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            },
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="border-t border-slate-200 px-6 py-5">
+                      <div className="grid gap-5 md:grid-cols-[1fr_320px]">
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            Order Notes
+                          </label>
+
+                          <textarea
+                            value={notes}
+                            onChange={(event) =>
+                              setNotes(
+                                event.target
+                                  .value,
+                              )
+                            }
+                            rows={5}
+                            placeholder="Internal notes, delivery instructions, customer requests..."
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-700">
+                            Shipping
+                          </label>
 
                           <input
                             type="number"
                             min="0"
                             step="0.01"
                             value={
-                              item.unit_price
+                              shippingAmount
                             }
-                            onChange={(
-                              event
-                            ) =>
-                              updatePrice(
-                                item.id,
-                                Number(
-                                  event
-                                    .target
-                                    .value
-                                )
+                            onChange={(event) =>
+                              setShippingAmount(
+                                event.target
+                                  .value,
                               )
                             }
+                            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-right text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                           />
+
+                          <p className="mt-2 text-xs text-slate-400">
+                            Enter shipping charges in{" "}
+                            {currency}.
+                          </p>
                         </div>
-
-                        <strong className="sale-item-total">
-                          {formatCurrency(
-                            item.quantity *
-                              item.unit_price
-                          )}
-                        </strong>
-
-                        <button
-                          type="button"
-                          className="remove-item"
-                          onClick={() =>
-                            removeItem(
-                              item.id
-                            )
-                          }
-                          aria-label={`Remove ${item.product_name}`}
-                        >
-                          ×
-                        </button>
                       </div>
-                    ))}
+                    </div>
                   </>
                 )}
-              </div>
-            </section>
+              </section>
+            </div>
 
-            <section className="new-sale-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Notes
+            {/* Summary */}
+            <aside className="space-y-6">
+              {/* Order Summary */}
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    Order Summary
                   </h2>
 
-                  <p>
-                    Add any internal notes
-                    related to this sale.
+                  <p className="mt-1 text-sm text-slate-500">
+                    Final sales order totals.
                   </p>
                 </div>
-              </div>
 
-              <div className="new-sale-card-body">
-                <textarea
-                  value={notes}
-                  onChange={(event) =>
-                    setNotes(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Add notes about this sale..."
-                  rows={4}
-                />
-              </div>
-            </section>
-          </main>
-
-          <aside className="new-sale-sidebar">
-            <section className="new-sale-card totals-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Sale Summary
-                  </h2>
-                </div>
-              </div>
-
-              <div className="totals-body">
-                <div className="summary-row">
-                  <span>
-                    Subtotal
-                  </span>
-
-                  <strong>
-                    {formatCurrency(
-                      subtotal
-                    )}
-                  </strong>
-                </div>
-
-                <div className="summary-input-row">
-                  <label>
-                    Discount
-                  </label>
-
-                  <div className="summary-input">
-                    <span>
-                      $
+                <div className="space-y-4 px-6 py-5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Items
                     </span>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        discountAmount
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setDiscountAmount(
-                          event.target
-                            .value
-                        )
-                      }
-                    />
+                    <span className="font-medium text-slate-800">
+                      {lines.length}
+                    </span>
                   </div>
-                </div>
 
-                <div className="summary-input-row">
-                  <label>
-                    Tax
-                  </label>
-
-                  <div className="summary-input">
-                    <span>
-                      $
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Subtotal
                     </span>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        taxAmount
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setTaxAmount(
-                          event.target
-                            .value
-                        )
-                      }
-                    />
+                    <span className="font-medium text-slate-800">
+                      {formatMoney(
+                        subtotal,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
                   </div>
-                </div>
 
-                <div className="summary-input-row">
-                  <label>
-                    Shipping
-                  </label>
-
-                  <div className="summary-input">
-                    <span>
-                      $
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Discount
                     </span>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        shippingAmount
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setShippingAmount(
-                          event.target
-                            .value
-                        )
-                      }
-                    />
+                    <span className="font-medium text-red-600">
+                      -
+                      {formatMoney(
+                        totalDiscount,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Tax
+                    </span>
+
+                    <span className="font-medium text-slate-800">
+                      {formatMoney(
+                        taxAmount,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Shipping
+                    </span>
+
+                    <span className="font-medium text-slate-800">
+                      {formatMoney(
+                        shipping,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4">
+                    <div className="flex items-end justify-between gap-4">
+                      <span className="text-sm font-semibold text-slate-700">
+                        Order Total
+                      </span>
+
+                      <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-slate-950">
+                        {formatMoney(
+                          total,
+                          currency,
+                          regionalSettings,
+                        )}
+                      </span>
+                    </div>
                   </div>
                 </div>
+              </section>
 
-                <div className="summary-divider" />
-
-                <div className="summary-total">
-                  <span>
-                    Total
-                  </span>
-
-                  <strong>
-                    {formatCurrency(
-                      total
-                    )}
-                  </strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="new-sale-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Payment
+              {/* Margin Preview */}
+              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-base font-semibold text-slate-950">
+                    Margin Preview
                   </h2>
 
-                  <p>
-                    Record the payment state.
+                  <p className="mt-1 text-sm text-slate-500">
+                    Estimated from current variant costs.
                   </p>
                 </div>
-              </div>
 
-              <div className="settings-body">
-                <label>
-                  Payment Status
-                </label>
+                <div className="space-y-4 px-6 py-5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Estimated Cost
+                    </span>
 
-                <select
-                  value={
-                    paymentStatus
+                    <span className="font-medium text-slate-800">
+                      {formatMoney(
+                        totalCost,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Gross Profit
+                    </span>
+
+                    <span
+                      className={`font-semibold ${
+                        estimatedGrossProfit >=
+                        0
+                          ? "text-emerald-700"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {formatMoney(
+                        estimatedGrossProfit,
+                        currency,
+                        regionalSettings,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">
+                      Gross Margin
+                    </span>
+
+                    <span className="font-semibold text-slate-900">
+                      {total > 0
+                        ? `${(
+                            (estimatedGrossProfit /
+                              total) *
+                            100
+                          ).toFixed(1)}%`
+                        : "0.0%"}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Fulfillment Info */}
+              <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 7h16M4 12h10M4 17h7"
+                      />
+
+                      <circle
+                        cx="18"
+                        cy="15"
+                        r="3"
+                      />
+                    </svg>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-900">
+                      Inventory fulfillment
+                    </h3>
+
+                    <p className="mt-1 text-xs leading-5 text-blue-800/80">
+                      This sale will be created as unfulfilled. Warehouse selection, batch allocation, and optional serial selection happen from the fulfillment workflow after the order is created.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              {/* V2 Inventory Model */}
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  V2 Inventory Model
+                </h3>
+
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                      1
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Product
+                      </p>
+
+                      <p className="text-[11px] text-slate-400">
+                        Product definition
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="ml-4 h-3 border-l border-dashed border-slate-300" />
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                      2
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Variant
+                      </p>
+
+                      <p className="text-[11px] text-slate-400">
+                        SKU / pricing identity
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="ml-4 h-3 border-l border-dashed border-slate-300" />
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-xs font-bold text-blue-600">
+                      3
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Batch / Lot
+                      </p>
+
+                      <p className="text-[11px] text-slate-400">
+                        Primary tracked inventory
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="ml-4 h-3 border-l border-dashed border-slate-300" />
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-xs font-bold text-purple-600">
+                      4
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Serialized Unit
+                      </p>
+
+                      <p className="text-[11px] text-slate-400">
+                        Optional child identity
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Actions */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <button
+                  type="button"
+                  onClick={saveSale}
+                  disabled={
+                    saving ||
+                    lines.length === 0
                   }
-                  onChange={(event) =>
-                    setPaymentStatus(
-                      event.target
-                        .value as PaymentStatus
-                    )
-                  }
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="unpaid">
-                    Unpaid
-                  </option>
+                  {saving
+                    ? "Creating Sale..."
+                    : "Create Sales Order"}
+                </button>
 
-                  <option value="partially_paid">
-                    Partially Paid
-                  </option>
-
-                  <option value="paid">
-                    Paid
-                  </option>
-                </select>
-              </div>
-            </section>
-
-            <section className="new-sale-card">
-              <div className="new-sale-card-header">
-                <div>
-                  <h2>
-                    Fulfillment
-                  </h2>
-
-                  <p>
-                    Track how the order will be
-                    fulfilled.
-                  </p>
-                </div>
-              </div>
-
-              <div className="settings-body">
-                <label>
-                  Fulfillment Status
-                </label>
-
-                <select
-                  value={
-                    fulfillmentStatus
-                  }
-                  onChange={(event) =>
-                    setFulfillmentStatus(
-                      event.target
-                        .value as FulfillmentStatus
-                    )
-                  }
+                <button
+                  type="button"
+                  onClick={clearForm}
+                  disabled={saving}
+                  className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="unfulfilled">
-                    Unfulfilled
-                  </option>
-
-                  <option value="partially_fulfilled">
-                    Partially Fulfilled
-                  </option>
-
-                  <option value="fulfilled">
-                    Fulfilled
-                  </option>
-                </select>
+                  Clear Form
+                </button>
               </div>
-            </section>
-
-            <button
-              type="button"
-              className="mobile-save-button"
-              onClick={saveSale}
-              disabled={
-                saving ||
-                items.length === 0
-              }
-            >
-              {saving
-                ? "Creating Sale..."
-                : "Create Sale"}
-            </button>
-          </aside>
+            </aside>
+          </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .new-sale-page {
-          width: 100%;
-          max-width: 1500px;
-          margin: 0 auto;
-        }
-
-        .new-sale-header-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .new-sale-cancel,
-        .new-sale-save {
-          height: 41px;
-          padding: 0 14px;
-          border-radius: 8px;
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .new-sale-cancel {
-          border: 1px solid #dfe4eb;
-          background: #ffffff;
-          color: #667080;
-        }
-
-        .new-sale-cancel:hover {
-          background: #f7f8fa;
-          color: #263043;
-        }
-
-        .new-sale-save {
-          border: 1px solid #172033;
-          background: #172033;
-          color: #ffffff;
-        }
-
-        .new-sale-save:hover {
-          background: #263043;
-        }
-
-        .new-sale-save:disabled,
-        .mobile-save-button:disabled,
-        .add-product-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .new-sale-error {
-          min-height: 43px;
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          margin-bottom: 15px;
-          padding: 0 12px;
-          border: 1px solid #ead6d6;
-          border-radius: 9px;
-          background: #fff8f8;
-          color: #8b5555;
-          font-size: 10px;
-          font-weight: 600;
-        }
-
-        .error-icon {
-          width: 22px;
-          height: 22px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 22px;
-          border-radius: 50%;
-          background: #f4e2e2;
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .new-sale-error button {
-          margin-left: auto;
-          border: 0;
-          background: transparent;
-          color: #9a7474;
-          cursor: pointer;
-          font-size: 17px;
-        }
-
-        .new-sale-success {
-          margin-bottom: 15px;
-          padding: 12px;
-          border: 1px solid #d8e9dc;
-          border-radius: 9px;
-          background: #f5fbf6;
-          color: #477052;
-          font-size: 10px;
-          font-weight: 600;
-        }
-
-        .new-sale-layout {
-          display: grid;
-          grid-template-columns: minmax(
-              0,
-              1fr
-            )
-            340px;
-          gap: 18px;
-          align-items: start;
-        }
-
-        .new-sale-main,
-        .new-sale-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .new-sale-card {
-          overflow: visible;
-          border: 1px solid #e2e6ec;
-          border-radius: 13px;
-          background: #ffffff;
-        }
-
-        .new-sale-card-header {
-          min-height: 68px;
-          display: flex;
-          align-items: center;
-          padding: 13px 17px;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .new-sale-card-header h2 {
-          margin: 0;
-          color: #30394a;
-          font-size: 13px;
-          font-weight: 780;
-          letter-spacing: -0.01em;
-        }
-
-        .new-sale-card-header p {
-          margin: 4px 0 0;
-          color: #9aa2af;
-          font-size: 9px;
-          line-height: 14px;
-        }
-
-        .new-sale-card-body {
-          padding: 16px 17px;
-        }
-
-        .new-sale-label,
-        .new-sale-field label,
-        .settings-body label {
-          display: block;
-          margin-bottom: 6px;
-          color: #687386;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        select,
-        input,
-        textarea {
-          font-family: inherit;
-        }
-
-        .new-sale-card select,
-        .new-sale-card textarea,
-        .new-sale-field > input,
-        .summary-input input {
-          width: 100%;
-          border: 1px solid #dfe4eb;
-          outline: none;
-          border-radius: 8px;
-          background: #ffffff;
-          color: #354052;
-          font-size: 11px;
-        }
-
-        .new-sale-card select {
-          height: 40px;
-          padding: 0 10px;
-        }
-
-        .new-sale-card textarea {
-          min-height: 100px;
-          padding: 10px;
-          resize: vertical;
-          line-height: 17px;
-        }
-
-        .new-sale-card select:focus,
-        .new-sale-card textarea:focus,
-        .new-sale-field > input:focus,
-        .summary-input:focus-within {
-          border-color: #c9d0da;
-        }
-
-        .new-sale-product-picker {
-          display: grid;
-          grid-template-columns:
-            minmax(0, 1fr)
-            minmax(190px, 0.75fr)
-            auto;
-          gap: 10px;
-          align-items: end;
-          padding: 16px 17px;
-          border-bottom: 1px solid #edf0f4;
-          background: #fafbfd;
-        }
-
-        .new-sale-field {
-          position: relative;
-        }
-
-        .new-sale-field > input {
-          height: 40px;
-          padding: 0 11px;
-        }
-
-        .product-results {
-          position: absolute;
-          z-index: 20;
-          top: calc(100% + 5px);
-          left: 0;
-          right: 0;
-          max-height: 270px;
-          overflow-y: auto;
-          border: 1px solid #dfe4eb;
-          border-radius: 9px;
-          background: #ffffff;
-          box-shadow: 0 10px 30px
-            rgba(24, 34, 51, 0.09);
-        }
-
-        .product-result {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding: 11px 12px;
-          border: 0;
-          border-bottom: 1px solid #f0f2f5;
-          background: #ffffff;
-          color: #364052;
-          text-align: left;
-          cursor: pointer;
-          font-family: inherit;
-        }
-
-        .product-result:last-child {
-          border-bottom: 0;
-        }
-
-        .product-result:hover {
-          background: #f8fafc;
-        }
-
-        .product-result strong,
-        .product-result small {
-          display: block;
-        }
-
-        .product-result strong {
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .product-result small {
-          margin-top: 3px;
-          color: #9aa2af;
-          font-size: 8px;
-        }
-
-        .result-arrow {
-          color: #9ba4b1;
-          font-size: 13px;
-        }
-
-        .product-result-empty {
-          padding: 16px;
-          color: #9aa2af;
-          font-size: 10px;
-          text-align: center;
-        }
-
-        .no-variant {
-          min-height: 40px;
-          display: flex;
-          align-items: center;
-          padding: 0 10px;
-          border: 1px solid #e3e7ed;
-          border-radius: 8px;
-          background: #f8f9fb;
-          color: #8992a0;
-          font-size: 9px;
-        }
-
-        .add-product-button {
-          height: 40px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          padding: 0 13px;
-          border: 1px solid #172033;
-          border-radius: 8px;
-          background: #172033;
-          color: #ffffff;
-          cursor: pointer;
-          font-family: inherit;
-          font-size: 10px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .add-product-button:hover:not(
-            :disabled
-          ) {
-          background: #263043;
-        }
-
-        .add-product-button span {
-          font-size: 15px;
-          font-weight: 400;
-        }
-
-        .new-sale-items {
-          min-height: 180px;
-        }
-
-        .items-table-header {
-          min-height: 39px;
-          display: grid;
-          grid-template-columns:
-            minmax(230px, 1fr)
-            125px
-            120px
-            100px
-            35px;
-          gap: 12px;
-          align-items: center;
-          padding: 0 17px;
-          border-bottom: 1px solid #edf0f4;
-          color: #9aa2af;
-          font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-        }
-
-        .sale-item {
-          min-height: 73px;
-          display: grid;
-          grid-template-columns:
-            minmax(230px, 1fr)
-            125px
-            120px
-            100px
-            35px;
-          gap: 12px;
-          align-items: center;
-          padding: 8px 17px;
-          border-bottom: 1px solid #f0f2f5;
-        }
-
-        .sale-item:last-child {
-          border-bottom: 0;
-        }
-
-        .sale-item-product {
-          min-width: 0;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .sale-item-icon {
-          width: 32px;
-          height: 32px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 32px;
-          border: 1px solid #e2e6ec;
-          border-radius: 8px;
-          background: #f8f9fb;
-          color: #6e7888;
-          font-size: 9px;
-          font-weight: 800;
-        }
-
-        .sale-item-product strong,
-        .sale-item-product span {
-          display: block;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .sale-item-product strong {
-          color: #465163;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .sale-item-product span {
-          margin-top: 3px;
-          color: #9aa2af;
-          font-size: 8px;
-        }
-
-        .sale-item-quantity {
-          height: 34px;
-          display: flex;
-          align-items: center;
-          border: 1px solid #dfe4eb;
-          border-radius: 7px;
-          overflow: hidden;
-        }
-
-        .sale-item-quantity button {
-          width: 29px;
-          height: 100%;
-          border: 0;
-          background: #f8f9fb;
-          color: #697386;
-          cursor: pointer;
-          font-size: 14px;
-        }
-
-        .sale-item-quantity button:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .sale-item-quantity input {
-          width: 50px;
-          height: 100%;
-          border: 0;
-          outline: 0;
-          text-align: center;
-          color: #465163;
-          font-size: 10px;
-        }
-
-        .sale-item-price {
-          height: 34px;
-          display: flex;
-          align-items: center;
-          gap: 3px;
-          padding: 0 8px;
-          border: 1px solid #dfe4eb;
-          border-radius: 7px;
-          color: #8c95a3;
-        }
-
-        .sale-item-price input {
-          width: 100%;
-          height: 100%;
-          border: 0;
-          outline: 0;
-          color: #465163;
-          font-size: 10px;
-        }
-
-        .sale-item-total {
-          color: #344052;
-          font-size: 10px;
-          font-weight: 750;
-          white-space: nowrap;
-        }
-
-        .remove-item {
-          width: 29px;
-          height: 29px;
-          display: grid;
-          place-items: center;
-          border: 1px solid transparent;
-          border-radius: 7px;
-          background: transparent;
-          color: #a0a8b4;
-          cursor: pointer;
-          font-size: 17px;
-        }
-
-        .remove-item:hover {
-          border-color: #ead6d6;
-          background: #fff8f8;
-          color: #915858;
-        }
-
-        .empty-items {
-          min-height: 220px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-        }
-
-        .empty-items-icon {
-          width: 43px;
-          height: 43px;
-          display: grid;
-          place-items: center;
-          margin-bottom: 11px;
-          border: 1px solid #e2e6ec;
-          border-radius: 50%;
-          background: #fafbfd;
-          color: #9099a7;
-          font-size: 18px;
-        }
-
-        .empty-items strong {
-          color: #5a6575;
-          font-size: 12px;
-          font-weight: 750;
-        }
-
-        .empty-items span {
-          max-width: 280px;
-          margin-top: 5px;
-          color: #a0a8b4;
-          font-size: 9px;
-          line-height: 15px;
-        }
-
-        .totals-body {
-          padding: 15px 17px 17px;
-        }
-
-        .summary-row,
-        .summary-input-row,
-        .summary-total {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-
-        .summary-row {
-          min-height: 34px;
-        }
-
-        .summary-row span,
-        .summary-input-row label {
-          color: #7d8795;
-          font-size: 10px;
-        }
-
-        .summary-row strong {
-          color: #465163;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .summary-input-row {
-          min-height: 43px;
-        }
-
-        .summary-input {
-          width: 110px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          padding: 0 8px;
-          border: 1px solid #dfe4eb;
-          border-radius: 7px;
-          color: #9aa2af;
-        }
-
-        .summary-input input {
-          padding: 0;
-          border: 0;
-          outline: 0;
-          font-size: 10px;
-          text-align: right;
-        }
-
-        .summary-divider {
-          height: 1px;
-          margin: 8px 0;
-          background: #edf0f4;
-        }
-
-        .summary-total {
-          padding-top: 4px;
-        }
-
-        .summary-total span {
-          color: #596476;
-          font-size: 11px;
-          font-weight: 750;
-        }
-
-        .summary-total strong {
-          color: #263043;
-          font-size: 19px;
-          font-weight: 800;
-          letter-spacing: -0.03em;
-        }
-
-        .settings-body {
-          padding: 15px 17px 17px;
-        }
-
-        .mobile-save-button {
-          display: none;
-        }
-
-        @media (max-width: 1100px) {
-          .new-sale-layout {
-            grid-template-columns: 1fr;
-          }
-
-          .new-sale-sidebar {
-            display: grid;
-            grid-template-columns: repeat(
-              3,
-              minmax(0, 1fr)
-            );
-            align-items: start;
-          }
-
-          .totals-card {
-            grid-column: span 1;
-          }
-        }
-
-        @media (max-width: 850px) {
-          .new-sale-product-picker {
-            grid-template-columns: 1fr;
-          }
-
-          .add-product-button {
-            width: 100%;
-          }
-
-          .new-sale-sidebar {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 700px) {
-          .new-sale-header-actions {
-            gap: 5px;
-          }
-
-          .new-sale-cancel,
-          .new-sale-save {
-            height: 37px;
-            padding: 0 10px;
-            font-size: 10px;
-          }
-
-          .items-table-header {
-            display: none;
-          }
-
-          .sale-item {
-            grid-template-columns:
-              minmax(0, 1fr)
-              auto;
-            gap: 10px;
-            padding: 13px 14px;
-          }
-
-          .sale-item-product {
-            grid-column: 1 / -1;
-          }
-
-          .sale-item-quantity {
-            width: 105px;
-          }
-
-          .sale-item-price {
-            width: 105px;
-          }
-
-          .sale-item-total {
-            justify-self: end;
-          }
-
-          .remove-item {
-            justify-self: end;
-          }
-
-          .mobile-save-button {
-            min-height: 45px;
-            display: block;
-            width: 100%;
-            border: 1px solid #172033;
-            border-radius: 9px;
-            background: #172033;
-            color: #ffffff;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 11px;
-            font-weight: 750;
-          }
-        }
-      `}</style>
     </AppShell>
   );
 }

@@ -57,6 +57,72 @@ type NavItem = {
   keywords?: string[];
 };
 
+type PermissionKey = `${string}:${string}`;
+
+function permissionKey(
+  module: string,
+  action: string,
+): PermissionKey {
+  return `${module}:${action}`;
+}
+
+const NAV_MODULE_MAP: Record<string, string> = {
+  "/": "dashboard",
+  "/customers": "customers",
+  "/estimates": "quotes",
+  "/sales": "sales_orders",
+  "/invoices": "invoices",
+  "/payments": "payments",
+  "/products": "products",
+  "/serial-numbers": "serial_numbers",
+  "/inventory": "inventory",
+  "/warehouses": "warehouses",
+  "/pricing/products": "pricing",
+  "/suppliers": "suppliers",
+  "/purchase-orders": "purchase_orders",
+  "/expenses": "expenses",
+  "/expenses/categories": "expenses",
+  "/expenses/closings": "expenses",
+  "/expenses/reports": "expenses",
+  "/warranty": "warranty",
+  "/repairs": "repairs",
+  "/rma": "rma",
+  "/service-providers": "service_jobs",
+  "/service-jobs": "service_jobs",
+  "/b2b-portal": "b2b_portal",
+  "/reports": "reports",
+  "/employees": "employees",
+  "/documents": "documents",
+  "/settings": "settings",
+};
+
+function getNavModule(href: string): string | null {
+  if (NAV_MODULE_MAP[href]) {
+    return NAV_MODULE_MAP[href];
+  }
+
+  const matchingRoute = Object.keys(NAV_MODULE_MAP)
+    .filter((route) => route !== "/")
+    .sort((a, b) => b.length - a.length)
+    .find(
+      (route) =>
+        href === route ||
+        href.startsWith(`${route}/`),
+    );
+
+  return matchingRoute
+    ? NAV_MODULE_MAP[matchingRoute]
+    : null;
+}
+
+function permissionCacheKey(
+  userId: string,
+  companyId: string,
+) {
+  return `sbs_permissions:${userId}:${companyId}`;
+}
+
+
 type NavSection = {
   label: string;
   items: NavItem[];
@@ -466,7 +532,7 @@ function getWorkspaceSections(): NavSection[] {
       ],
     },
     {
-      label: "SYSTEM",
+      label: "SYSTEM", 
       items: [
         {
           label: "Settings",
@@ -1070,16 +1136,85 @@ export default function AppShell({
   const [profileMenuOpen, setProfileMenuOpen] =
     useState(false);
 
+  const [permissionKeys, setPermissionKeys] =
+    useState<Set<PermissionKey>>(new Set());
+
+  const [permissionsLoaded, setPermissionsLoaded] =
+    useState(false);
+
   const searchRef =
     useRef<HTMLDivElement | null>(null);
 
   const profileMenuRef =
     useRef<HTMLDivElement | null>(null);
 
-  const sections = useMemo(
+  const rawSections = useMemo(
     () => getWorkspaceSections(),
     []
   );
+
+  const sections = useMemo<NavSection[]>(() => {
+    // Keep the existing navigation visible while the permission
+    // request is resolving. This prevents the AppShell from looking
+    // empty/slow after every page navigation. The middleware and RLS
+    // remain the real security boundary.
+    if (!permissionsLoaded) {
+      return rawSections;
+    }
+
+    function filterItem(
+      item: NavItem,
+    ): NavItem | null {
+      const module = getNavModule(item.href);
+
+      if (!module) {
+        return null;
+      }
+
+      const allowed = permissionKeys.has(
+        permissionKey(module, "view"),
+      );
+
+      if (!allowed) {
+        return null;
+      }
+
+      const children = item.children
+        ?.map(filterItem)
+        .filter(
+          (child): child is NavItem =>
+            child !== null,
+        );
+
+      // Preserve existing availability flags, including
+      // Reports & Analytics → Coming Soon.
+      return {
+        ...item,
+        children:
+          children && children.length > 0
+            ? children
+            : undefined,
+      };
+    }
+
+    return rawSections
+      .map((section) => ({
+        ...section,
+        items: section.items
+          .map(filterItem)
+          .filter(
+            (item): item is NavItem =>
+              item !== null,
+          ),
+      }))
+      .filter(
+        (section) => section.items.length > 0,
+      );
+  }, [
+    rawSections,
+    permissionKeys,
+    permissionsLoaded,
+  ]);
 
   const allNavItems = useMemo(() => {
     return sections.flatMap((section) =>
@@ -1170,19 +1305,99 @@ export default function AppShell({
     }
 
     if (membershipData?.company_id) {
+      const companyId = membershipData.company_id;
+      const cacheKey = permissionCacheKey(
+        user.id,
+        companyId,
+      );
+
+      // Restore the last known permission set immediately so the
+      // sidebar does not wait for the network on every page load.
+      try {
+        const cached = window.sessionStorage.getItem(
+          cacheKey,
+        );
+
+        if (cached) {
+          const cachedKeys = JSON.parse(cached);
+
+          if (Array.isArray(cachedKeys)) {
+            setPermissionKeys(
+              new Set<PermissionKey>(cachedKeys),
+            );
+          }
+        }
+      } catch {
+        // Ignore unavailable/corrupt browser cache.
+      }
+
+      // Fetch permissions and company details in parallel.
+      const [permissionResult, companyResult] =
+        await Promise.all([
+          supabase.rpc(
+            "employee_get_my_permissions",
+            {
+              p_company_id: companyId,
+            },
+          ),
+          supabase
+            .from("companies")
+            .select(
+              "id, name, currency, timezone, business_type"
+            )
+            .eq("id", companyId)
+            .maybeSingle(),
+        ]);
+
+      const {
+        data: permissionData,
+        error: permissionError,
+      } = permissionResult;
+
+      if (permissionError) {
+        console.error(
+          "Failed to load employee permissions:",
+          permissionError,
+        );
+
+        // If there was no cached permission set, fail closed.
+        try {
+          if (!window.sessionStorage.getItem(cacheKey)) {
+            setPermissionKeys(new Set());
+          }
+        } catch {
+          setPermissionKeys(new Set());
+        }
+      } else {
+        const keys = new Set<PermissionKey>(
+          (permissionData || []).map(
+            (permission: {
+              module: string;
+              action: string;
+            }) =>
+              permissionKey(
+                permission.module,
+                permission.action,
+              ),
+          ),
+        );
+
+        setPermissionKeys(keys);
+
+        try {
+          window.sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify(Array.from(keys)),
+          );
+        } catch {
+          // Ignore unavailable browser storage.
+        }
+      }
+
       const {
         data: companyData,
         error: companyError,
-      } = await supabase
-        .from("companies")
-        .select(
-          "id, name, currency, timezone, business_type"
-        )
-        .eq(
-          "id",
-          membershipData.company_id
-        )
-        .maybeSingle();
+      } = companyResult;
 
       if (companyError) {
         throw companyError;
@@ -1193,6 +1408,8 @@ export default function AppShell({
           companyData as WorkspaceCompany
         );
       }
+
+      setPermissionsLoaded(true);
     }
 
     const metadata = user.user_metadata ?? {};
@@ -1207,11 +1424,19 @@ export default function AppShell({
     setProfile({
       full_name: fullName,
     });
+
+    if (!membershipData?.company_id) {
+      setPermissionKeys(new Set());
+      setPermissionsLoaded(true);
+    }
   } catch (error) {
     console.error(
       "Failed to load workspace:",
       error
     );
+
+    setPermissionKeys(new Set());
+    setPermissionsLoaded(true);
   }
 }, [supabase]);
 
@@ -1224,6 +1449,42 @@ export default function AppShell({
       window.clearTimeout(timer);
     };
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (!permissionsLoaded) {
+      return;
+    }
+
+    const currentModule =
+      getNavModule(pathname);
+
+    if (
+      currentModule &&
+      !permissionKeys.has(
+        permissionKey(
+          currentModule,
+          "view",
+        ),
+      )
+    ) {
+      const firstAllowedItem =
+        allNavItems.find(
+          (item) => item.available,
+        );
+
+      if (firstAllowedItem) {
+        router.replace(
+          firstAllowedItem.href,
+        );
+      }
+    }
+  }, [
+    pathname,
+    permissionKeys,
+    permissionsLoaded,
+    allNavItems,
+    router,
+  ]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -1584,9 +1845,11 @@ export default function AppShell({
         }
 
         .sbs-brand {
+          width: 100%;
+          height: 54px;
           display: flex;
           align-items: center;
-          gap: 12px;
+          justify-content: center;
           min-width: 0;
           text-decoration: none;
           color: inherit;
@@ -1594,57 +1857,17 @@ export default function AppShell({
           border: none;
           padding: 0;
           cursor: pointer;
-          text-align: left;
-        }
-
-        .sbs-brand-mark {
-          width: 36px;
-          height: 36px;
-          border-radius: 9px;
-          background: #ffffff;
-          color: #090d0b;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 14px;
-          font-weight: 800;
-          letter-spacing: -0.03em;
-          flex-shrink: 0;
-          overflow: hidden;
-          box-shadow:
-            0 5px 16px
-            rgba(0, 0, 0, 0.3);
+          text-align: center;
         }
 
         .sbs-brand-logo {
-          width: 100%;
-          height: 100%;
+          width: 205px;
+          height: 50px;
           object-fit: contain;
+          object-position: center;
           display: block;
-        }
-
-        .sbs-brand-text {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .sbs-brand-name {
-          font-size: 13.5px;
-          line-height: 1.2;
-          font-weight: 700;
-          color: #ffffff;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-brand-subtitle {
-          margin-top: 3px;
-          font-size: 11px;
-          line-height: 1;
-          color: #78857d;
-          font-weight: 500;
+          background: transparent;
+          flex-shrink: 0;
         }
 
         .sbs-sidebar-scroll {
@@ -2682,26 +2905,14 @@ export default function AppShell({
             }
             aria-label="Go to dashboard"
           >
-            <span className="sbs-brand-mark">
-              <Image
-                src="/sbs-logo.png"
-                alt="Sharif Business Solutions"
-                width={36}
-                height={36}
-                className="sbs-brand-logo"
-                priority
-              />
-            </span>
-
-            <span className="sbs-brand-text">
-              <span className="sbs-brand-name">
-                Sharif Business
-              </span>
-
-              <span className="sbs-brand-subtitle">
-                Management Platform
-              </span>
-            </span>
+            <Image
+              src="/sbs-logo.png"
+              alt="Sharif Business Solutions"
+              width={205}
+              height={50}
+              className="sbs-brand-logo"
+              priority
+            />
           </button>
         </div>
 

@@ -1,19 +1,33 @@
 "use client";
 
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
   useState,
+  type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
-
-/* -------------------------------------------------------------------------- */
-/* Types                                                                      */
-/* -------------------------------------------------------------------------- */
+import {
+  Activity,
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Eye,
+  Filter,
+  Layers3,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Tags,
+  Warehouse,
+  X,
+} from "lucide-react";
 
 type Product = {
   id: string;
@@ -23,41 +37,13 @@ type Product = {
   description: string | null;
   category: string | null;
   brand: string | null;
-  product_type: "physical" | "digital" | "other";
-  status: "active" | "archived" | "draft";
+  product_type: string;
+  status: string;
   track_inventory: boolean;
   tax_rate: number;
+  tracking_mode: string;
   created_at: string;
   updated_at: string;
-};
-
-type ProductOptionValue = {
-  id: string;
-  company_id: string;
-  option_id: string;
-  value: string;
-  position: number;
-  created_at: string;
-};
-
-type ProductOption = {
-  id: string;
-  company_id: string;
-  product_id: string;
-  name: string;
-  position: number;
-  created_at: string;
-  updated_at: string;
-  product_option_values: ProductOptionValue[];
-};
-
-type ProductVariantValue = {
-  id: string;
-  company_id: string;
-  variant_id: string;
-  option_id: string;
-  option_value_id: string;
-  created_at: string;
 };
 
 type ProductVariant = {
@@ -73,1945 +59,2191 @@ type ProductVariant = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  product_variant_values: ProductVariantValue[];
 };
 
-type ProductWithVariants = Product & {
-  product_options: ProductOption[];
-  product_variants: ProductVariant[];
+type InventoryStock = {
+  product_id: string;
+  variant_id: string | null;
+  quantity: number;
+  reserved_quantity: number;
 };
 
-type SortKey =
-  | "name"
-  | "created_at"
-  | "selling_price"
-  | "cost_price"
-  | "margin"
-  | "variants";
+type ProductRow = Product & {
+  variants: ProductVariant[];
+  stock: number;
+  reserved: number;
+  available: number;
+};
 
-type SortDirection = "asc" | "desc";
+type StatCardProps = {
+  label: string;
+  value: string;
+  helper: string;
+  icon: ReactNode;
+};
 
-type IconName =
-  | "dashboard"
-  | "customers"
-  | "quotes"
-  | "orders"
-  | "invoices"
-  | "payments"
-  | "products"
-  | "serials"
-  | "inventory"
-  | "warehouses"
-  | "pricing"
-  | "suppliers"
-  | "purchases"
-  | "expenses"
-  | "warranty"
-  | "repairs"
-  | "rma"
-  | "portal"
-  | "reports"
-  | "employees"
-  | "documents"
-  | "settings"
-  | "search"
-  | "filter"
-  | "grid"
-  | "list"
-  | "plus"
-  | "package"
-  | "layers"
-  | "box"
-  | "dollar"
-  | "edit"
-  | "archive"
-  | "restore"
-  | "more"
-  | "refresh"
-  | "arrow"
-  | "warning"
-  | "check"
-  | "chevron"
-  | "close";
+const STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  archived: "Archived",
+};
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
+const PRODUCT_TYPE_LABELS: Record<string, string> = {
+  physical: "Physical",
+  service: "Service",
+  digital: "Digital",
+};
 
-function numberValue(value: string | number | null | undefined) {
-  const result = Number(value);
-  return Number.isFinite(result) ? result : 0;
-}
+function StatCard({
+  label,
+  value,
+  helper,
+  icon,
+}: StatCardProps) {
+  return (
+    <div className="stat-card">
+      <div className="stat-icon">{icon}</div>
 
-function getActiveVariants(product: ProductWithVariants) {
-  return product.product_variants.filter((variant) => variant.is_active);
-}
-
-function getProductPrices(product: ProductWithVariants) {
-  const variants = getActiveVariants(product);
-
-  if (variants.length === 0) {
-    return {
-      min: 0,
-      max: 0,
-    };
-  }
-
-  const prices = variants.map((variant) =>
-    numberValue(variant.selling_price)
-  );
-
-  return {
-    min: Math.min(...prices),
-    max: Math.max(...prices),
-  };
-}
-
-function getProductCost(product: ProductWithVariants) {
-  const variants = getActiveVariants(product);
-
-  if (variants.length === 0) {
-    return 0;
-  }
-
-  return Math.min(
-    ...variants.map((variant) => numberValue(variant.cost_price))
+      <div className="stat-copy">
+        <div className="stat-label">{label}</div>
+        <div className="stat-value">{value}</div>
+        <div className="stat-helper">{helper}</div>
+      </div>
+    </div>
   );
 }
 
-function getVariantMargin(variant: ProductVariant) {
-  const selling = numberValue(variant.selling_price);
-  const cost = numberValue(variant.cost_price);
-
-  if (selling <= 0) {
-    return 0;
-  }
-
-  return ((selling - cost) / selling) * 100;
-}
-
-function getProductMargin(product: ProductWithVariants) {
-  const variants = getActiveVariants(product);
-
-  if (variants.length === 0) {
-    return 0;
-  }
-
-  const total = variants.reduce(
-    (sum, variant) => sum + getVariantMargin(variant),
-    0
-  );
-
-  return total / variants.length;
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Icon                                                                       */
-/* -------------------------------------------------------------------------- */
+function normalize(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
 
-function Icon({
-  name,
-  size = 18,
-}: {
-  name: IconName;
-  size?: number;
-}) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    className: "shrink-0",
-  };
+function getStatusClass(status: string) {
+  switch (status) {
+    case "active":
+      return "status status-active";
 
-  switch (name) {
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
-        </svg>
-      );
+    case "inactive":
+      return "status status-inactive";
 
-    case "filter":
-      return (
-        <svg {...common}>
-          <path d="M4 6h16" />
-          <path d="M7 12h10" />
-          <path d="M10 18h4" />
-        </svg>
-      );
-
-    case "grid":
-      return (
-        <svg {...common}>
-          <rect x="4" y="4" width="6" height="6" rx="1" />
-          <rect x="14" y="4" width="6" height="6" rx="1" />
-          <rect x="4" y="14" width="6" height="6" rx="1" />
-          <rect x="14" y="14" width="6" height="6" rx="1" />
-        </svg>
-      );
-
-    case "list":
-      return (
-        <svg {...common}>
-          <path d="M8 6h12" />
-          <path d="M8 12h12" />
-          <path d="M8 18h12" />
-          <path d="M4 6h.01" />
-          <path d="M4 12h.01" />
-          <path d="M4 18h.01" />
-        </svg>
-      );
-
-    case "plus":
-      return (
-        <svg {...common}>
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
-      );
-
-    case "package":
-      return (
-        <svg {...common}>
-          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-          <path d="m4.5 7.5 7.5 4 7.5-4" />
-          <path d="M12 11.5V21" />
-        </svg>
-      );
-
-    case "layers":
-      return (
-        <svg {...common}>
-          <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-          <path d="m3 12 9 5 9-5" />
-          <path d="m3 16 9 5 9-5" />
-        </svg>
-      );
-
-    case "box":
-      return (
-        <svg {...common}>
-          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
-          <path d="M12 12 4.5 7.5" />
-          <path d="m12 12 7.5-4.5" />
-        </svg>
-      );
-
-    case "dollar":
-      return (
-        <svg {...common}>
-          <path d="M12 2v20" />
-          <path d="M17 5.5c-1-1-2.6-1.5-4.5-1.5-3 0-5 1.5-5 3.8 0 5.7 9.5 2.4 9.5 7.3 0 2.2-2 3.4-5 3.4-2 0-3.7-.6-4.8-1.7" />
-        </svg>
-      );
-
-    case "edit":
-      return (
-        <svg {...common}>
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z" />
-        </svg>
-      );
-
-    case "archive":
-      return (
-        <svg {...common}>
-          <path d="M4 7h16" />
-          <path d="M5 7v12h14V7" />
-          <path d="M7 4h10l2 3H5l2-3Z" />
-          <path d="M9 11h6" />
-        </svg>
-      );
-
-    case "restore":
-      return (
-        <svg {...common}>
-          <path d="M4 12a8 8 0 1 0 2.3-5.7" />
-          <path d="M4 4v5h5" />
-        </svg>
-      );
-
-    case "more":
-      return (
-        <svg {...common}>
-          <circle cx="5" cy="12" r="1" />
-          <circle cx="12" cy="12" r="1" />
-          <circle cx="19" cy="12" r="1" />
-        </svg>
-      );
-
-    case "refresh":
-      return (
-        <svg {...common}>
-          <path d="M20 11a8 8 0 0 0-14.9-4" />
-          <path d="M4 4v5h5" />
-          <path d="M4 13a8 8 0 0 0 14.9 4" />
-          <path d="M20 20v-5h-5" />
-        </svg>
-      );
-
-    case "arrow":
-      return (
-        <svg {...common}>
-          <path d="M5 12h13" />
-          <path d="m13 6 6 6-6 6" />
-        </svg>
-      );
-
-    case "warning":
-      return (
-        <svg {...common}>
-          <path d="M12 3 2.8 19a1 1 0 0 0 .9 1.5h16.6a1 1 0 0 0 .9-1.5L12 3Z" />
-          <path d="M12 9v4" />
-          <path d="M12 17h.01" />
-        </svg>
-      );
-
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="m5 12 4 4L19 6" />
-        </svg>
-      );
-
-    case "close":
-      return (
-        <svg {...common}>
-          <path d="m6 6 12 12" />
-          <path d="m18 6-12 12" />
-        </svg>
-      );
-
-    case "chevron":
-      return (
-        <svg {...common}>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      );
+    case "archived":
+      return "status status-archived";
 
     default:
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="8" />
-        </svg>
-      );
+      return "status";
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Page                                                                       */
-/* -------------------------------------------------------------------------- */
+function getTrackingLabel(product: Product) {
+  const tracked =
+    Boolean(product.track_inventory) ||
+    normalize(product.tracking_mode) !== "none";
+
+  return tracked ? "Tracked" : "Not Tracked";
+}
+
+function isTracked(product: Product) {
+  return (
+    Boolean(product.track_inventory) ||
+    normalize(product.tracking_mode) !== "none"
+  );
+}
 
 export default function ProductsPage() {
   const router = useRouter();
+
   const supabase = useMemo(() => createClient(), []);
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [currency, setCurrency] = useState("USD");
-
-  const [products, setProducts] = useState<ProductWithVariants[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [stockRows, setStockRows] = useState<InventoryStock[]>([]);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "active" | "draft" | "archived"
-  >("all");
-  const [typeFilter, setTypeFilter] = useState<
-    "all" | "physical" | "digital" | "other"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [trackingFilter, setTrackingFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [brandFilter, setBrandFilter] = useState("all");
 
-  const [sortKey, setSortKey] =
-    useState<SortKey>("created_at");
-
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>("desc");
-
-  const [viewMode, setViewMode] =
-    useState<"list" | "grid">("list");
-
-  const [selectedProductIds, setSelectedProductIds] =
-    useState<string[]>([]);
-
-  const [actionProductId, setActionProductId] =
+  const [expandedProductId, setExpandedProductId] =
     useState<string | null>(null);
 
-  /* ------------------------------------------------------------------------ */
-  /* Currency                                                                 */
-  /* ------------------------------------------------------------------------ */
-
-  const money = useCallback(
-    (value: number) =>
-      new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(numberValue(value)),
-    [currency]
-  );
-
-  /* ------------------------------------------------------------------------ */
-  /* Company                                                                  */
-  /* ------------------------------------------------------------------------ */
-
-  const getCompanyMembership = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      router.replace("/login");
-      throw new Error("You must be signed in.");
-    }
-
-    const { data, error: membershipError } = await supabase
-      .from("company_members")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (membershipError) {
-      throw membershipError;
-    }
-
-    if (!data?.company_id) {
-      throw new Error("No company membership was found.");
-    }
-
-    return data.company_id as string;
-  }, [router, supabase]);
-
-  const loadCompany = useCallback(
-    async (id: string) => {
-      const { data, error: companyError } = await supabase
-        .from("companies")
-        .select("currency")
-        .eq("id", id)
-        .single();
-
-      if (companyError) {
-        throw companyError;
-      }
-
-      setCurrency(data?.currency || "USD");
-    },
-    [supabase]
-  );
-
-  /* ------------------------------------------------------------------------ */
-  /* Products                                                                 */
-  /* ------------------------------------------------------------------------ */
+  const [showFilters, setShowFilters] = useState(false);
 
   const loadProducts = useCallback(
-    async (id: string) => {
-      setLoading(true);
-      setError(null);
+    async (showRefresh = false) => {
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setErrorMessage("");
+      setSuccessMessage("");
 
       try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        const {
+          data: membership,
+          error: membershipError,
+        } = await supabase
+          .from("company_members")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (membershipError) {
+          throw membershipError;
+        }
+
+        if (!membership?.company_id) {
+          throw new Error(
+            "No company workspace is available for this account."
+          );
+        }
+
+        const companyId = membership.company_id;
+
         const [
-          productsResult,
-          optionsResult,
-          optionValuesResult,
-          variantsResult,
-          variantValuesResult,
+          { data: productData, error: productError },
+          { data: variantData, error: variantError },
+          { data: stockData, error: stockError },
         ] = await Promise.all([
           supabase
             .from("products")
             .select(
-              "id, company_id, name, slug, description, category, brand, product_type, status, track_inventory, tax_rate, created_at, updated_at"
+              `
+                id,
+                company_id,
+                name,
+                slug,
+                description,
+                category,
+                brand,
+                product_type,
+                status,
+                track_inventory,
+                tax_rate,
+                tracking_mode,
+                created_at,
+                updated_at
+              `
             )
-            .eq("company_id", id)
-            .order("created_at", { ascending: false }),
-
-          supabase
-            .from("product_options")
-            .select(
-              "id, company_id, product_id, name, position, created_at, updated_at"
-            )
-            .eq("company_id", id)
-            .order("position", { ascending: true }),
-
-          supabase
-            .from("product_option_values")
-            .select(
-              "id, company_id, option_id, value, position, created_at"
-            )
-            .eq("company_id", id)
-            .order("position", { ascending: true }),
+            .eq("company_id", companyId)
+            .order("name", {
+              ascending: true,
+            }),
 
           supabase
             .from("product_variants")
             .select(
-              "id, company_id, product_id, name, sku, barcode, cost_price, selling_price, is_default, is_active, created_at, updated_at"
+              `
+                id,
+                company_id,
+                product_id,
+                name,
+                sku,
+                barcode,
+                cost_price,
+                selling_price,
+                is_default,
+                is_active,
+                created_at,
+                updated_at
+              `
             )
-            .eq("company_id", id)
-            .order("created_at", { ascending: true }),
+            .eq("company_id", companyId)
+            .order("is_default", {
+              ascending: false,
+            })
+            .order("name", {
+              ascending: true,
+            }),
 
           supabase
-            .from("product_variant_values")
+            .from("inventory_batch_stock")
             .select(
-              "id, company_id, variant_id, option_id, option_value_id, created_at"
+              `
+                product_id,
+                variant_id,
+                quantity,
+                reserved_quantity
+              `
             )
-            .eq("company_id", id),
+            .eq("company_id", companyId),
         ]);
 
-        if (productsResult.error) {
-          throw productsResult.error;
+        if (productError) {
+          throw productError;
         }
 
-        if (optionsResult.error) {
-          throw optionsResult.error;
+        if (variantError) {
+          throw variantError;
         }
 
-        if (optionValuesResult.error) {
-          throw optionValuesResult.error;
+        if (stockError) {
+          throw stockError;
         }
 
-        if (variantsResult.error) {
-          throw variantsResult.error;
-        }
+        setProducts((productData || []) as Product[]);
+        setVariants((variantData || []) as ProductVariant[]);
+        setStockRows((stockData || []) as InventoryStock[]);
+      } catch (error) {
+        console.error(error);
 
-        if (variantValuesResult.error) {
-          throw variantValuesResult.error;
-        }
-
-        const rawProducts =
-          (productsResult.data || []) as Product[];
-
-        const rawOptions =
-          (optionsResult.data || []) as ProductOption[];
-
-        const rawOptionValues =
-          (optionValuesResult.data ||
-            []) as ProductOptionValue[];
-
-        const rawVariants =
-          (variantsResult.data || []) as ProductVariant[];
-
-        const rawVariantValues =
-          (variantValuesResult.data ||
-            []) as ProductVariantValue[];
-
-        const productsWithVariants: ProductWithVariants[] =
-          rawProducts.map((product) => {
-            const productOptions = rawOptions
-              .filter(
-                (option) => option.product_id === product.id
-              )
-              .map((option) => ({
-                ...option,
-                product_option_values:
-                  rawOptionValues.filter(
-                    (value) =>
-                      value.option_id === option.id
-                  ),
-              }));
-
-            const productVariants = rawVariants
-              .filter(
-                (variant) =>
-                  variant.product_id === product.id
-              )
-              .map((variant) => ({
-                ...variant,
-                product_variant_values:
-                  rawVariantValues.filter(
-                    (value) =>
-                      value.variant_id === variant.id
-                  ),
-              }));
-
-            return {
-              ...product,
-              product_options: productOptions,
-              product_variants: productVariants,
-            };
-          });
-
-        setProducts(productsWithVariants);
-      } catch (loadError) {
-        console.error(loadError);
-
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Unable to load products."
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to load products."
         );
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     },
-    [supabase]
+    [router, supabase]
   );
 
   useEffect(() => {
-    let mounted = true;
+    loadProducts();
+  }, [loadProducts]);
 
-    async function initialize() {
-      try {
-        const id = await getCompanyMembership();
+  const productRows = useMemo<ProductRow[]>(() => {
+    const variantsByProduct = new Map<string, ProductVariant[]>();
 
-        if (!mounted) {
-          return;
-        }
+    for (const variant of variants) {
+      const current =
+        variantsByProduct.get(variant.product_id) || [];
 
-        setCompanyId(id);
-
-        await Promise.all([
-          loadCompany(id),
-          loadProducts(id),
-        ]);
-      } catch (initError) {
-        console.error(initError);
-
-        if (mounted) {
-          setError(
-            initError instanceof Error
-              ? initError.message
-              : "Unable to load your workspace."
-          );
-
-          setLoading(false);
-        }
-      }
+      current.push(variant);
+      variantsByProduct.set(
+        variant.product_id,
+        current
+      );
     }
 
-    void initialize();
+    const stockByProduct = new Map<
+      string,
+      { quantity: number; reserved: number }
+    >();
 
-    return () => {
-      mounted = false;
-    };
-  }, [
-    getCompanyMembership,
-    loadCompany,
-    loadProducts,
-  ]);
+    for (const stock of stockRows) {
+      const current = stockByProduct.get(
+        stock.product_id
+      ) || {
+        quantity: 0,
+        reserved: 0,
+      };
 
-  /* ------------------------------------------------------------------------ */
-  /* Filtering                                                                */
-  /* ------------------------------------------------------------------------ */
+      current.quantity += Number(stock.quantity || 0);
+      current.reserved += Number(
+        stock.reserved_quantity || 0
+      );
+
+      stockByProduct.set(
+        stock.product_id,
+        current
+      );
+    }
+
+    return products.map((product) => {
+      const stock =
+        stockByProduct.get(product.id) || {
+          quantity: 0,
+          reserved: 0,
+        };
+
+      return {
+        ...product,
+        variants:
+          variantsByProduct.get(product.id) || [],
+        stock: stock.quantity,
+        reserved: stock.reserved,
+        available: Math.max(
+          stock.quantity - stock.reserved,
+          0
+        ),
+      };
+    });
+  }, [products, variants, stockRows]);
+
+  const categories = useMemo(() => {
+    return Array.from(
+      new Set(
+        products
+          .map((product) => product.category?.trim())
+          .filter(Boolean) as string[]
+      )
+    ).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [products]);
+
+  const brands = useMemo(() => {
+    return Array.from(
+      new Set(
+        products
+          .map((product) => product.brand?.trim())
+          .filter(Boolean) as string[]
+      )
+    ).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = normalize(search);
 
-    const result = products.filter((product) => {
+    return productRows.filter((product) => {
+      const searchable = [
+        product.name,
+        product.brand,
+        product.category,
+        product.slug,
+        product.product_type,
+        ...product.variants.flatMap((variant) => [
+          variant.name,
+          variant.sku,
+          variant.barcode,
+        ]),
+      ]
+        .filter(Boolean)
+        .map((value) => normalize(value))
+        .join(" ");
+
+      const matchesSearch =
+        !query || searchable.includes(query);
+
       const matchesStatus =
         statusFilter === "all" ||
         product.status === statusFilter;
 
-      const matchesType =
-        typeFilter === "all" ||
-        product.product_type === typeFilter;
+      const matchesTracking =
+        trackingFilter === "all" ||
+        (trackingFilter === "tracked" &&
+          isTracked(product)) ||
+        (trackingFilter === "untracked" &&
+          !isTracked(product));
 
-      if (!matchesStatus || !matchesType) {
-        return false;
-      }
+      const matchesCategory =
+        categoryFilter === "all" ||
+        product.category === categoryFilter;
 
-      if (!query) {
-        return true;
-      }
+      const matchesBrand =
+        brandFilter === "all" ||
+        product.brand === brandFilter;
 
-      const variantText = product.product_variants
-        .flatMap((variant) => [
-          variant.name,
-          variant.sku || "",
-          variant.barcode || "",
-        ])
-        .join(" ");
-
-      const optionText = product.product_options
-        .flatMap((option) => [
-          option.name,
-          ...option.product_option_values.map(
-            (value) => value.value
-          ),
-        ])
-        .join(" ");
-
-      const searchable = [
-        product.name,
-        product.description || "",
-        product.category || "",
-        product.brand || "",
-        product.product_type,
-        product.status,
-        variantText,
-        optionText,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(query);
-    });
-
-    return result.sort((a, b) => {
-      let comparison = 0;
-
-      if (sortKey === "name") {
-        comparison = a.name.localeCompare(b.name);
-      }
-
-      if (sortKey === "created_at") {
-        comparison =
-          new Date(a.created_at).getTime() -
-          new Date(b.created_at).getTime();
-      }
-
-      if (sortKey === "selling_price") {
-        comparison =
-          getProductPrices(a).min -
-          getProductPrices(b).min;
-      }
-
-      if (sortKey === "cost_price") {
-        comparison =
-          getProductCost(a) -
-          getProductCost(b);
-      }
-
-      if (sortKey === "margin") {
-        comparison =
-          getProductMargin(a) -
-          getProductMargin(b);
-      }
-
-      if (sortKey === "variants") {
-        comparison =
-          a.product_variants.length -
-          b.product_variants.length;
-      }
-
-      return sortDirection === "asc"
-        ? comparison
-        : -comparison;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesTracking &&
+        matchesCategory &&
+        matchesBrand
+      );
     });
   }, [
-    products,
+    productRows,
     search,
     statusFilter,
-    typeFilter,
-    sortKey,
-    sortDirection,
+    trackingFilter,
+    categoryFilter,
+    brandFilter,
   ]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Statistics                                                               */
-  /* ------------------------------------------------------------------------ */
-
   const stats = useMemo(() => {
+    const total = products.length;
+
     const active = products.filter(
       (product) => product.status === "active"
     ).length;
 
-    const drafts = products.filter(
-      (product) => product.status === "draft"
+    const tracked = products.filter(isTracked).length;
+
+    const untracked = total - tracked;
+
+    const totalVariants = variants.length;
+
+    const lowStock = productRows.filter(
+      (product) =>
+        isTracked(product) &&
+        product.available <= 0
     ).length;
-
-    const archived = products.filter(
-      (product) => product.status === "archived"
-    ).length;
-
-    const variants = products.reduce(
-      (sum, product) =>
-        sum + product.product_variants.length,
-      0
-    );
-
-    const inventoryTracked = products.filter(
-      (product) => product.track_inventory
-    ).length;
-
-    const margins = products.flatMap((product) =>
-      getActiveVariants(product).map(getVariantMargin)
-    );
-
-    const averageMargin =
-      margins.length > 0
-        ? margins.reduce((sum, margin) => sum + margin, 0) /
-          margins.length
-        : 0;
 
     return {
-      total: products.length,
+      total,
       active,
-      drafts,
-      archived,
-      variants,
-      inventoryTracked,
-      averageMargin,
+      tracked,
+      untracked,
+      totalVariants,
+      lowStock,
     };
-  }, [products]);
+  }, [products, variants, productRows]);
 
-  /* ------------------------------------------------------------------------ */
-  /* Selection                                                                */
-  /* ------------------------------------------------------------------------ */
+  const hasFilters =
+    search.trim() !== "" ||
+    statusFilter !== "all" ||
+    trackingFilter !== "all" ||
+    categoryFilter !== "all" ||
+    brandFilter !== "all";
 
-  function toggleProductSelection(id: string) {
-    setSelectedProductIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
+  function clearFilters() {
+    setSearch("");
+    setStatusFilter("all");
+    setTrackingFilter("all");
+    setCategoryFilter("all");
+    setBrandFilter("all");
+  }
+
+  function toggleExpanded(productId: string) {
+    setExpandedProductId((current) =>
+      current === productId ? null : productId
     );
   }
 
-  function toggleSelectAll() {
-    if (
-      selectedProductIds.length ===
-      filteredProducts.length
-    ) {
-      setSelectedProductIds([]);
-      return;
-    }
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="page-content inventory-page">
+          <div className="loading-card">
+            <div className="spinner" />
+            <span>Loading products...</span>
+          </div>
 
-    setSelectedProductIds(
-      filteredProducts.map((product) => product.id)
+          <style jsx>{styles}</style>
+        </div>
+      </AppShell>
     );
   }
-
-  function changeSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDirection((current) =>
-        current === "asc" ? "desc" : "asc"
-      );
-      return;
-    }
-
-    setSortKey(key);
-    setSortDirection("asc");
-  }
-
-  /* ------------------------------------------------------------------------ */
-  /* Archive / Restore                                                        */
-  /* ------------------------------------------------------------------------ */
-
-  async function changeProductStatus(
-    product: ProductWithVariants
-  ) {
-    if (!companyId) {
-      return;
-    }
-
-    setActionProductId(product.id);
-    setError(null);
-
-    const nextStatus =
-      product.status === "archived"
-        ? "active"
-        : "archived";
-
-    try {
-      const { error: updateError } = await supabase
-        .from("products")
-        .update({
-          status: nextStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", product.id)
-        .eq("company_id", companyId);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      setProducts((current) =>
-        current.map((item) =>
-          item.id === product.id
-            ? {
-                ...item,
-                status: nextStatus,
-              }
-            : item
-        )
-      );
-    } catch (statusError) {
-      console.error(statusError);
-
-      setError(
-        statusError instanceof Error
-          ? statusError.message
-          : "Unable to update the product."
-      );
-    } finally {
-      setActionProductId(null);
-    }
-  }
-
-  /* ------------------------------------------------------------------------ */
-  /* Render                                                                   */
-  /* ------------------------------------------------------------------------ */
 
   return (
-    <AppShell
-      title="Products"
-      description="Manage your product catalog, pricing, variants, and inventory settings."
-      actions={
-        <button
-          type="button"
-          onClick={() => router.push("/products/new")}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-        >
-          <Icon name="plus" size={17} />
-          Add Product
-        </button>
-      }
-    >
-      <div className="space-y-6">
-        {error && (
-          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <Icon name="warning" size={18} />
+    <AppShell>
+      <div className="page-content inventory-page">
+        <div className="page-header">
+          <div>
+            <div className="eyebrow">
+              <span className="eyebrow-dot" />
+              INVENTORY CATALOG
+            </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">
-                Something went wrong
-              </div>
+            <h1 className="page-title">
+              Products
+            </h1>
 
-              <div className="mt-0.5 break-words">
-                {error}
-              </div>
+            <p className="page-subtitle">
+              Manage your product catalog, variants and
+              inventory tracking behavior.
+            </p>
+          </div>
+
+          <div className="header-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => loadProducts(true)}
+              disabled={refreshing}
+            >
+              <RefreshCw
+                size={16}
+                className={
+                  refreshing ? "spin" : ""
+                }
+              />
+              Refresh
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() =>
+                router.push("/products/new")
+              }
+            >
+              <Plus size={17} />
+              New Product
+            </button>
+          </div>
+        </div>
+
+        {errorMessage ? (
+          <div className="alert alert-error">
+            <CircleAlert size={18} />
+            <div>
+              <strong>Unable to load products</strong>
+              <span>{errorMessage}</span>
             </div>
 
             <button
               type="button"
-              onClick={() => setError(null)}
-              className="rounded-lg p-1 transition hover:bg-red-100"
+              className="alert-close"
+              onClick={() => setErrorMessage("")}
             >
-              <Icon name="close" size={15} />
+              <X size={16} />
             </button>
           </div>
-        )}
+        ) : null}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Summary cards                                                     */}
-        {/* ---------------------------------------------------------------- */}
+        {successMessage ? (
+          <div className="alert alert-success">
+            <Activity size={18} />
+            <span>{successMessage}</span>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <SummaryCard
-            icon="package"
+            <button
+              type="button"
+              className="alert-close"
+              onClick={() => setSuccessMessage("")}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
+
+        <div className="stats-grid">
+          <StatCard
             label="Total Products"
-            value={stats.total}
-            description="Across your catalog"
+            value={formatNumber(stats.total)}
+            helper="Catalog products"
+            icon={<Package size={19} />}
           />
 
-          <SummaryCard
-            icon="check"
+          <StatCard
             label="Active"
-            value={stats.active}
-            description="Currently enabled"
+            value={formatNumber(stats.active)}
+            helper="Currently active"
+            icon={<Activity size={19} />}
           />
 
-          <SummaryCard
-            icon="layers"
-            label="Variants"
-            value={stats.variants}
-            description="Configured variants"
+          <StatCard
+            label="Tracked"
+            value={formatNumber(stats.tracked)}
+            helper="Inventory managed"
+            icon={<Warehouse size={19} />}
           />
 
-          <SummaryCard
-            icon="box"
-            label="Inventory Tracked"
-            value={stats.inventoryTracked}
-            description="Products linked to stock"
+          <StatCard
+            label="Not Tracked"
+            value={formatNumber(stats.untracked)}
+            helper="No inventory tracking"
+            icon={<Archive size={19} />}
           />
 
-          <SummaryCard
-            icon="dollar"
-            label="Average Margin"
-            value={`${stats.averageMargin.toFixed(1)}%`}
-            description="Across active variants"
+          <StatCard
+            label="Total Variants"
+            value={formatNumber(
+              stats.totalVariants
+            )}
+            helper="Product variants"
+            icon={<Layers3 size={19} />}
+          />
+
+          <StatCard
+            label="Out of Stock"
+            value={formatNumber(stats.lowStock)}
+            helper="Tracked products"
+            icon={<CircleAlert size={19} />}
           />
         </div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Catalog                                                            */}
-        {/* ---------------------------------------------------------------- */}
+        <div className="toolbar-card">
+          <div className="search-wrap">
+            <Search size={17} />
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {/* Toolbar */}
-          <div className="border-b border-slate-200 p-4">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="relative min-w-0 flex-1 xl:max-w-2xl">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Icon name="search" size={18} />
-                </div>
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Search products, SKU, barcode, brand..."
+            />
 
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(event.target.value)
-                  }
-                  placeholder="Search products, SKU, barcode, brand, category..."
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                />
+            {search ? (
+              <button
+                type="button"
+                className="clear-search"
+                onClick={() => setSearch("")}
+              >
+                <X size={15} />
+              </button>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            className={`filter-toggle ${
+              showFilters ? "active" : ""
+            }`}
+            onClick={() =>
+              setShowFilters((value) => !value)
+            }
+          >
+            <SlidersHorizontal size={16} />
+            Filters
+            {hasFilters ? (
+              <span className="filter-count">
+                {
+                  [
+                    search.trim() !== "",
+                    statusFilter !== "all",
+                    trackingFilter !== "all",
+                    categoryFilter !== "all",
+                    brandFilter !== "all",
+                  ].filter(Boolean).length
+                }
+              </span>
+            ) : null}
+          </button>
+
+          {hasFilters ? (
+            <button
+              type="button"
+              className="clear-filters"
+              onClick={clearFilters}
+            >
+              Clear all
+            </button>
+          ) : null}
+        </div>
+
+        {showFilters ? (
+          <div className="filters-card">
+            <div className="filter-group">
+              <label>Status</label>
+
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value)
+                }
+              >
+                <option value="all">
+                  All statuses
+                </option>
+                <option value="active">
+                  Active
+                </option>
+                <option value="inactive">
+                  Inactive
+                </option>
+                <option value="archived">
+                  Archived
+                </option>
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label>Inventory Tracking</label>
+
+              <select
+                value={trackingFilter}
+                onChange={(event) =>
+                  setTrackingFilter(
+                    event.target.value
+                  )
+                }
+              >
+                <option value="all">
+                  All tracking
+                </option>
+                <option value="tracked">
+                  Tracked
+                </option>
+                <option value="untracked">
+                  Not Tracked
+                </option>
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label>Category</label>
+
+              <select
+                value={categoryFilter}
+                onChange={(event) =>
+                  setCategoryFilter(
+                    event.target.value
+                  )
+                }
+              >
+                <option value="all">
+                  All categories
+                </option>
+
+                {categories.map((category) => (
+                  <option
+                    key={category}
+                    value={category}
+                  >
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label>Brand</label>
+
+              <select
+                value={brandFilter}
+                onChange={(event) =>
+                  setBrandFilter(
+                    event.target.value
+                  )
+                }
+              >
+                <option value="all">
+                  All brands
+                </option>
+
+                {brands.map((brand) => (
+                  <option
+                    key={brand}
+                    value={brand}
+                  >
+                    {brand}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="content-card">
+          <div className="content-card-header">
+            <div>
+              <div className="section-title">
+                Product Catalog
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <FilterSelect
-                  value={statusFilter}
-                  onChange={(value) =>
-                    setStatusFilter(
-                      value as
-                        | "all"
-                        | "active"
-                        | "draft"
-                        | "archived"
-                    )
-                  }
-                  options={[
-                    {
-                      value: "all",
-                      label: "All statuses",
-                    },
-                    {
-                      value: "active",
-                      label: "Active",
-                    },
-                    {
-                      value: "draft",
-                      label: "Drafts",
-                    },
-                    {
-                      value: "archived",
-                      label: "Archived",
-                    },
-                  ]}
-                />
-
-                <FilterSelect
-                  value={typeFilter}
-                  onChange={(value) =>
-                    setTypeFilter(
-                      value as
-                        | "all"
-                        | "physical"
-                        | "digital"
-                        | "other"
-                    )
-                  }
-                  options={[
-                    {
-                      value: "all",
-                      label: "All types",
-                    },
-                    {
-                      value: "physical",
-                      label: "Physical",
-                    },
-                    {
-                      value: "digital",
-                      label: "Digital",
-                    },
-                    {
-                      value: "other",
-                      label: "Other",
-                    },
-                  ]}
-                />
-
-                <div className="hidden h-6 w-px bg-slate-200 sm:block" />
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    companyId
-                      ? void loadProducts(companyId)
-                      : undefined
-                  }
-                  disabled={!companyId || loading}
-                  title="Refresh"
-                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Icon name="refresh" size={16} />
-                </button>
-
-                <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("list")}
-                    className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                      viewMode === "list"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-400 hover:text-slate-700"
-                    }`}
-                    title="List view"
-                  >
-                    <Icon name="list" size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("grid")}
-                    className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                      viewMode === "grid"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-400 hover:text-slate-700"
-                    }`}
-                    title="Grid view"
-                  >
-                    <Icon name="grid" size={16} />
-                  </button>
-                </div>
+              <div className="section-helper">
+                {filteredProducts.length ===
+                products.length
+                  ? `${formatNumber(
+                      products.length
+                    )} products`
+                  : `${formatNumber(
+                      filteredProducts.length
+                    )} of ${formatNumber(
+                      products.length
+                    )} products`}
               </div>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span>
-                  Showing{" "}
-                  <strong className="font-semibold text-slate-700">
-                    {filteredProducts.length}
-                  </strong>{" "}
-                  of{" "}
-                  <strong className="font-semibold text-slate-700">
-                    {products.length}
-                  </strong>{" "}
-                  products
-                </span>
-
-                {selectedProductIds.length > 0 && (
-                  <>
-                    <span className="text-slate-300">
-                      •
-                    </span>
-
-                    <span className="font-medium text-blue-600">
-                      {selectedProductIds.length} selected
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Icon name="filter" size={14} />
-
-                <span className="text-xs text-slate-400">
-                  Sort:
-                </span>
-
-                <select
-                  value={sortKey}
-                  onChange={(event) =>
-                    setSortKey(
-                      event.target.value as SortKey
-                    )
-                  }
-                  className="rounded-md border-0 bg-transparent py-1 pl-1 pr-7 text-xs font-medium text-slate-700 outline-none focus:ring-0"
-                >
-                  <option value="created_at">
-                    Newest
-                  </option>
-                  <option value="name">Name</option>
-                  <option value="selling_price">
-                    Selling price
-                  </option>
-                  <option value="cost_price">
-                    Cost price
-                  </option>
-                  <option value="margin">Margin</option>
-                  <option value="variants">
-                    Variants
-                  </option>
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSortDirection((current) =>
-                      current === "asc"
-                        ? "desc"
-                        : "asc"
-                    )
-                  }
-                  className="rounded-md px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                  title={`Sort ${
-                    sortDirection === "asc"
-                      ? "descending"
-                      : "ascending"
-                  }`}
-                >
-                  {sortDirection === "asc" ? "↑" : "↓"}
-                </button>
-              </div>
+            <div className="table-meta">
+              <Tags size={15} />
+              {hasFilters
+                ? "Filtered results"
+                : "All products"}
             </div>
           </div>
 
-          {/* Bulk selection */}
-          {selectedProductIds.length > 0 && (
-            <div className="flex flex-col gap-2 border-b border-blue-100 bg-blue-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-blue-800">
-                  {selectedProductIds.length} product
-                  {selectedProductIds.length === 1
-                    ? ""
-                    : "s"}{" "}
-                  selected
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSelectedProductIds([])
-                  }
-                  className="text-xs font-medium text-blue-600 hover:text-blue-800"
-                >
-                  Clear
-                </button>
+          {filteredProducts.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">
+                <Package size={25} />
               </div>
 
-              <span className="text-xs text-blue-600">
-                Bulk actions will be available as the
-                catalog workflow expands.
-              </span>
+              <h3>
+                {products.length === 0
+                  ? "No products yet"
+                  : "No matching products"}
+              </h3>
+
+              <p>
+                {products.length === 0
+                  ? "Create your first product to start building your catalog."
+                  : "Try changing your search or filters."}
+              </p>
+
+              <div className="empty-actions">
+                {products.length === 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() =>
+                      router.push(
+                        "/products/new"
+                      )
+                    }
+                  >
+                    <Plus size={16} />
+                    New Product
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={clearFilters}
+                  >
+                    <Filter size={16} />
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table className="products-table">
+                <thead>
+                  <tr>
+                    <th className="product-column">
+                      Product
+                    </th>
+                    <th>Brand</th>
+                    <th>Category</th>
+                    <th>Variants</th>
+                    <th>Tracking</th>
+                    <th>Stock</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th className="actions-column">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredProducts.map(
+                    (product) => {
+                      const expanded =
+                        expandedProductId ===
+                        product.id;
+
+                      const defaultVariant =
+                        product.variants.find(
+                          (variant) =>
+                            variant.is_default
+                        ) ||
+                        product.variants[0];
+
+                      return (
+                        <React.Fragment
+                          key={product.id}
+                        >
+                          <tr
+                            className={
+                              expanded
+                                ? "product-row expanded"
+                                : "product-row"
+                            }
+                          >
+                            <td>
+                              <div className="product-cell">
+                                <button
+                                  type="button"
+                                  className="expand-button"
+                                  onClick={() =>
+                                    toggleExpanded(
+                                      product.id
+                                    )
+                                  }
+                                  aria-label={
+                                    expanded
+                                      ? "Collapse product"
+                                      : "Expand product"
+                                  }
+                                >
+                                  {expanded ? (
+                                    <ChevronDown
+                                      size={16}
+                                    />
+                                  ) : (
+                                    <ChevronRight
+                                      size={16}
+                                    />
+                                  )}
+                                </button>
+
+                                <div className="product-avatar">
+                                  <Package
+                                    size={18}
+                                  />
+                                </div>
+
+                                <div className="product-copy">
+                                  <button
+                                    type="button"
+                                    className="product-name"
+                                    onClick={() =>
+                                      router.push(
+                                        `/products/${product.id}`
+                                      )
+                                    }
+                                  >
+                                    {product.name}
+                                  </button>
+
+                                  <div className="product-sub">
+                                    {defaultVariant
+                                      ?.sku ||
+                                      defaultVariant
+                                        ?.barcode ||
+                                      PRODUCT_TYPE_LABELS[
+                                        product.product_type
+                                      ] ||
+                                      product.product_type}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td>
+                              <span className="muted-cell">
+                                {product.brand ||
+                                  "—"}
+                              </span>
+                            </td>
+
+                            <td>
+                              <span className="category-pill">
+                                {product.category ||
+                                  "Uncategorized"}
+                              </span>
+                            </td>
+
+                            <td>
+                              <div className="variant-count">
+                                <Layers3
+                                  size={14}
+                                />
+                                {product.variants.length}
+                              </div>
+                            </td>
+
+                            <td>
+                              <span
+                                className={
+                                  isTracked(product)
+                                    ? "tracking-pill tracked"
+                                    : "tracking-pill untracked"
+                                }
+                              >
+                                <span className="tracking-dot" />
+                                {getTrackingLabel(
+                                  product
+                                )}
+                              </span>
+                            </td>
+
+                            <td>
+                              {isTracked(product) ? (
+                                <div className="stock-cell">
+                                  <strong>
+                                    {formatNumber(
+                                      product.available
+                                    )}
+                                  </strong>
+
+                                  <span>
+                                    {product.reserved >
+                                    0
+                                      ? `${formatNumber(
+                                          product.reserved
+                                        )} reserved`
+                                      : "available"}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="muted-cell">
+                                  —
+                                </span>
+                              )}
+                            </td>
+
+                            <td>
+                              <span
+                                className={getStatusClass(
+                                  product.status
+                                )}
+                              >
+                                <span className="status-dot" />
+                                {STATUS_LABELS[
+                                  product.status
+                                ] ||
+                                  product.status}
+                              </span>
+                            </td>
+
+                            <td>
+                              <span className="date-cell">
+                                {formatDate(
+                                  product.updated_at
+                                )}
+                              </span>
+                            </td>
+
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  type="button"
+                                  className="icon-action"
+                                  title="View product"
+                                  onClick={() =>
+                                    router.push(
+                                      `/products/${product.id}`
+                                    )
+                                  }
+                                >
+                                  <Eye size={16} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="icon-action"
+                                  title="Manage product"
+                                  onClick={() =>
+                                    router.push(
+                                      `/products/${product.id}/edit`
+                                    )
+                                  }
+                                >
+                                  <SlidersHorizontal
+                                    size={16}
+                                  />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {expanded ? (
+                            <tr className="variant-detail-row">
+                              <td
+                                colSpan={9}
+                              >
+                                <div className="variant-panel">
+                                  <div className="variant-panel-header">
+                                    <div>
+                                      <div className="variant-panel-title">
+                                        Variants
+                                      </div>
+                                      <div className="variant-panel-helper">
+                                        {product.variants.length ===
+                                        0
+                                          ? "No variants configured."
+                                          : `${formatNumber(
+                                              product
+                                                .variants
+                                                .length
+                                            )} variant${
+                                              product
+                                                .variants
+                                                .length ===
+                                              1
+                                                ? ""
+                                                : "s"
+                                            }`}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      className="btn btn-small"
+                                      onClick={() =>
+                                        router.push(
+                                          `/products/${product.id}/edit`
+                                        )
+                                      }
+                                    >
+                                      Manage Variants
+                                      <ChevronRight
+                                        size={15}
+                                      />
+                                    </button>
+                                  </div>
+
+                                  {product
+                                    .variants
+                                    .length >
+                                  0 ? (
+                                    <div className="variant-grid">
+                                      {product.variants.map(
+                                        (
+                                          variant
+                                        ) => (
+                                          <div
+                                            key={
+                                              variant.id
+                                            }
+                                            className="variant-card"
+                                          >
+                                            <div className="variant-card-top">
+                                              <div className="variant-icon">
+                                                <Layers3
+                                                  size={
+                                                    16
+                                                  }
+                                                />
+                                              </div>
+
+                                              <div className="variant-name">
+                                                {
+                                                  variant.name
+                                                }
+
+                                                {variant.is_default ? (
+                                                  <span className="default-badge">
+                                                    Default
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                            </div>
+
+                                            <div className="variant-meta">
+                                              <div>
+                                                <span>
+                                                  SKU
+                                                </span>
+                                                <strong>
+                                                  {variant.sku ||
+                                                    "—"}
+                                                </strong>
+                                              </div>
+
+                                              <div>
+                                                <span>
+                                                  Barcode
+                                                </span>
+                                                <strong>
+                                                  {variant.barcode ||
+                                                    "—"}
+                                                </strong>
+                                              </div>
+
+                                              <div>
+                                                <span>
+                                                  Cost
+                                                </span>
+                                                <strong>
+                                                  {new Intl.NumberFormat(
+                                                    "en-US",
+                                                    {
+                                                      style:
+                                                        "currency",
+                                                      currency:
+                                                        "USD",
+                                                      maximumFractionDigits: 2,
+                                                    }
+                                                  ).format(
+                                                    Number(
+                                                      variant.cost_price ||
+                                                        0
+                                                    )
+                                                  )}
+                                                </strong>
+                                              </div>
+
+                                              <div>
+                                                <span>
+                                                  Sell
+                                                </span>
+                                                <strong>
+                                                  {new Intl.NumberFormat(
+                                                    "en-US",
+                                                    {
+                                                      style:
+                                                        "currency",
+                                                      currency:
+                                                        "USD",
+                                                      maximumFractionDigits: 2,
+                                                    }
+                                                  ).format(
+                                                    Number(
+                                                      variant.selling_price ||
+                                                        0
+                                                    )
+                                                  )}
+                                                </strong>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="variant-empty">
+                                      <Layers3
+                                        size={18}
+                                      />
+                                      <span>
+                                        This product does
+                                        not have any
+                                        variants yet.
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </React.Fragment>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
+        </div>
 
-          {/* Loading */}
-          {loading ? (
-            <LoadingState />
-          ) : filteredProducts.length === 0 ? (
-            <EmptyState
-              hasProducts={products.length > 0}
-              search={search}
-              onAddProduct={() =>
-                router.push("/products/new")
-              }
-              onClearFilters={() => {
-                setSearch("");
-                setStatusFilter("all");
-                setTypeFilter("all");
-              }}
-            />
-          ) : viewMode === "list" ? (
-            <ProductTable
-              products={filteredProducts}
-              selectedProductIds={selectedProductIds}
-              actionProductId={actionProductId}
-              money={money}
-              onToggleSelection={
-                toggleProductSelection
-              }
-              onToggleSelectAll={toggleSelectAll}
-              onView={(id) =>
-                router.push(`/products/${id}`)
-              }
-              onEdit={(id) =>
-                router.push(
-                  `/products/${id}/edit`
-                )
-              }
-              onChangeStatus={changeProductStatus}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              onSort={changeSort}
-            />
-          ) : (
-            <ProductGrid
-              products={filteredProducts}
-              selectedProductIds={selectedProductIds}
-              actionProductId={actionProductId}
-              money={money}
-              onToggleSelection={
-                toggleProductSelection
-              }
-              onView={(id) =>
-                router.push(`/products/${id}`)
-              }
-              onEdit={(id) =>
-                router.push(
-                  `/products/${id}/edit`
-                )
-              }
-              onChangeStatus={changeProductStatus}
-            />
-          )}
-        </section>
+        <style jsx>{styles}</style>
       </div>
     </AppShell>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Product table                                                              */
-/* -------------------------------------------------------------------------- */
-
-function ProductTable({
-  products,
-  selectedProductIds,
-  actionProductId,
-  money,
-  onToggleSelection,
-  onToggleSelectAll,
-  onView,
-  onEdit,
-  onChangeStatus,
-  sortKey,
-  sortDirection,
-  onSort,
-}: {
-  products: ProductWithVariants[];
-  selectedProductIds: string[];
-  actionProductId: string | null;
-  money: (value: number) => string;
-  onToggleSelection: (id: string) => void;
-  onToggleSelectAll: () => void;
-  onView: (id: string) => void;
-  onEdit: (id: string) => void;
-  onChangeStatus: (
-    product: ProductWithVariants
-  ) => void;
-  sortKey: SortKey;
-  sortDirection: SortDirection;
-  onSort: (key: SortKey) => void;
-}) {
-  const allSelected =
-    products.length > 0 &&
-    selectedProductIds.length === products.length;
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[1050px]">
-        <div className="grid grid-cols-[40px_minmax(270px,1.8fr)_130px_150px_110px_120px_110px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={onToggleSelectAll}
-            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          />
-
-          <SortButton
-            label="Product"
-            active={sortKey === "name"}
-            direction={sortDirection}
-            onClick={() => onSort("name")}
-          />
-
-          <div>Status</div>
-
-          <SortButton
-            label="Pricing"
-            active={sortKey === "selling_price"}
-            direction={sortDirection}
-            onClick={() => onSort("selling_price")}
-          />
-
-          <SortButton
-            label="Margin"
-            active={sortKey === "margin"}
-            direction={sortDirection}
-            onClick={() => onSort("margin")}
-          />
-
-          <div>Inventory</div>
-
-          <div className="text-right">
-            Actions
-          </div>
-        </div>
-
-        {products.map((product) => {
-          const prices = getProductPrices(product);
-          const margin = getProductMargin(product);
-          const selected =
-            selectedProductIds.includes(product.id);
-
-          return (
-            <div
-              key={product.id}
-              className={`grid grid-cols-[40px_minmax(270px,1.8fr)_130px_150px_110px_120px_110px] items-center gap-4 border-b border-slate-100 px-5 py-4 transition last:border-b-0 hover:bg-slate-50/70 ${
-                selected ? "bg-blue-50/40" : ""
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={() =>
-                  onToggleSelection(product.id)
-                }
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-
-              <button
-                type="button"
-                onClick={() => onView(product.id)}
-                className="flex min-w-0 items-center gap-3 text-left"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
-                  <Icon name="package" size={18} />
-                </div>
-
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900 hover:text-blue-600">
-                    {product.name}
-                  </div>
-
-                  <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-slate-400">
-                    {product.brand && (
-                      <span className="truncate">
-                        {product.brand}
-                      </span>
-                    )}
-
-                    {product.category && (
-                      <>
-                        {product.brand && (
-                          <span>•</span>
-                        )}
-
-                        <span className="truncate">
-                          {product.category}
-                        </span>
-                      </>
-                    )}
-
-                    <span>•</span>
-
-                    <span>
-                      {product.product_variants.length}{" "}
-                      {product.product_variants.length ===
-                      1
-                        ? "variant"
-                        : "variants"}
-                    </span>
-                  </div>
-                </div>
-              </button>
-
-              <div>
-                <StatusBadge status={product.status} />
-              </div>
-
-              <div>
-                <div className="text-sm font-semibold text-slate-900">
-                  {prices.min === prices.max
-                    ? money(prices.min)
-                    : `${money(prices.min)} – ${money(
-                        prices.max
-                      )}`}
-                </div>
-
-                <div className="mt-0.5 text-xs text-slate-400">
-                  {product.product_variants.length}{" "}
-                  pricing{" "}
-                  {product.product_variants.length === 1
-                    ? "configuration"
-                    : "configurations"}
-                </div>
-              </div>
-
-              <div>
-                <div
-                  className={`text-sm font-semibold ${
-                    margin >= 30
-                      ? "text-emerald-600"
-                      : margin >= 15
-                        ? "text-slate-700"
-                        : "text-amber-600"
-                  }`}
-                >
-                  {margin.toFixed(1)}%
-                </div>
-
-                <div className="mt-0.5 text-xs text-slate-400">
-                  avg. margin
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm font-medium text-slate-700">
-                  {product.track_inventory
-                    ? "Tracked"
-                    : "Not tracked"}
-                </div>
-
-                <div className="mt-0.5 text-xs text-slate-400">
-                  {product.product_type}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => onView(product.id)}
-                  className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                  title="View product"
-                >
-                  <Icon name="arrow" size={16} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onEdit(product.id)}
-                  className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                  title="Edit product"
-                >
-                  <Icon name="edit" size={16} />
-                </button>
-
-                <button
-                  type="button"
-                  disabled={actionProductId === product.id}
-                  onClick={() => onChangeStatus(product)}
-                  className={`rounded-lg p-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    product.status === "archived"
-                      ? "text-blue-600 hover:bg-blue-50"
-                      : "text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  }`}
-                  title={
-                    product.status === "archived"
-                      ? "Restore product"
-                      : "Archive product"
-                  }
-                >
-                  <Icon
-                    name={
-                      product.status === "archived"
-                        ? "restore"
-                        : "archive"
-                    }
-                    size={16}
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                  title="More actions"
-                >
-                  <Icon name="more" size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Product grid                                                               */
-/* -------------------------------------------------------------------------- */
-
-function ProductGrid({
-  products,
-  selectedProductIds,
-  actionProductId,
-  money,
-  onToggleSelection,
-  onView,
-  onEdit,
-  onChangeStatus,
-}: {
-  products: ProductWithVariants[];
-  selectedProductIds: string[];
-  actionProductId: string | null;
-  money: (value: number) => string;
-  onToggleSelection: (id: string) => void;
-  onView: (id: string) => void;
-  onEdit: (id: string) => void;
-  onChangeStatus: (
-    product: ProductWithVariants
-  ) => void;
-}) {
-  return (
-    <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {products.map((product) => {
-        const prices = getProductPrices(product);
-        const margin = getProductMargin(product);
-        const selected =
-          selectedProductIds.includes(product.id);
-
-        return (
-          <article
-            key={product.id}
-            className={`rounded-xl border bg-white transition hover:border-slate-300 hover:shadow-sm ${
-              selected
-                ? "border-blue-300 ring-2 ring-blue-100"
-                : "border-slate-200"
-            }`}
-          >
-            <div className="flex items-start justify-between border-b border-slate-100 p-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={() =>
-                    onToggleSelection(product.id)
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
-                  <Icon name="package" size={18} />
-                </div>
-              </div>
-
-              <StatusBadge status={product.status} />
-            </div>
-
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => onView(product.id)}
-                  className="min-w-0 text-left"
-                >
-                  <h3 className="truncate text-sm font-semibold text-slate-900 hover:text-blue-600">
-                    {product.name}
-                  </h3>
-
-                  <p className="mt-1 truncate text-xs text-slate-500">
-                    {product.brand ||
-                      product.category ||
-                      "Product catalog"}
-                  </p>
-                </button>
-
-                <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold capitalize text-slate-600">
-                  {product.product_type}
-                </span>
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <MetricBox
-                  label="Selling"
-                  value={
-                    prices.min === prices.max
-                      ? money(prices.min)
-                      : `${money(prices.min)}+`
-                  }
-                />
-
-                <MetricBox
-                  label="Margin"
-                  value={`${margin.toFixed(1)}%`}
-                />
-
-                <MetricBox
-                  label="Variants"
-                  value={String(
-                    product.product_variants.length
-                  )}
-                />
-
-                <MetricBox
-                  label="Options"
-                  value={String(
-                    product.product_options.length
-                  )}
-                />
-              </div>
-
-              <div className="mt-5 border-t border-slate-100 pt-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">
-                    {product.track_inventory
-                      ? "Inventory tracked"
-                      : "Inventory not tracked"}
-                  </span>
-
-                  <span className="text-xs text-slate-400">
-                    {formatDate(product.created_at)}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onView(product.id)}
-                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    View Product
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onEdit(product.id)}
-                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
-                    title="Edit product"
-                  >
-                    <Icon name="edit" size={15} />
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={
-                      actionProductId === product.id
-                    }
-                    onClick={() =>
-                      onChangeStatus(product)
-                    }
-                    className={`rounded-lg border border-slate-200 bg-white p-2 transition disabled:opacity-50 ${
-                      product.status === "archived"
-                        ? "text-blue-600 hover:bg-blue-50"
-                        : "text-slate-500 hover:bg-red-50 hover:text-red-600"
-                    }`}
-                    title={
-                      product.status === "archived"
-                        ? "Restore product"
-                        : "Archive product"
-                    }
-                  >
-                    <Icon
-                      name={
-                        product.status === "archived"
-                          ? "restore"
-                          : "archive"
-                      }
-                      size={15}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Small components                                                           */
-/* -------------------------------------------------------------------------- */
-
-function SortButton({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  direction: SortDirection;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-1 text-left"
-    >
-      {label}
-
-      {active && (
-        <span>
-          {direction === "asc" ? "↑" : "↓"}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function FilterSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: {
-    value: string;
-    label: string;
-  }[];
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(event) =>
-        onChange(event.target.value)
-      }
-      className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-    >
-      {options.map((option) => (
-        <option
-          key={option.value}
-          value={option.value}
-        >
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function StatusBadge({
-  status,
-}: {
-  status: "active" | "draft" | "archived";
-}) {
-  const config = {
-    active: {
-      label: "Active",
-      className:
-        "border-emerald-200 bg-emerald-50 text-emerald-700",
-      dot: "bg-emerald-500",
-    },
-    draft: {
-      label: "Draft",
-      className:
-        "border-amber-200 bg-amber-50 text-amber-700",
-      dot: "bg-amber-500",
-    },
-    archived: {
-      label: "Archived",
-      className:
-        "border-slate-200 bg-slate-100 text-slate-600",
-      dot: "bg-slate-400",
-    },
-  }[status];
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.className}`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${config.dot}`}
-      />
-
-      {config.label}
-    </span>
-  );
-}
-
-function MetricBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-        {label}
-      </div>
-
-      <div className="mt-1 truncate text-sm font-semibold text-slate-900">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  description,
-}: {
-  icon: IconName;
-  label: string;
-  value: string | number;
-  description: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            {label}
-          </div>
-
-          <div className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-            {value}
-          </div>
-        </div>
-
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-500">
-          <Icon name={icon} size={19} />
-        </div>
-      </div>
-
-      <div className="mt-2 text-xs text-slate-500">
-        {description}
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="space-y-3 p-5">
-      {[1, 2, 3, 4, 5].map((item) => (
-        <div
-          key={item}
-          className="h-16 animate-pulse rounded-lg bg-slate-100"
-        />
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({
-  hasProducts,
-  search,
-  onAddProduct,
-  onClearFilters,
-}: {
-  hasProducts: boolean;
-  search: string;
-  onAddProduct: () => void;
-  onClearFilters: () => void;
-}) {
-  const filtered =
-    hasProducts || Boolean(search.trim());
-
-  return (
-    <div className="px-6 py-16 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
-        <Icon name="package" size={24} />
-      </div>
-
-      <h3 className="mt-4 text-sm font-semibold text-slate-900">
-        {filtered
-          ? "No products match your filters"
-          : "No products yet"}
-      </h3>
-
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-        {filtered
-          ? "Try adjusting your search or filters to find the product you're looking for."
-          : "Create your first product to start building your catalog, pricing, and inventory records."}
-      </p>
-
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-        {filtered && (
-          <button
-            type="button"
-            onClick={onClearFilters}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            Clear Filters
-          </button>
-        )}
-
-        {!hasProducts && (
-          <button
-            type="button"
-            onClick={onAddProduct}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <Icon name="plus" size={16} />
-            Add Product
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+const styles = `
+  .inventory-page {
+    min-height: 100%;
+    padding: 28px;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 22px;
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 7px;
+  }
+
+  .eyebrow-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #166534;
+    display: inline-block;
+  }
+
+  .page-title {
+    margin: 0;
+    color: #0f172a;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 750;
+    letter-spacing: -0.025em;
+  }
+
+  .page-subtitle {
+    margin: 7px 0 0;
+    color: #64748b;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn {
+    min-height: 40px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #334155;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.15s ease;
+  }
+
+  .btn:hover {
+    border-color: #94a3b8;
+    background: #f8fafc;
+  }
+
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    color: #fff;
+    background: #166534;
+    border-color: #166534;
+  }
+
+  .btn-primary:hover {
+    background: #14532d;
+    border-color: #14532d;
+  }
+
+  .btn-secondary {
+    background: #fff;
+  }
+
+  .btn-small {
+    min-height: 34px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    min-height: 112px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 17px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+  }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    color: #166534;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .stat-copy {
+    min-width: 0;
+  }
+
+  .stat-label {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .stat-value {
+    color: #0f172a;
+    font-size: 23px;
+    font-weight: 750;
+    line-height: 1.15;
+    margin-top: 5px;
+  }
+
+  .stat-helper {
+    color: #94a3b8;
+    font-size: 11px;
+    margin-top: 5px;
+    white-space: nowrap;
+  }
+
+  .toolbar-card {
+    min-height: 64px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 11px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+  }
+
+  .search-wrap {
+    height: 40px;
+    flex: 1;
+    min-width: 260px;
+    border: 1px solid #dbe1e8;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 11px;
+    color: #94a3b8;
+    background: #fff;
+  }
+
+  .search-wrap:focus-within {
+    border-color: #86a98f;
+    box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+  }
+
+  .search-wrap input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    color: #0f172a;
+    font-size: 13px;
+    background: transparent;
+  }
+
+  .search-wrap input::placeholder {
+    color: #94a3b8;
+  }
+
+  .clear-search,
+  .alert-close {
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 3px;
+  }
+
+  .clear-search:hover,
+  .alert-close:hover {
+    color: #475569;
+  }
+
+  .filter-toggle {
+    height: 40px;
+    border: 1px solid #dbe1e8;
+    background: #fff;
+    color: #475569;
+    border-radius: 10px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .filter-toggle:hover,
+  .filter-toggle.active {
+    border-color: #a7c2ad;
+    color: #166534;
+    background: #f7fbf8;
+  }
+
+  .filter-count {
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #166534;
+    color: #fff;
+    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .clear-filters {
+    border: 0;
+    background: transparent;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 8px;
+  }
+
+  .filters-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 15px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .filter-group label {
+    color: #475569;
+    font-size: 11px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.035em;
+  }
+
+  .filter-group select {
+    height: 38px;
+    border: 1px solid #dbe1e8;
+    border-radius: 9px;
+    padding: 0 10px;
+    color: #334155;
+    background: #fff;
+    outline: none;
+    font-size: 13px;
+  }
+
+  .filter-group select:focus {
+    border-color: #86a98f;
+    box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+  }
+
+  .content-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+  }
+
+  .content-card-header {
+    min-height: 70px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .section-title {
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 750;
+  }
+
+  .section-helper {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 3px;
+  }
+
+  .table-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .products-table {
+    width: 100%;
+    min-width: 1180px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .products-table th {
+    height: 43px;
+    padding: 0 14px;
+    text-align: left;
+    background: #f8fafc;
+    color: #64748b;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    white-space: nowrap;
+  }
+
+  .products-table td {
+    padding: 13px 14px;
+    border-bottom: 1px solid #eef2f5;
+    color: #334155;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .product-row:hover td {
+    background: #fcfdfd;
+  }
+
+  .product-row.expanded td {
+    background: #fbfdfb;
+    border-bottom-color: #e2e8e4;
+  }
+
+  .product-column {
+    width: 310px;
+  }
+
+  .actions-column {
+    width: 88px;
+    text-align: right !important;
+  }
+
+  .product-cell {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .expand-button {
+    width: 27px;
+    height: 27px;
+    flex: 0 0 auto;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .expand-button:hover {
+    color: #166534;
+    border-color: #b8ccb9;
+    background: #f7fbf8;
+  }
+
+  .product-avatar {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    border-radius: 9px;
+    background: #f1f5f9;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .product-copy {
+    min-width: 0;
+  }
+
+  .product-name {
+    display: block;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .product-name:hover {
+    color: #166534;
+  }
+
+  .product-sub {
+    color: #94a3b8;
+    font-size: 11px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+  }
+
+  .muted-cell {
+    color: #64748b;
+  }
+
+  .category-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 150px;
+    padding: 5px 8px;
+    border-radius: 7px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 650;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .variant-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #475569;
+    font-weight: 700;
+  }
+
+  .tracking-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 5px 8px;
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .tracking-pill.tracked {
+    color: #166534;
+    background: #f0fdf4;
+  }
+
+  .tracking-pill.untracked {
+    color: #64748b;
+    background: #f1f5f9;
+  }
+
+  .tracking-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .stock-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stock-cell strong {
+    color: #0f172a;
+    font-size: 13px;
+  }
+
+  .stock-cell span {
+    color: #94a3b8;
+    font-size: 10px;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .status-active {
+    color: #166534;
+    background: #f0fdf4;
+  }
+
+  .status-inactive {
+    color: #92400e;
+    background: #fffbeb;
+  }
+
+  .status-archived {
+    color: #64748b;
+    background: #f1f5f9;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .date-cell {
+    color: #64748b;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  .icon-action {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .icon-action:hover {
+    color: #166534;
+    border-color: #b8ccb9;
+    background: #f7fbf8;
+  }
+
+  .variant-detail-row td {
+    padding: 0;
+    background: #fbfdfb;
+  }
+
+  .variant-panel {
+    padding: 16px 20px 18px 72px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .variant-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 13px;
+  }
+
+  .variant-panel-title {
+    color: #334155;
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .variant-panel-helper {
+    color: #94a3b8;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .variant-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .variant-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+  }
+
+  .variant-card-top {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .variant-icon {
+    width: 29px;
+    height: 29px;
+    flex: 0 0 auto;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .variant-name {
+    min-width: 0;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 750;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .default-badge {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 9px;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+
+  .variant-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .variant-meta > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .variant-meta span {
+    color: #94a3b8;
+    font-size: 9px;
+    text-transform: uppercase;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+  }
+
+  .variant-meta strong {
+    color: #475569;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .variant-empty {
+    min-height: 65px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 12px;
+  }
+
+  .empty-state {
+    padding: 68px 24px;
+    text-align: center;
+  }
+
+  .empty-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-radius: 14px;
+    background: #f1f5f9;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .empty-state h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 750;
+  }
+
+  .empty-state p {
+    margin: 7px auto 0;
+    max-width: 420px;
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .empty-actions {
+    margin-top: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .loading-card {
+    min-height: 280px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #64748b;
+    font-size: 13px;
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #dbe5de;
+    border-top-color: #166534;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .spin {
+    animation: spin 0.8s linear infinite;
+  }
+
+  .alert {
+    min-height: 52px;
+    border-radius: 12px;
+    padding: 11px 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    font-size: 13px;
+  }
+
+  .alert > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .alert strong {
+    font-size: 12px;
+  }
+
+  .alert span {
+    font-size: 12px;
+  }
+
+  .alert-error {
+    border: 1px solid #fecaca;
+    background: #fff7f7;
+    color: #991b1b;
+  }
+
+  .alert-success {
+    border: 1px solid #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .alert-close {
+    margin-left: auto;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 1400px) {
+    .stats-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 900px) {
+    .inventory-page {
+      padding: 20px;
+    }
+
+    .page-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .header-actions {
+      width: 100%;
+    }
+
+    .header-actions .btn {
+      flex: 1;
+    }
+
+    .filters-card {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .variant-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .variant-panel {
+      padding-left: 20px;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .inventory-page {
+      padding: 15px;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .toolbar-card {
+      flex-wrap: wrap;
+    }
+
+    .search-wrap {
+      min-width: 100%;
+      order: 1;
+    }
+
+    .filter-toggle,
+    .clear-filters {
+      order: 2;
+    }
+
+    .filters-card {
+      grid-template-columns: 1fr;
+    }
+
+    .content-card-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+`;
