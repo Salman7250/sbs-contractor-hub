@@ -1861,14 +1861,15 @@ export default function AppShell({
         }
 
         .sbs-brand-logo {
-          width: 205px;
-          height: 50px;
-          object-fit: contain;
-          object-position: center;
-          display: block;
-          background: transparent;
-          flex-shrink: 0;
-        }
+  width: 205px;
+  height: 50px;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  background: transparent;
+  flex-shrink: 0;
+  transform: translateY(10px);
+}
 
         .sbs-sidebar-scroll {
           flex: 1;
