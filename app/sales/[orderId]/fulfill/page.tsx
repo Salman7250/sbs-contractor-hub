@@ -1306,6 +1306,11 @@ export default function FulfillSalesOrderPage() {
       setFulfilling(true);
       setErrorMessage("");
       setSuccessMessage("");
+       if (!order) {
+      throw new Error(
+        "Sales order is missing. Please refresh the page and try again.",
+      );
+    }
 
       if (!companyId) {
         throw new Error(
