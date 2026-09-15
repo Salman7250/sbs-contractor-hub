@@ -676,7 +676,7 @@ export default function ExpensesPage() {
           supabase
             .from("employees")
             .select(
-              "id, user_id, first_name, last_name, full_name"
+              "id, user_id, first_name, last_name, display_name"
             )
             .eq(
               "company_id",
@@ -742,14 +742,11 @@ export default function ExpensesPage() {
               user_id:
                 employee.user_id || null,
               name:
-                employee.full_name ||
-                [
-                  employee.first_name,
-                  employee.last_name,
-                ]
-                  .filter(Boolean)
-                  .join(" ") ||
-                "Employee",
+  employee.display_name ||
+  [employee.first_name, employee.last_name]
+    .filter(Boolean)
+    .join(" ") ||
+  "Employee",
             })
           );
 

@@ -74,7 +74,7 @@ type Employee = {
   id: string;
   first_name?: string | null;
   last_name?: string | null;
-  full_name?: string | null;
+  display_name?: string | null;
 };
 
 type Settlement = {
@@ -191,8 +191,8 @@ function formatDateTime(value: string | null | undefined) {
 function employeeName(employee?: Employee | null) {
   if (!employee) return "—";
 
-  if (employee.full_name?.trim()) {
-    return employee.full_name.trim();
+  if (employee.display_name?.trim()) {
+    return employee.display_name.trim();
   }
 
   return [employee.first_name, employee.last_name]
@@ -482,7 +482,7 @@ export default function ExpenseDetailPage() {
         if (loadedExpense.employee_id) {
           const { data: employeeData } = await supabase
             .from("employees")
-            .select("id, first_name, last_name, full_name")
+            .select("id, first_name, last_name, display_name")
             .eq("id", loadedExpense.employee_id)
             .eq("company_id", companyId)
             .maybeSingle();
@@ -860,7 +860,7 @@ export default function ExpenseDetailPage() {
   if (!expense) {
     return (
       <AppShell>
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6">
             <h2 className="text-lg font-semibold text-rose-800">
               Expense not found
@@ -873,7 +873,7 @@ export default function ExpenseDetailPage() {
 
             <Link
               href="/expenses"
-              className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              className="mt-5 inline-flex rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
             >
               Back to Expenses
             </Link>
@@ -887,7 +887,7 @@ export default function ExpenseDetailPage() {
     <AppShell>
       <div className="min-h-screen bg-slate-50">
         <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-[1600px] px-6 py-5">
+          <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
@@ -906,7 +906,7 @@ export default function ExpenseDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  <h1 className="break-words text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
                     {expense.description}
                   </h1>
 
@@ -925,7 +925,7 @@ export default function ExpenseDetailPage() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
                   onClick={() => loadData(true)}
@@ -952,7 +952,7 @@ export default function ExpenseDetailPage() {
                         "approved"
                       )
                     }
-                    className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Approve
                   </button>
@@ -1005,7 +1005,7 @@ export default function ExpenseDetailPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-[1600px] space-y-6 px-6 py-6">
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
           {errorMessage && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {errorMessage}
@@ -1098,11 +1098,11 @@ export default function ExpenseDetailPage() {
           </div>
 
           {/* Main content */}
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.8fr)]">
-            <div className="space-y-6">
+          <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)] xl:gap-6">
+            <div className="min-w-0 space-y-5 sm:space-y-6 xl:sticky xl:top-6 xl:self-start">
               {/* Expense information */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Expense Information
                   </h2>
@@ -1222,7 +1222,7 @@ export default function ExpenseDetailPage() {
               {/* Settlement */}
               {expense.expense_type === "employee_advance" && (
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex flex-col gap-3 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-base font-bold text-slate-900">
                         Employee Advance Settlement
@@ -1239,14 +1239,14 @@ export default function ExpenseDetailPage() {
                         onClick={() =>
                           setShowSettlementModal(true)
                         }
-                        className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                        className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
                       >
                         Add Settlement
                       </button>
                     )}
                   </div>
 
-                  <div className="p-6">
+                  <div className="p-4 sm:p-6">
                     <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1384,7 +1384,7 @@ export default function ExpenseDetailPage() {
 
               {/* Receipt */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Supporting Document
                   </h2>
@@ -1394,7 +1394,7 @@ export default function ExpenseDetailPage() {
                   </p>
                 </div>
 
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {!expense.receipt_path ? (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
                       <p className="text-sm font-medium text-slate-700">
@@ -1422,7 +1422,7 @@ export default function ExpenseDetailPage() {
                         href={receiptUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
                       >
                         Open Receipt
                       </a>
@@ -1438,7 +1438,7 @@ export default function ExpenseDetailPage() {
 
               {/* Activity */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Activity History
                   </h2>
@@ -1448,7 +1448,7 @@ export default function ExpenseDetailPage() {
                   </p>
                 </div>
 
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {activity.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
                       <p className="text-sm text-slate-500">
@@ -1533,10 +1533,10 @@ export default function ExpenseDetailPage() {
             </div>
 
             {/* Right sidebar */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-5 sm:space-y-6 xl:sticky xl:top-6 xl:self-start">
               {/* Status */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Status
                   </h2>
@@ -1593,7 +1593,7 @@ export default function ExpenseDetailPage() {
 
               {/* Notification */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Notifications
                   </h2>
@@ -1603,7 +1603,7 @@ export default function ExpenseDetailPage() {
                   </p>
                 </div>
 
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {notificationJobs.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
                       <p className="text-sm text-slate-600">
@@ -1701,7 +1701,7 @@ export default function ExpenseDetailPage() {
 
               {/* Record information */}
               <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-4">
+                <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
                   <h2 className="text-base font-bold text-slate-900">
                     Record Information
                   </h2>
@@ -1757,7 +1757,7 @@ export default function ExpenseDetailPage() {
       {/* Settlement Modal */}
       {showSettlementModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-slate-200 px-6 py-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1819,7 +1819,7 @@ export default function ExpenseDetailPage() {
                     )
                   }
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="0.00"
                 />
               </div>
@@ -1839,7 +1839,7 @@ export default function ExpenseDetailPage() {
                       )
                     }
                     required
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   />
                 </div>
 
@@ -1855,7 +1855,7 @@ export default function ExpenseDetailPage() {
                         event.target.value as PaymentMethod
                       )
                     }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   >
                     {Object.entries(
                       paymentMethodLabels
@@ -1881,7 +1881,7 @@ export default function ExpenseDetailPage() {
                       event.target.value
                     )
                   }
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="Receipt, transaction ID, etc."
                 />
               </div>
@@ -1899,12 +1899,12 @@ export default function ExpenseDetailPage() {
                       event.target.value
                     )
                   }
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="Optional settlement notes..."
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
                   type="button"
                   onClick={() =>
@@ -1918,7 +1918,7 @@ export default function ExpenseDetailPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving
                     ? "Saving..."
@@ -1933,7 +1933,7 @@ export default function ExpenseDetailPage() {
       {/* Cancel Modal */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-slate-200 px-6 py-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1979,12 +1979,12 @@ export default function ExpenseDetailPage() {
                   onChange={(event) =>
                     setCancelReason(event.target.value)
                   }
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="Why is this expense being cancelled?"
                 />
               </div>
 
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
                   type="button"
                   onClick={() =>
