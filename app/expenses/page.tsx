@@ -9,6 +9,7 @@ import {
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type ExpenseType =
   | "operating_expense"
@@ -31,6 +32,15 @@ type SettlementStatus =
   | "partially_settled"
   | "settled";
 
+type PaymentMethod =
+  | "cash"
+  | "bank_transfer"
+  | "credit_card"
+  | "debit_card"
+  | "company_card"
+  | "petty_cash"
+  | "other";
+
 type Expense = {
   id: string;
   company_id: string;
@@ -42,14 +52,7 @@ type Expense = {
   employee_id: string | null;
   amount: number;
   currency: string;
-  payment_method:
-    | "cash"
-    | "bank_transfer"
-    | "credit_card"
-    | "debit_card"
-    | "company_card"
-    | "petty_cash"
-    | "other";
+  payment_method: PaymentMethod;
   reference: string | null;
   notes: string | null;
   receipt_path: string | null;
@@ -70,6 +73,12 @@ type ExpenseCategory = {
 };
 
 type Employee = {
+  id: string;
+  user_id: string | null;
+  name: string;
+};
+
+type Person = {
   id: string;
   name: string;
 };
@@ -110,7 +119,10 @@ const EXPENSE_TYPES: {
   },
 ];
 
-const PAYMENT_METHODS = [
+const PAYMENT_METHODS: {
+  value: PaymentMethod;
+  label: string;
+}[] = [
   {
     value: "cash",
     label: "Cash",
@@ -198,7 +210,7 @@ function formatDate(value: string) {
   });
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value: string | null) {
   if (!value) return "—";
 
   const date = new Date(value);
@@ -216,9 +228,7 @@ function formatDateTime(value: string) {
   });
 }
 
-function getExpenseTypeLabel(
-  type: ExpenseType
-) {
+function getExpenseTypeLabel(type: ExpenseType) {
   return (
     EXPENSE_TYPES.find(
       (item) => item.value === type
@@ -227,7 +237,7 @@ function getExpenseTypeLabel(
 }
 
 function getPaymentMethodLabel(
-  value: string
+  value: PaymentMethod
 ) {
   return (
     PAYMENT_METHODS.find(
@@ -244,7 +254,7 @@ function getStatusClass(
       return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
     case "paid":
-      return "bg-blue-50 text-blue-700 ring-1 ring-blue-200";
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
 
     case "rejected":
       return "bg-red-50 text-red-700 ring-1 ring-red-200";
@@ -293,6 +303,159 @@ function getSettlementLabel(
   }
 }
 
+function Icon({
+  name,
+  className = "h-5 w-5",
+}: {
+  name:
+    | "wallet"
+    | "calendar"
+    | "clock"
+    | "check"
+    | "user"
+    | "alert"
+    | "search"
+    | "filter"
+    | "refresh"
+    | "download"
+    | "plus"
+    | "close"
+    | "arrow";
+  className?: string;
+}) {
+  const common = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+  };
+
+  switch (name) {
+    case "calendar":
+      return (
+        <svg {...common}>
+          <rect
+            x="3"
+            y="4"
+            width="18"
+            height="17"
+            rx="2"
+          />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+      );
+
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      );
+
+    case "check":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m8 12 2.5 2.5L16 9" />
+        </svg>
+      );
+
+    case "user":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3" />
+          <path d="M5 21c0-4 3-7 7-7s7 3 7 7" />
+        </svg>
+      );
+
+    case "alert":
+      return (
+        <svg {...common}>
+          <path d="M12 3 2.5 20h19L12 3Z" />
+          <path d="M12 9v5" />
+          <circle
+            cx="12"
+            cy="17"
+            r=".7"
+            fill="currentColor"
+            stroke="none"
+          />
+        </svg>
+      );
+
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+      );
+
+    case "filter":
+      return (
+        <svg {...common}>
+          <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+      );
+
+    case "refresh":
+      return (
+        <svg {...common}>
+          <path d="M20 11a8 8 0 0 0-14.9-3" />
+          <path d="M4 5v4h4" />
+          <path d="M4 13a8 8 0 0 0 14.9 3" />
+          <path d="M20 19v-4h-4" />
+        </svg>
+      );
+
+    case "download":
+      return (
+        <svg {...common}>
+          <path d="M12 3v12" />
+          <path d="m7 10 5 5 5-5" />
+          <path d="M5 21h14" />
+        </svg>
+      );
+
+    case "plus":
+      return (
+        <svg {...common}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+
+    case "close":
+      return (
+        <svg {...common}>
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      );
+
+    case "arrow":
+      return (
+        <svg {...common}>
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      );
+
+    default:
+      return (
+        <svg {...common}>
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="14"
+            rx="2"
+          />
+          <path d="M7 9h10M7 13h6" />
+        </svg>
+      );
+  }
+}
+
 export default function ExpensesPage() {
   const supabase = useMemo(
     () => createClient(),
@@ -300,6 +463,57 @@ export default function ExpensesPage() {
   );
 
   const router = useRouter();
+
+  const {
+    hasPermission,
+    loading: permissionsLoading,
+  } = usePermissions();
+
+  const canView = hasPermission(
+    "expenses",
+    "view"
+  );
+
+  const canCreate = hasPermission(
+    "expenses",
+    "create"
+  );
+
+  const canEdit = hasPermission(
+    "expenses",
+    "edit"
+  );
+
+  const canApprove = hasPermission(
+    "expenses",
+    "approve"
+  );
+
+  const canPay = hasPermission(
+    "expenses",
+    "pay"
+  );
+
+  const canClose = hasPermission(
+    "expenses",
+    "close"
+  );
+
+  /*
+   * Employee role has view/create only.
+   *
+   * This is deliberately based on permissions rather than
+   * checking the role name so custom roles continue to work.
+   */
+  const restrictedEmployee =
+    canView &&
+    !canEdit &&
+    !canApprove &&
+    !canPay &&
+    !canClose;
+
+  const [currentUserId, setCurrentUserId] =
+    useState<string | null>(null);
 
   const [expenses, setExpenses] =
     useState<Expense[]>([]);
@@ -309,6 +523,9 @@ export default function ExpensesPage() {
 
   const [employees, setEmployees] =
     useState<Employee[]>([]);
+
+  const [people, setPeople] =
+    useState<Person[]>([]);
 
   const [company, setCompany] =
     useState<Company | null>(null);
@@ -377,6 +594,8 @@ export default function ExpensesPage() {
           return;
         }
 
+        setCurrentUserId(user.id);
+
         const {
           data: membership,
           error: membershipError,
@@ -400,10 +619,37 @@ export default function ExpensesPage() {
         const companyId =
           membership.company_id;
 
+        /*
+         * IMPORTANT:
+         * Employee users are restricted at query level.
+         * We do NOT load the whole company ledger and then
+         * hide records in the browser.
+         */
+        let expensesQuery = supabase
+          .from("expenses")
+          .select("*")
+          .eq("company_id", companyId)
+          .order("expense_date", {
+            ascending: false,
+          })
+          .order("created_at", {
+            ascending: false,
+          });
+
+        if (restrictedEmployee) {
+          expensesQuery =
+            expensesQuery.eq(
+              "created_by",
+              user.id
+            );
+        }
+
         const [
           companyResult,
           expensesResult,
           categoriesResult,
+          employeesResult,
+          profilesResult,
         ] = await Promise.all([
           supabase
             .from("companies")
@@ -413,19 +659,7 @@ export default function ExpensesPage() {
             .eq("id", companyId)
             .single(),
 
-          supabase
-            .from("expenses")
-            .select("*")
-            .eq(
-              "company_id",
-              companyId
-            )
-            .order("expense_date", {
-              ascending: false,
-            })
-            .order("created_at", {
-              ascending: false,
-            }),
+          expensesQuery,
 
           supabase
             .from("expense_categories")
@@ -437,9 +671,28 @@ export default function ExpensesPage() {
               companyId
             )
             .eq("is_active", true)
-            .order("name", {
-              ascending: true,
-            }),
+            .order("name"),
+
+          supabase
+            .from("employees")
+            .select(
+              "id, user_id, first_name, last_name, full_name"
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .order("first_name"),
+
+          /*
+           * profiles gives us the actual user behind
+           * created_by / approved_by.
+           */
+          supabase
+            .from("profiles")
+            .select(
+              "id, full_name"
+            ),
         ]);
 
         if (companyResult.error) {
@@ -452,6 +705,20 @@ export default function ExpensesPage() {
 
         if (categoriesResult.error) {
           throw categoriesResult.error;
+        }
+
+        if (employeesResult.error) {
+          console.warn(
+            "Could not load employees:",
+            employeesResult.error
+          );
+        }
+
+        if (profilesResult.error) {
+          console.warn(
+            "Could not load profiles:",
+            profilesResult.error
+          );
         }
 
         setCompany(
@@ -468,54 +735,86 @@ export default function ExpensesPage() {
             []) as ExpenseCategory[]
         );
 
-        /*
-         * Employee records are intentionally loaded
-         * separately because SBS may use different
-         * employee schemas depending on the current
-         * employee module implementation.
-         *
-         * If the employees table exists, load the
-         * available names. Failure here should not
-         * prevent the expense ledger itself from loading.
-         */
-        const {
-          data: employeeData,
-        } = await supabase
-          .from("employees")
-          .select(
-            "id, first_name, last_name, full_name"
-          )
-          .eq(
-            "company_id",
-            companyId
-          )
-          .order("first_name", {
-            ascending: true,
-          });
-
-        if (employeeData) {
-          const normalizedEmployees =
-            employeeData.map(
-              (employee: any) => ({
-                id: employee.id,
-                name:
-                  employee.full_name ||
-                  [
-                    employee.first_name,
-                    employee.last_name,
-                  ]
-                    .filter(Boolean)
-                    .join(" ") ||
-                  "Employee",
-              })
-            );
-
-          setEmployees(
-            normalizedEmployees
+        const normalizedEmployees: Employee[] =
+          (employeesResult.data || []).map(
+            (employee: any) => ({
+              id: employee.id,
+              user_id:
+                employee.user_id || null,
+              name:
+                employee.full_name ||
+                [
+                  employee.first_name,
+                  employee.last_name,
+                ]
+                  .filter(Boolean)
+                  .join(" ") ||
+                "Employee",
+            })
           );
-        } else {
-          setEmployees([]);
-        }
+
+        setEmployees(
+          normalizedEmployees
+        );
+
+        const normalizedPeople: Person[] = [];
+
+        (profilesResult.data || []).forEach(
+          (profile: any) => {
+            const name =
+              profile.full_name?.trim() ||
+              "User";
+
+            if (!profile.id) return;
+
+            normalizedPeople.push({
+              id: profile.id,
+              name,
+            });
+          }
+        );
+
+        /*
+         * Add employee identities as fallback.
+         * This is useful if a profile does not have a
+         * display name yet.
+         */
+        const peopleMap = new Map<
+          string,
+          Person
+        >();
+
+        normalizedPeople.forEach((person) => {
+          peopleMap.set(
+            person.id,
+            person
+          );
+        });
+
+        normalizedEmployees.forEach(
+          (employee) => {
+            if (
+              employee.user_id &&
+              !peopleMap.has(
+                employee.user_id
+              )
+            ) {
+              peopleMap.set(
+                employee.user_id,
+                {
+                  id: employee.user_id,
+                  name: employee.name,
+                }
+              );
+            }
+          }
+        );
+
+        setPeople(
+          Array.from(
+            peopleMap.values()
+          )
+        );
       } catch (err: unknown) {
         console.error(
           "Expenses page load error:",
@@ -532,12 +831,21 @@ export default function ExpensesPage() {
         setRefreshing(false);
       }
     },
-    [router, supabase]
+    [
+      router,
+      supabase,
+      restrictedEmployee,
+    ]
   );
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (!permissionsLoading) {
+      void loadData();
+    }
+  }, [
+    permissionsLoading,
+    loadData,
+  ]);
 
   const employeeMap = useMemo(() => {
     return new Map(
@@ -548,6 +856,15 @@ export default function ExpensesPage() {
     );
   }, [employees]);
 
+  const personMap = useMemo(() => {
+    return new Map(
+      people.map((person) => [
+        person.id,
+        person.name,
+      ])
+    );
+  }, [people]);
+
   const categoryMap = useMemo(() => {
     return new Map(
       categories.map((category) => [
@@ -556,6 +873,62 @@ export default function ExpensesPage() {
       ])
     );
   }, [categories]);
+
+  function getCreatedByName(expense: Expense) {
+    if (!expense.created_by) {
+      return "Unknown";
+    }
+
+    const name = personMap.get(
+      expense.created_by
+    );
+
+    if (name) {
+      return name;
+    }
+
+    if (expense.created_by === currentUserId) {
+      return "You";
+    }
+
+    const employee = employees.find(
+      (item) =>
+        item.id === expense.created_by ||
+        item.user_id === expense.created_by
+    );
+
+    if (employee) {
+      return employee.name;
+    }
+
+    return "Unknown";
+  }
+
+  function getApprovedByName(expense: Expense) {
+    if (!expense.approved_by) {
+      return null;
+    }
+
+    const name = personMap.get(
+      expense.approved_by
+    );
+
+    if (name) {
+      return name;
+    }
+
+    const employee = employees.find(
+      (item) =>
+        item.id === expense.approved_by ||
+        item.user_id === expense.approved_by
+    );
+
+    if (employee) {
+      return employee.name;
+    }
+
+    return "Unknown";
+  }
 
   const filteredExpenses = useMemo(() => {
     const query =
@@ -576,6 +949,13 @@ export default function ExpensesPage() {
             ) || ""
           : "";
 
+      const createdByName =
+        getCreatedByName(expense);
+
+      const approvedByName =
+        getApprovedByName(expense) ||
+        "";
+
       const searchableText = [
         expense.description,
         expense.vendor_name || "",
@@ -584,6 +964,8 @@ export default function ExpensesPage() {
         expense.id,
         categoryName,
         employeeName,
+        createdByName,
+        approvedByName,
         getExpenseTypeLabel(
           expense.expense_type
         ),
@@ -620,6 +1002,7 @@ export default function ExpensesPage() {
           paymentFilter;
 
       const matchesEmployee =
+        restrictedEmployee ||
         employeeFilter === "all" ||
         expense.employee_id ===
           employeeFilter;
@@ -657,6 +1040,9 @@ export default function ExpensesPage() {
     dateTo,
     categoryMap,
     employeeMap,
+    personMap,
+    currentUserId,
+    restrictedEmployee,
   ]);
 
   const stats = useMemo(() => {
@@ -685,27 +1071,35 @@ export default function ExpensesPage() {
     const totalExpenses =
       expenses.reduce(
         (sum, expense) =>
-          sum + Number(expense.amount || 0),
+          sum +
+          Number(
+            expense.amount || 0
+          ),
         0
       );
 
     const thisMonth =
       monthExpenses.reduce(
         (sum, expense) =>
-          sum + Number(expense.amount || 0),
+          sum +
+          Number(
+            expense.amount || 0
+          ),
         0
       );
 
     const pending =
       expenses.filter(
         (expense) =>
-          expense.status === "pending"
+          expense.status ===
+          "pending"
       );
 
     const approved =
       expenses.filter(
         (expense) =>
-          expense.status === "approved" ||
+          expense.status ===
+            "approved" ||
           expense.status === "paid"
       );
 
@@ -790,7 +1184,8 @@ export default function ExpensesPage() {
         categoryFilter !== "all" ||
         statusFilter !== "all" ||
         paymentFilter !== "all" ||
-        employeeFilter !== "all" ||
+        (!restrictedEmployee &&
+          employeeFilter !== "all") ||
         dateFrom ||
         dateTo
     );
@@ -807,7 +1202,10 @@ export default function ExpensesPage() {
   }
 
   function exportCSV() {
-    if (!filteredExpenses.length) {
+    if (
+      restrictedEmployee ||
+      !filteredExpenses.length
+    ) {
       return;
     }
 
@@ -819,6 +1217,9 @@ export default function ExpensesPage() {
       "Description",
       "Vendor / Merchant",
       "Employee",
+      "Created By",
+      "Approved By",
+      "Approved At",
       "Amount",
       "Currency",
       "Payment Method",
@@ -849,6 +1250,13 @@ export default function ExpensesPage() {
                 expense.employee_id
               ) || ""
             : "",
+          getCreatedByName(expense),
+          getApprovedByName(
+            expense
+          ) || "",
+          formatDateTime(
+            expense.approved_at
+          ),
           Number(
             expense.amount || 0
           ).toFixed(2),
@@ -870,18 +1278,15 @@ export default function ExpensesPage() {
 
     const escapeCSV = (
       value: unknown
-    ) => {
-      const stringValue =
-        String(value ?? "");
-
-      return `"${stringValue.replace(
-        /"/g,
-        '""'
-      )}"`;
-    };
+    ) =>
+      `"${String(
+        value ?? ""
+      ).replace(/"/g, '""')}"`;
 
     const csv = [
-      headers.map(escapeCSV).join(","),
+      headers
+        .map(escapeCSV)
+        .join(","),
       ...rows.map((row) =>
         row.map(escapeCSV).join(",")
       ),
@@ -902,17 +1307,12 @@ export default function ExpensesPage() {
 
     link.href = url;
 
-    const date =
-      new Date()
-        .toISOString()
-        .slice(0, 10);
-
-    link.download = `sbs-expenses-${date}.csv`;
+    link.download = `sbs-expenses-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
 
     document.body.appendChild(link);
-
     link.click();
-
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
@@ -922,122 +1322,128 @@ export default function ExpensesPage() {
     return company?.currency || "AED";
   }
 
+  if (
+    !permissionsLoading &&
+    !canView
+  ) {
+    return (
+      <AppShell
+        title="Expenses"
+        description="Manage company expenses and employee submissions."
+      >
+        <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Icon name="alert" />
+          </div>
+
+          <h2 className="mt-4 text-base font-semibold text-gray-900">
+            Access restricted
+          </h2>
+
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
+            You do not have permission to view expenses.
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell
       title="Expenses"
-      description="Track every company expense, employee advance, reimbursement, and day-to-day money-out transaction."
+      description={
+        restrictedEmployee
+          ? "View and track your submitted expenses, approval status, and settlement."
+          : "Track every company expense, employee advance, reimbursement, and day-to-day money-out transaction."
+      }
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              router.push(
-                "/expenses/closings"
-              )
-            }
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-          >
-            <svg
-              className="mr-2 h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {canClose && (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/expenses/closings"
+                )
+              }
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
             >
-              <rect
-                x="3"
-                y="4"
-                width="18"
-                height="18"
-                rx="2"
+              <Icon
+                name="calendar"
+                className="mr-2 h-4 w-4"
               />
-              <line
-                x1="16"
-                y1="2"
-                x2="16"
-                y2="6"
-              />
-              <line
-                x1="8"
-                y1="2"
-                x2="8"
-                y2="6"
-              />
-              <line
-                x1="3"
-                y1="10"
-                x2="21"
-                y2="10"
-              />
-            </svg>
-            Closings
-          </button>
+              Closings
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={exportCSV}
-            disabled={
-              filteredExpenses.length === 0
-            }
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <svg
-              className="mr-2 h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {!restrictedEmployee && (
+            <button
+              type="button"
+              onClick={exportCSV}
+              disabled={
+                filteredExpenses.length ===
+                0
+              }
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <path d="M12 3v12" />
-              <path d="m7 10 5 5 5-5" />
-              <path d="M5 21h14" />
-            </svg>
-            Export CSV
-          </button>
+              <Icon
+                name="download"
+                className="mr-2 h-4 w-4"
+              />
+              Export CSV
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() =>
-              router.push(
-                "/expenses/new"
-              )
-            }
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
-          >
-            <svg
-              className="mr-2 h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/expenses/new"
+                )
+              }
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
             >
-              <line
-                x1="12"
-                y1="5"
-                x2="12"
-                y2="19"
+              <Icon
+                name="plus"
+                className="mr-2 h-4 w-4"
               />
-              <line
-                x1="5"
-                y1="12"
-                x2="19"
-                y2="12"
-              />
-            </svg>
-            New Expense
-          </button>
+              New Expense
+            </button>
+          )}
         </div>
       }
     >
       <div className="space-y-6">
+        {restrictedEmployee && (
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-5 py-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                <Icon name="user" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">
+                  My Expenses
+                </p>
+
+                <p className="mt-1 text-sm text-emerald-700">
+                  You are viewing expenses submitted by your account. Company-wide expense records are restricted to authorized finance and management users.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="font-semibold">
+                <p className="font-semibold text-red-800">
                   Could not load expenses
                 </p>
-                <p className="mt-1">
+
+                <p className="mt-1 text-sm text-red-700">
                   {error}
                 </p>
               </div>
@@ -1055,309 +1461,111 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        {/* Statistics */}
+        {/* KPI CARDS */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Total Expenses
-                </p>
+          {[
+            {
+              title: "Total Expenses",
+              amount: stats.totalExpenses,
+              count: stats.totalCount,
+              suffix: "transactions",
+              icon: "wallet" as const,
+              iconClass:
+                "bg-emerald-50 text-emerald-600",
+            },
+            {
+              title: "This Month",
+              amount: stats.thisMonth,
+              count: stats.thisMonthCount,
+              suffix: "transactions",
+              icon: "calendar" as const,
+              iconClass:
+                "bg-emerald-50 text-emerald-600",
+            },
+            {
+              title: "Pending Approval",
+              amount: stats.pendingAmount,
+              count: stats.pendingCount,
+              suffix: "awaiting review",
+              icon: "clock" as const,
+              iconClass:
+                "bg-amber-50 text-amber-600",
+            },
+            {
+              title: "Approved",
+              amount: stats.approvedAmount,
+              count: stats.approvedCount,
+              suffix: "approved / paid",
+              icon: "check" as const,
+              iconClass:
+                "bg-emerald-50 text-emerald-600",
+            },
+            {
+              title: "Employee Advances",
+              amount:
+                stats.employeeAdvanceAmount,
+              count:
+                stats.employeeAdvanceCount,
+              suffix: "advances",
+              icon: "user" as const,
+              iconClass:
+                "bg-violet-50 text-violet-600",
+            },
+            {
+              title: "Outstanding",
+              amount:
+                stats.outstandingAmount,
+              count:
+                stats.outstandingCount,
+              suffix: "unsettled",
+              icon: "alert" as const,
+              iconClass:
+                "bg-red-50 text-red-600",
+            },
+          ].map((card) => (
+            <div
+              key={card.title}
+              className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">
+                    {card.title}
+                  </p>
 
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.totalExpenses,
-                        getCardCurrency()
-                      )}
-                </p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
+                    {loading
+                      ? "—"
+                      : money(
+                          card.amount,
+                          getCardCurrency()
+                        )}
+                  </p>
 
-                <p className="mt-1 text-xs text-gray-500">
-                  {stats.totalCount}{" "}
-                  transaction
-                  {stats.totalCount === 1
-                    ? ""
-                    : "s"}
-                </p>
-              </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {card.count}{" "}
+                    {card.suffix}
+                  </p>
+                </div>
 
-              <div className="rounded-lg bg-gray-100 p-2 text-gray-700">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                <div
+                  className={`rounded-xl p-2.5 ${card.iconClass}`}
                 >
-                  <rect
-                    x="3"
-                    y="5"
-                    width="18"
-                    height="14"
-                    rx="2"
-                  />
-                  <path d="M7 9h10" />
-                  <path d="M7 13h6" />
-                </svg>
+                  <Icon name={card.icon} />
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  This Month
-                </p>
-
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.thisMonth,
-                        getCardCurrency()
-                      )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {stats.thisMonthCount}{" "}
-                  transaction
-                  {stats.thisMonthCount ===
-                  1
-                    ? ""
-                    : "s"}
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect
-                    x="3"
-                    y="4"
-                    width="18"
-                    height="18"
-                    rx="2"
-                  />
-                  <line
-                    x1="16"
-                    y1="2"
-                    x2="16"
-                    y2="6"
-                  />
-                  <line
-                    x1="8"
-                    y1="2"
-                    x2="8"
-                    y2="6"
-                  />
-                  <line
-                    x1="3"
-                    y1="10"
-                    x2="21"
-                    y2="10"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Pending Approval
-                </p>
-
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.pendingAmount,
-                        getCardCurrency()
-                      )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {stats.pendingCount}{" "}
-                  awaiting review
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-amber-50 p-2 text-amber-600">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="9"
-                  />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Approved
-                </p>
-
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.approvedAmount,
-                        getCardCurrency()
-                      )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {stats.approvedCount}{" "}
-                  approved / paid
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="9"
-                  />
-                  <path d="m8 12 2.5 2.5L16 9" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Employee Advances
-                </p>
-
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.employeeAdvanceAmount,
-                        getCardCurrency()
-                      )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {stats.employeeAdvanceCount}{" "}
-                  advance
-                  {stats.employeeAdvanceCount ===
-                  1
-                    ? ""
-                    : "s"}
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-purple-50 p-2 text-purple-600">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle
-                    cx="12"
-                    cy="8"
-                    r="3"
-                  />
-                  <path d="M5 21c0-4 3-7 7-7s7 3 7 7" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Outstanding
-                </p>
-
-                <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-                  {loading
-                    ? "—"
-                    : money(
-                        stats.outstandingAmount,
-                        getCardCurrency()
-                      )}
-                </p>
-
-                <p className="mt-1 text-xs text-red-600">
-                  {stats.outstandingCount}{" "}
-                  unsettled
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-red-50 p-2 text-red-600">
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M12 3 2.5 20h19L12 3Z" />
-                  <path d="M12 9v5" />
-                  <circle
-                    cx="12"
-                    cy="17"
-                    r=".75"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Filters */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        {/* FILTER BAR */}
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
             <div className="relative flex-1">
-              <svg
+              <Icon
+                name="search"
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle
-                  cx="11"
-                  cy="11"
-                  r="7"
-                />
-                <path d="m20 20-4-4" />
-              </svg>
+              />
 
               <input
                 type="text"
@@ -1367,8 +1575,12 @@ export default function ExpensesPage() {
                     event.target.value
                   )
                 }
-                placeholder="Search expenses, vendors, employees, references..."
-                className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                placeholder={
+                  restrictedEmployee
+                    ? "Search your expenses..."
+                    : "Search expenses, vendors, employees, references..."
+                }
+                className="h-10 w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
 
@@ -1379,7 +1591,7 @@ export default function ExpensesPage() {
                   event.target.value
                 )
               }
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+              className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
             >
               <option value="all">
                 All Statuses
@@ -1404,7 +1616,7 @@ export default function ExpensesPage() {
                   event.target.value
                 )
               }
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+              className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
             >
               <option value="all">
                 All Types
@@ -1426,31 +1638,24 @@ export default function ExpensesPage() {
               type="button"
               onClick={() =>
                 setShowFilters(
-                  (current) =>
-                    !current
+                  (value) => !value
                 )
               }
-              className={`inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition ${
+              className={`inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium transition ${
                 showFilters ||
                 hasActiveFilters
-                  ? "border-gray-300 bg-gray-100 text-gray-900"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                   : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
               }`}
             >
-              <svg
+              <Icon
+                name="filter"
                 className="mr-2 h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M4 6h16" />
-                <path d="M7 12h10" />
-                <path d="M10 18h4" />
-              </svg>
+              />
               Filters
+
               {hasActiveFilters && (
-                <span className="ml-2 rounded-full bg-gray-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                <span className="ml-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
                   •
                 </span>
               )}
@@ -1462,24 +1667,16 @@ export default function ExpensesPage() {
                 void loadData(true)
               }
               disabled={refreshing}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
             >
-              <svg
+              <Icon
+                name="refresh"
                 className={`mr-2 h-4 w-4 ${
                   refreshing
                     ? "animate-spin"
                     : ""
                 }`}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M20 11a8 8 0 0 0-14.9-3" />
-                <path d="M4 5v4h4" />
-                <path d="M4 13a8 8 0 0 0 14.9 3" />
-                <path d="M20 19v-4h-4" />
-              </svg>
+              />
               Refresh
             </button>
           </div>
@@ -1501,7 +1698,7 @@ export default function ExpensesPage() {
                         event.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                   >
                     <option value="all">
                       All Categories
@@ -1510,9 +1707,7 @@ export default function ExpensesPage() {
                     {categories.map(
                       (category) => (
                         <option
-                          key={
-                            category.id
-                          }
+                          key={category.id}
                           value={
                             category.id
                           }
@@ -1538,7 +1733,7 @@ export default function ExpensesPage() {
                         event.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                   >
                     <option value="all">
                       All Payment Methods
@@ -1547,9 +1742,7 @@ export default function ExpensesPage() {
                     {PAYMENT_METHODS.map(
                       (method) => (
                         <option
-                          key={
-                            method.value
-                          }
+                          key={method.value}
                           value={
                             method.value
                           }
@@ -1561,40 +1754,44 @@ export default function ExpensesPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-gray-600">
-                    Employee
-                  </label>
+                {!restrictedEmployee && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                      Employee
+                    </label>
 
-                  <select
-                    value={
-                      employeeFilter
-                    }
-                    onChange={(event) =>
-                      setEmployeeFilter(
-                        event.target.value
-                      )
-                    }
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-                  >
-                    <option value="all">
-                      All Employees
-                    </option>
+                    <select
+                      value={
+                        employeeFilter
+                      }
+                      onChange={(event) =>
+                        setEmployeeFilter(
+                          event.target.value
+                        )
+                      }
+                      className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    >
+                      <option value="all">
+                        All Employees
+                      </option>
 
-                    {employees.map(
-                      (employee) => (
-                        <option
-                          key={employee.id}
-                          value={
-                            employee.id
-                          }
-                        >
-                          {employee.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
+                      {employees.map(
+                        (employee) => (
+                          <option
+                            key={
+                              employee.id
+                            }
+                            value={
+                              employee.id
+                            }
+                          >
+                            {employee.name}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-gray-600">
@@ -1609,7 +1806,7 @@ export default function ExpensesPage() {
                         event.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                   />
                 </div>
 
@@ -1626,7 +1823,7 @@ export default function ExpensesPage() {
                         event.target.value
                       )
                     }
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                   />
                 </div>
               </div>
@@ -1642,7 +1839,7 @@ export default function ExpensesPage() {
                     onClick={
                       clearFilters
                     }
-                    className="text-xs font-semibold text-gray-700 hover:text-gray-900"
+                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
                   >
                     Clear all filters
                   </button>
@@ -1652,12 +1849,14 @@ export default function ExpensesPage() {
           )}
         </div>
 
-        {/* Expense Table */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        {/* LEDGER */}
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold text-gray-900">
-                Expense Ledger
+                {restrictedEmployee
+                  ? "My Expense Ledger"
+                  : "Expense Ledger"}
               </h2>
 
               <p className="mt-0.5 text-xs text-gray-500">
@@ -1670,8 +1869,10 @@ export default function ExpensesPage() {
             {hasActiveFilters && (
               <button
                 type="button"
-                onClick={clearFilters}
-                className="self-start text-xs font-semibold text-gray-600 hover:text-gray-900 sm:self-auto"
+                onClick={
+                  clearFilters
+                }
+                className="self-start text-xs font-semibold text-emerald-700 hover:text-emerald-800 sm:self-auto"
               >
                 Clear filters
               </button>
@@ -1679,8 +1880,8 @@ export default function ExpensesPage() {
           </div>
 
           {loading ? (
-            <div className="p-10 text-center">
-              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-800" />
+            <div className="p-12 text-center">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-emerald-600" />
 
               <p className="mt-3 text-sm text-gray-500">
                 Loading expenses...
@@ -1689,79 +1890,50 @@ export default function ExpensesPage() {
           ) : filteredExpenses.length ===
             0 ? (
             <div className="px-6 py-16 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                <svg
-                  className="h-6 w-6"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect
-                    x="3"
-                    y="5"
-                    width="18"
-                    height="14"
-                    rx="2"
-                  />
-                  <path d="M7 9h10" />
-                  <path d="M7 13h6" />
-                </svg>
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <Icon name="wallet" />
               </div>
 
               <h3 className="mt-4 text-sm font-semibold text-gray-900">
                 {expenses.length ===
                 0
-                  ? "No expenses recorded yet"
+                  ? restrictedEmployee
+                    ? "You have no expenses yet"
+                    : "No expenses recorded yet"
                   : "No expenses match your filters"}
               </h3>
 
               <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">
                 {expenses.length ===
                 0
-                  ? "Start recording company expenses such as inventory costs, tea and coffee, employee advances, fuel, transport, and other day-to-day spending."
-                  : "Try changing your search or filters to find the expense you're looking for."}
+                  ? "Record an expense to start tracking company spending and approval activity."
+                  : "Try changing your search or filters."}
               </p>
 
               {expenses.length ===
-                0 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    router.push(
-                      "/expenses/new"
-                    )
-                  }
-                  className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800"
-                >
-                  <svg
-                    className="mr-2 h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+                0 &&
+                canCreate && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        "/expenses/new"
+                      )
+                    }
+                    className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
                   >
-                    <line
-                      x1="12"
-                      y1="5"
-                      x2="12"
-                      y2="19"
+                    <Icon
+                      name="plus"
+                      className="mr-2 h-4 w-4"
                     />
-                    <line
-                      x1="5"
-                      y1="12"
-                      x2="19"
-                      y2="12"
-                    />
-                  </svg>
-                  Add First Expense
-                </button>
-              )}
+                    Add First Expense
+                  </button>
+                )}
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-[1180px] w-full">
+                <table className="min-w-[1500px] w-full">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/70">
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -1778,6 +1950,14 @@ export default function ExpensesPage() {
 
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Employee / Vendor
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Created By
+                      </th>
+
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Approved By
                       </th>
 
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -1817,15 +1997,26 @@ export default function ExpensesPage() {
                           expense.employee_id
                             ? employeeMap.get(
                                 expense.employee_id
-                              ) || "Employee"
+                              ) ||
+                              "Employee"
                             : null;
+
+                        const createdBy =
+                          getCreatedByName(
+                            expense
+                          );
+
+                        const approvedBy =
+                          getApprovedByName(
+                            expense
+                          );
 
                         return (
                           <tr
                             key={
                               expense.id
                             }
-                            className="group transition hover:bg-gray-50/70"
+                            className="group transition hover:bg-emerald-50/30"
                           >
                             <td className="px-5 py-4">
                               <button
@@ -1837,7 +2028,7 @@ export default function ExpensesPage() {
                                 }
                                 className="text-left"
                               >
-                                <p className="max-w-[270px] truncate text-sm font-semibold text-gray-900 group-hover:text-gray-700">
+                                <p className="max-w-[240px] truncate text-sm font-semibold text-gray-900 group-hover:text-emerald-700">
                                   {
                                     expense.description
                                   }
@@ -1857,7 +2048,7 @@ export default function ExpensesPage() {
                                         •
                                       </span>
 
-                                      <span className="max-w-[120px] truncate text-xs text-gray-500">
+                                      <span className="max-w-[100px] truncate text-xs text-gray-500">
                                         {
                                           expense.reference
                                         }
@@ -1871,7 +2062,7 @@ export default function ExpensesPage() {
                                         •
                                       </span>
 
-                                      <span className="text-xs font-medium text-blue-600">
+                                      <span className="text-xs font-medium text-emerald-600">
                                         Receipt
                                       </span>
                                     </>
@@ -1924,7 +2115,7 @@ export default function ExpensesPage() {
                                 </>
                               ) : (
                                 <>
-                                  <p className="max-w-[170px] truncate text-sm font-medium text-gray-800">
+                                  <p className="max-w-[150px] truncate text-sm font-medium text-gray-800">
                                     {expense.vendor_name ||
                                       "—"}
                                   </p>
@@ -1935,6 +2126,62 @@ export default function ExpensesPage() {
                                       : "No vendor"}
                                   </p>
                                 </>
+                              )}
+                            </td>
+
+                            {/* CREATED BY */}
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                                  <Icon
+                                    name="user"
+                                    className="h-4 w-4"
+                                  />
+                                </div>
+
+                                <div>
+                                  <p className="max-w-[140px] truncate text-sm font-semibold text-gray-800">
+                                    {
+                                      createdBy
+                                    }
+                                  </p>
+
+                                  <p className="mt-0.5 text-xs text-gray-400">
+                                    Submitted
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* APPROVED BY */}
+                            <td className="px-4 py-4">
+                              {approvedBy ? (
+                                <div>
+                                  <p className="max-w-[140px] truncate text-sm font-semibold text-emerald-700">
+                                    {
+                                      approvedBy
+                                    }
+                                  </p>
+
+                                  <p className="mt-0.5 text-xs text-gray-400">
+                                    {formatDateTime(
+                                      expense.approved_at
+                                    )}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-400">
+                                    —
+                                  </p>
+
+                                  <p className="mt-0.5 text-xs text-gray-400">
+                                    {expense.status ===
+                                    "pending"
+                                      ? "Awaiting approval"
+                                      : "Not approved"}
+                                  </p>
+                                </div>
                               )}
                             </td>
 
@@ -1991,7 +2238,7 @@ export default function ExpensesPage() {
                                     expense.id
                                   )
                                 }
-                                className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+                                className="inline-flex h-8 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
                               >
                                 View
                               </button>
@@ -2047,7 +2294,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Quick View Modal */}
+      {/* QUICK VIEW */}
       {selectedExpenseId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -2056,7 +2303,9 @@ export default function ExpensesPage() {
               event.target ===
               event.currentTarget
             ) {
-              setSelectedExpenseId(null);
+              setSelectedExpenseId(
+                null
+              );
             }
           }}
         >
@@ -2087,11 +2336,21 @@ export default function ExpensesPage() {
                   ) || "Employee"
                 : null;
 
+            const createdBy =
+              getCreatedByName(
+                expense
+              );
+
+            const approvedBy =
+              getApprovedByName(
+                expense
+              );
+
             return (
-              <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div className="flex items-start justify-between border-b border-gray-100 px-6 py-5">
                   <div>
-                    <p className="font-mono text-xs text-gray-400">
+                    <p className="font-mono text-xs text-emerald-600">
                       EXPENSE{" "}
                       {expense.id.slice(
                         0,
@@ -2115,53 +2374,113 @@ export default function ExpensesPage() {
                     }
                     className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                   >
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <line
-                        x1="6"
-                        y1="6"
-                        x2="18"
-                        y2="18"
-                      />
-                      <line
-                        x1="18"
-                        y1="6"
-                        x2="6"
-                        y2="18"
-                      />
-                    </svg>
+                    <Icon
+                      name="close"
+                    />
                   </button>
                 </div>
 
-                <div className="space-y-5 px-6 py-6">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="space-y-6 px-6 py-6">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">
-                        Amount
-                      </span>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                          Expense Amount
+                        </p>
 
-                      <span className="text-xl font-bold text-gray-900">
-                        {money(
-                          Number(
-                            expense.amount ||
-                              0
-                          ),
-                          expense.currency ||
-                            getCardCurrency()
-                        )}
+                        <p className="mt-1 text-2xl font-bold text-gray-900">
+                          {money(
+                            Number(
+                              expense.amount ||
+                                0
+                            ),
+                            expense.currency ||
+                              getCardCurrency()
+                          )}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${getStatusClass(
+                          expense.status
+                        )}`}
+                      >
+                        {
+                          expense.status
+                        }
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* AUDIT PEOPLE */}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                          <Icon
+                            name="user"
+                            className="h-4 w-4"
+                          />
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Created By
+                          </p>
+
+                          <p className="mt-1 text-sm font-semibold text-gray-900">
+                            {
+                              createdBy
+                            }
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            {formatDateTime(
+                              expense.created_at
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                          <Icon
+                            name="check"
+                            className="h-4 w-4"
+                          />
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Approved By
+                          </p>
+
+                          <p className="mt-1 text-sm font-semibold text-gray-900">
+                            {approvedBy ||
+                              "Not approved yet"}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-gray-400">
+                            {expense.approved_at
+                              ? formatDateTime(
+                                  expense.approved_at
+                                )
+                              : expense.status ===
+                                "pending"
+                              ? "Awaiting approval"
+                              : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Date
+                        Expense Date
                       </p>
 
                       <p className="mt-1 text-sm font-medium text-gray-800">
@@ -2189,19 +2508,9 @@ export default function ExpensesPage() {
                       </p>
 
                       <p className="mt-1 text-sm font-medium text-gray-800">
-                        {categoryName}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Payment Method
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium text-gray-800">
-                        {getPaymentMethodLabel(
-                          expense.payment_method
-                        )}
+                        {
+                          categoryName
+                        }
                       </p>
                     </div>
 
@@ -2224,6 +2533,18 @@ export default function ExpensesPage() {
                       <p className="mt-1 text-sm font-medium text-gray-800">
                         {expense.vendor_name ||
                           "—"}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        Payment Method
+                      </p>
+
+                      <p className="mt-1 text-sm font-medium text-gray-800">
+                        {getPaymentMethodLabel(
+                          expense.payment_method
+                        )}
                       </p>
                     </div>
 
@@ -2258,30 +2579,29 @@ export default function ExpensesPage() {
                         )}
                       </p>
                     </div>
-                  </div>
 
-                  {expense.reference && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                         Reference
                       </p>
 
-                      <p className="mt-1 text-sm text-gray-800">
-                        {
-                          expense.reference
-                        }
+                      <p className="mt-1 text-sm font-medium text-gray-800">
+                        {expense.reference ||
+                          "—"}
                       </p>
                     </div>
-                  )}
+                  </div>
 
                   {expense.notes && (
-                    <div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                         Notes
                       </p>
 
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-700">
-                        {expense.notes}
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                        {
+                          expense.notes
+                        }
                       </p>
                     </div>
                   )}
@@ -2295,27 +2615,29 @@ export default function ExpensesPage() {
                         null
                       )
                     }
-                    className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Close
                   </button>
 
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedExpenseId(
-                          null
-                        );
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedExpenseId(
+                            null
+                          );
 
-                        router.push(
-                          `/expenses/${expense.id}/edit`
-                        );
-                      }}
-                      className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      Edit Expense
-                    </button>
+                          router.push(
+                            `/expenses/${expense.id}/edit`
+                          );
+                        }}
+                        className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                      >
+                        Edit Expense
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -2328,9 +2650,13 @@ export default function ExpensesPage() {
                           `/expenses/${expense.id}`
                         );
                       }}
-                      className="inline-flex h-10 items-center justify-center rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800"
+                      className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
                     >
                       Open Details
+                      <Icon
+                        name="arrow"
+                        className="ml-2 h-4 w-4"
+                      />
                     </button>
                   </div>
                 </div>
