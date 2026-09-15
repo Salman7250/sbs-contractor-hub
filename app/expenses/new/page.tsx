@@ -262,7 +262,7 @@ export default function NewExpensePage() {
         supabase
           .from("employees")
           .select(
-            "id, first_name, last_name, full_name"
+            "id, first_name, last_name, display_name"
           )
           .eq("company_id", companyId)
           .order("first_name"),
@@ -296,11 +296,11 @@ export default function NewExpensePage() {
           employeeResult.data.map((employee) => ({
             id: employee.id,
             name:
-              employee.full_name ||
-              [employee.first_name, employee.last_name]
-                .filter(Boolean)
-                .join(" ") ||
-              "Unnamed Employee",
+  employee.display_name ||
+  [employee.first_name, employee.last_name]
+    .filter(Boolean)
+    .join(" ") ||
+  "Unnamed Employee",
           }))
         );
       } else {
