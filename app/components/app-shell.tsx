@@ -90,7 +90,7 @@ const NAV_MODULE_MAP: Record<string, string> = {
   "/service-providers": "service_jobs",
   "/service-jobs": "service_jobs",
   "/b2b-portal": "b2b_portal",
-  "/reports": "reports",
+  "/analytics": "analytics",
   "/employees": "employees",
   "/documents": "documents",
   "/settings": "settings",
@@ -489,10 +489,10 @@ function getWorkspaceSections(): NavSection[] {
           ],
         },
         {
-          label: "Reports & Analytics",
-          href: "/reports",
+          label: "Analytics",
+          href: "/analytics",
           icon: "reports",
-          available: false,
+          available: true,
           keywords: [
             "reports",
             "report",
