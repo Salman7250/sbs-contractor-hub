@@ -1,0 +1,2298 @@
+<!-- ============================================================
+     SBS — Sharif Business Solutions | Homepage
+     Paste this entire block into a WordPress "Custom HTML" block.
+     All CSS + JS are scoped to .sbs-home
+     ============================================================ -->
+<div class="sbs-home" id="sbs-home">
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+.sbs-home{
+  --sbs-green:#0E9F6E;
+  --sbs-green-dark:#0A7D57;
+  --sbs-green-deep:#075F42;
+  --sbs-green-light:#34D399;
+  --sbs-green-50:#EDFBF4;
+  --sbs-green-100:#D6F4E6;
+  --sbs-ink:#0C1512;
+  --sbs-ink-2:#18241F;
+  --sbs-body:#54635D;
+  --sbs-muted:#7C8A84;
+  --sbs-line:#E4EAE7;
+  --sbs-line-2:#EEF2F0;
+  --sbs-bg:#FFFFFF;
+  --sbs-bg-soft:#F7FAF9;
+  --sbs-radius:16px;
+  --sbs-radius-lg:22px;
+  --sbs-shadow-sm:0 1px 2px rgba(12,21,18,.05), 0 1px 3px rgba(12,21,18,.04);
+  --sbs-shadow:0 4px 14px rgba(12,21,18,.06), 0 1px 3px rgba(12,21,18,.04);
+  --sbs-shadow-lg:0 24px 60px rgba(12,21,18,.10), 0 6px 18px rgba(12,21,18,.05);
+  --sbs-shadow-xl:0 40px 90px rgba(7,95,66,.14), 0 10px 26px rgba(12,21,18,.06);
+  --sbs-ease:cubic-bezier(.22,.7,.3,1);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  color:var(--sbs-body);
+  background:var(--sbs-bg);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  position:relative;
+  overflow-x:hidden;
+  width:100%;
+}
+.sbs-home *,.sbs-home *::before,.sbs-home *::after{box-sizing:border-box;}
+.sbs-home img{max-width:100%;height:auto;display:block;}
+.sbs-home svg{display:block;}
+.sbs-home p{margin:0 0 1rem;}
+.sbs-home ul{list-style:none;margin:0;padding:0;}
+.sbs-home h1,.sbs-home h2,.sbs-home h3,.sbs-home h4,.sbs-home h5{
+  color:var(--sbs-ink);font-weight:700;letter-spacing:-.022em;line-height:1.14;margin:0 0 .6rem;
+}
+.sbs-home h1{font-size:clamp(2.25rem,4.6vw,3.65rem);letter-spacing:-.033em;font-weight:800;}
+.sbs-home h2{font-size:clamp(1.75rem,3.1vw,2.6rem);letter-spacing:-.03em;}
+.sbs-home h3{font-size:1.06rem;letter-spacing:-.012em;}
+.sbs-home a{color:inherit;text-decoration:none;}
+.sbs-home button{font-family:inherit;}
+.sbs-home :focus-visible{outline:3px solid rgba(14,159,110,.55);outline-offset:3px;border-radius:8px;}
+
+/* ---------- layout helpers ---------- */
+.sbs-home .sbs-wrap{width:100%;max-width:1200px;margin:0 auto;padding:0 24px;}
+.sbs-home .sbs-section{padding:clamp(64px,8vw,116px) 0;position:relative;}
+.sbs-home .sbs-section--soft{background:var(--sbs-bg-soft);border-top:1px solid var(--sbs-line-2);border-bottom:1px solid var(--sbs-line-2);}
+.sbs-home .sbs-head{max-width:720px;margin:0 auto clamp(38px,5vw,62px);text-align:center;}
+.sbs-home .sbs-head p{font-size:1.06rem;color:var(--sbs-body);margin:0;}
+.sbs-home .sbs-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-size:.72rem;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--sbs-green-dark);background:var(--sbs-green-50);
+  border:1px solid var(--sbs-green-100);padding:7px 14px;border-radius:999px;margin-bottom:18px;
+}
+.sbs-home .sbs-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sbs-green);}
+
+/* ---------- buttons ---------- */
+.sbs-home .sbs-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  font-size:.94rem;font-weight:600;letter-spacing:-.01em;border-radius:12px;
+  padding:13px 22px;min-height:48px;border:1px solid transparent;cursor:pointer;
+  transition:transform .25s var(--sbs-ease),box-shadow .25s var(--sbs-ease),background .2s ease,border-color .2s ease,color .2s ease;
+  white-space:nowrap;text-align:center;
+}
+.sbs-home .sbs-btn--primary{
+  color:#fff;background:linear-gradient(135deg,var(--sbs-green) 0%,var(--sbs-green-dark) 100%);
+  box-shadow:0 6px 18px rgba(14,159,110,.28);
+}
+.sbs-home .sbs-btn--primary:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(14,159,110,.34);}
+.sbs-home .sbs-btn--ghost{background:#fff;color:var(--sbs-ink);border-color:var(--sbs-line);box-shadow:var(--sbs-shadow-sm);}
+.sbs-home .sbs-btn--ghost:hover{transform:translateY(-2px);border-color:#CFDBD6;box-shadow:var(--sbs-shadow);}
+.sbs-home .sbs-btn--light{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.28);}
+.sbs-home .sbs-btn--light:hover{background:rgba(255,255,255,.2);transform:translateY(-2px);}
+.sbs-home .sbs-btn--white{background:#fff;color:var(--sbs-green-deep);box-shadow:0 10px 30px rgba(0,0,0,.18);}
+.sbs-home .sbs-btn--white:hover{transform:translateY(-2px);box-shadow:0 16px 38px rgba(0,0,0,.22);}
+.sbs-home .sbs-btn--soon{background:var(--sbs-bg-soft);color:var(--sbs-muted);border-color:var(--sbs-line);cursor:default;width:100%;}
+.sbs-home .sbs-btn--block{width:100%;}
+.sbs-home .sbs-btn svg{width:16px;height:16px;transition:transform .25s var(--sbs-ease);}
+.sbs-home .sbs-btn:hover svg{transform:translateX(3px);}
+
+/* ---------- header ---------- */
+.sbs-home .sbs-header{
+  position:sticky;top:0;z-index:9990;width:100%;
+  background:rgba(255,255,255,.72);
+  -webkit-backdrop-filter:saturate(180%) blur(14px);backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid transparent;
+  transition:border-color .3s ease,box-shadow .3s ease,background .3s ease;
+}
+.sbs-home .sbs-header.is-scrolled{
+  border-bottom-color:var(--sbs-line);background:rgba(255,255,255,.88);
+  box-shadow:0 6px 24px rgba(12,21,18,.05);
+}
+.sbs-home .sbs-nav{display:flex;align-items:center;justify-content:space-between;gap:20px;height:78px;transition:height .3s var(--sbs-ease);}
+.sbs-home .sbs-header.is-scrolled .sbs-nav{height:66px;}
+.sbs-home .sbs-logo{display:inline-flex;align-items:center;gap:11px;flex-shrink:0;}
+.sbs-home .sbs-logo__mark{
+  width:38px;height:38px;border-radius:11px;flex-shrink:0;
+  display:block;object-fit:contain;
+}
+.sbs-home .sbs-logo__text{display:flex;flex-direction:column;line-height:1.05;}
+.sbs-home .sbs-logo__name{font-size:1.28rem;font-weight:800;color:var(--sbs-ink);letter-spacing:-.04em;}
+.sbs-home .sbs-logo__sub{font-size:.62rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sbs-muted);}
+.sbs-home .sbs-menu{display:flex;align-items:center;gap:4px;}
+.sbs-home .sbs-menu a{
+  font-size:.91rem;font-weight:500;color:var(--sbs-body);padding:9px 14px;border-radius:9px;
+  transition:color .2s ease,background .2s ease;
+}
+.sbs-home .sbs-menu a:hover{color:var(--sbs-ink);background:var(--sbs-bg-soft);}
+.sbs-home .sbs-actions{display:flex;align-items:center;gap:10px;}
+.sbs-home .sbs-actions .sbs-link-login{font-size:.91rem;font-weight:600;color:var(--sbs-ink);padding:10px 12px;border-radius:9px;transition:background .2s ease;}
+.sbs-home .sbs-actions .sbs-link-login:hover{background:var(--sbs-bg-soft);}
+.sbs-home .sbs-actions .sbs-btn{padding:11px 20px;min-height:44px;font-size:.9rem;}
+.sbs-home .sbs-burger{
+  display:none;width:44px;height:44px;border-radius:11px;border:1px solid var(--sbs-line);
+  background:#fff;cursor:pointer;padding:0;position:relative;flex-shrink:0;
+}
+.sbs-home .sbs-burger span{
+  position:absolute;left:12px;width:20px;height:2px;border-radius:2px;background:var(--sbs-ink);
+  transition:transform .3s var(--sbs-ease),opacity .2s ease,top .3s var(--sbs-ease);
+}
+.sbs-home .sbs-burger span:nth-child(1){top:15px;}
+.sbs-home .sbs-burger span:nth-child(2){top:21px;}
+.sbs-home .sbs-burger span:nth-child(3){top:27px;}
+.sbs-home .sbs-burger[aria-expanded="true"] span:nth-child(1){top:21px;transform:rotate(45deg);}
+.sbs-home .sbs-burger[aria-expanded="true"] span:nth-child(2){opacity:0;}
+.sbs-home .sbs-burger[aria-expanded="true"] span:nth-child(3){top:21px;transform:rotate(-45deg);}
+.sbs-home .sbs-mobile{
+  display:none;border-top:1px solid var(--sbs-line);background:#fff;
+  max-height:0;overflow:hidden;transition:max-height .42s var(--sbs-ease);
+}
+.sbs-home .sbs-mobile.is-open{max-height:560px;}
+.sbs-home .sbs-mobile__inner{padding:16px 24px 26px;display:flex;flex-direction:column;gap:2px;}
+.sbs-home .sbs-mobile__inner a.sbs-mlink{
+  padding:14px 6px;font-size:1rem;font-weight:500;color:var(--sbs-ink);border-bottom:1px solid var(--sbs-line-2);
+}
+.sbs-home .sbs-mobile__cta{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+
+/* ---------- hero ---------- */
+.sbs-home .sbs-hero{position:relative;padding:clamp(52px,7vw,92px) 0 clamp(64px,8vw,108px);overflow:hidden;}
+.sbs-home .sbs-hero::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(760px 420px at 78% 8%,rgba(52,211,153,.16),transparent 62%),
+    radial-gradient(620px 420px at 6% 0%,rgba(14,159,110,.10),transparent 60%),
+    linear-gradient(180deg,#F6FBF9 0%,#FFFFFF 58%);
+  background-size:200% 200%,200% 200%,100% 100%;
+  animation:sbsGradientDrift 22s ease-in-out infinite alternate;
+}
+@keyframes sbsGradientDrift{0%{background-position:0% 0%,0% 0%,0 0;}100%{background-position:100% 30%,60% 20%,0 0;}}
+.sbs-home .sbs-hero::after{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(14,159,110,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(14,159,110,.055) 1px,transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(70% 60% at 50% 30%,#000 0%,transparent 78%);
+  mask-image:radial-gradient(70% 60% at 50% 30%,#000 0%,transparent 78%);
+}
+.sbs-home .sbs-hero__grid{
+  position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.04fr);
+  gap:clamp(36px,4.5vw,64px);align-items:center;
+}
+.sbs-home .sbs-hero__badge{
+  display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--sbs-line);
+  border-radius:999px;padding:7px 15px 7px 9px;font-size:.7rem;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--sbs-ink);box-shadow:var(--sbs-shadow-sm);margin-bottom:22px;
+}
+.sbs-home .sbs-hero__badge i{
+  width:20px;height:20px;border-radius:6px;background:var(--sbs-green-50);color:var(--sbs-green-dark);
+  display:flex;align-items:center;justify-content:center;font-style:normal;font-size:.68rem;
+}
+.sbs-home .sbs-hero h1 .sbs-hl{
+  background:linear-gradient(120deg,var(--sbs-green) 0%,var(--sbs-green-deep) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.sbs-home .sbs-hero__lead{font-size:clamp(1rem,1.35vw,1.14rem);max-width:560px;margin:20px 0 14px;}
+.sbs-home .sbs-hero__sub{font-size:.92rem;color:var(--sbs-muted);max-width:520px;margin:0 0 30px;padding-left:14px;border-left:2px solid var(--sbs-green-100);}
+.sbs-home .sbs-hero__cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:34px;}
+.sbs-home .sbs-trust{display:flex;flex-wrap:wrap;gap:10px 26px;}
+.sbs-home .sbs-trust li{display:flex;align-items:center;gap:8px;font-size:.855rem;font-weight:500;color:var(--sbs-body);}
+.sbs-home .sbs-trust svg{width:17px;height:17px;color:var(--sbs-green);flex-shrink:0;}
+
+/* ---------- app mockup shared ---------- */
+.sbs-home .sbs-app{
+  background:#fff;border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);
+  box-shadow:var(--sbs-shadow-xl);overflow:hidden;
+}
+.sbs-home .sbs-app__bar{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--sbs-line-2);
+  background:linear-gradient(180deg,#FCFEFD,#F7FAF9);
+}
+.sbs-home .sbs-dots{display:flex;gap:6px;}
+.sbs-home .sbs-dots i{width:9px;height:9px;border-radius:50%;background:#E2E8E5;display:block;}
+.sbs-home .sbs-dots i:first-child{background:#F2C3C0;}
+.sbs-home .sbs-dots i:nth-child(2){background:#F5E0B5;}
+.sbs-home .sbs-dots i:nth-child(3){background:#BFE7D3;}
+.sbs-home .sbs-app__url{
+  flex:1;font-size:.72rem;color:var(--sbs-muted);background:#fff;border:1px solid var(--sbs-line-2);
+  border-radius:7px;padding:5px 11px;text-align:center;font-weight:500;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.sbs-home .sbs-app__tag{
+  font-size:.6rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--sbs-green-dark);
+  background:var(--sbs-green-50);border:1px solid var(--sbs-green-100);padding:4px 8px;border-radius:5px;flex-shrink:0;
+}
+.sbs-home .sbs-app__body{padding:18px;}
+
+/* hero dashboard */
+.sbs-home .sbs-heroviz{position:relative;}
+.sbs-home .sbs-heroviz .sbs-app{animation:sbsFloat 8s ease-in-out infinite;}
+@keyframes sbsFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+.sbs-home .sbs-dash__top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.sbs-home .sbs-dash__title{font-size:.95rem;font-weight:700;color:var(--sbs-ink);}
+.sbs-home .sbs-dash__title span{display:block;font-size:.72rem;font-weight:500;color:var(--sbs-muted);}
+.sbs-home .sbs-chip{
+  font-size:.68rem;font-weight:600;color:var(--sbs-body);background:var(--sbs-bg-soft);
+  border:1px solid var(--sbs-line);border-radius:7px;padding:5px 10px;
+}
+.sbs-home .sbs-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px;}
+.sbs-home .sbs-kpi{
+  border:1px solid var(--sbs-line-2);border-radius:12px;padding:11px 12px;background:#fff;
+  transition:transform .25s var(--sbs-ease),box-shadow .25s var(--sbs-ease),border-color .25s ease;
+}
+.sbs-home .sbs-kpi:hover{transform:translateY(-3px);border-color:var(--sbs-green-100);box-shadow:var(--sbs-shadow);}
+.sbs-home .sbs-kpi__label{font-size:.63rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sbs-muted);margin-bottom:5px;}
+.sbs-home .sbs-kpi__value{font-size:1rem;font-weight:800;color:var(--sbs-ink);letter-spacing:-.025em;line-height:1.2;}
+.sbs-home .sbs-kpi__value small{font-size:.66rem;font-weight:600;color:var(--sbs-muted);}
+.sbs-home .sbs-kpi__delta{display:inline-flex;align-items:center;gap:3px;font-size:.66rem;font-weight:600;margin-top:5px;color:var(--sbs-green-dark);}
+.sbs-home .sbs-kpi__delta.is-down{color:#B4713A;}
+.sbs-home .sbs-dash__split{display:grid;grid-template-columns:1.32fr 1fr;gap:12px;}
+.sbs-home .sbs-panel{border:1px solid var(--sbs-line-2);border-radius:14px;padding:13px;background:#fff;}
+.sbs-home .sbs-panel__head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;gap:8px;}
+.sbs-home .sbs-panel__head h4{font-size:.78rem;font-weight:700;color:var(--sbs-ink);margin:0;letter-spacing:-.01em;}
+.sbs-home .sbs-panel__head em{font-size:.66rem;font-style:normal;color:var(--sbs-muted);font-weight:500;}
+
+/* chart */
+.sbs-home .sbs-chart{position:relative;height:118px;}
+.sbs-home .sbs-chart svg{width:100%;height:100%;overflow:visible;}
+.sbs-home .sbs-chart .sbs-line{
+  fill:none;stroke:var(--sbs-green);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:640;stroke-dashoffset:640;
+}
+.sbs-home .is-visible .sbs-chart .sbs-line{animation:sbsDraw 1.8s var(--sbs-ease) forwards;}
+@keyframes sbsDraw{to{stroke-dashoffset:0;}}
+.sbs-home .sbs-chart .sbs-area{fill:url(#sbsGrad);opacity:0;}
+.sbs-home .is-visible .sbs-chart .sbs-area{animation:sbsFadeArea 1.4s .7s ease forwards;}
+@keyframes sbsFadeArea{to{opacity:1;}}
+.sbs-home .sbs-chart .sbs-gridline{stroke:var(--sbs-line-2);stroke-width:1;}
+.sbs-home .sbs-chart .sbs-pt{fill:#fff;stroke:var(--sbs-green);stroke-width:2.2;opacity:0;}
+.sbs-home .is-visible .sbs-chart .sbs-pt{animation:sbsFadeArea .5s 1.5s ease forwards;}
+.sbs-home .sbs-chart .sbs-pulse{fill:var(--sbs-green);transform-origin:center;}
+.sbs-home .sbs-chart__x{display:flex;justify-content:space-between;margin-top:7px;font-size:.62rem;color:var(--sbs-muted);font-weight:500;}
+
+/* bars */
+.sbs-home .sbs-bars{display:flex;align-items:flex-end;gap:8px;height:96px;}
+.sbs-home .sbs-bars li{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;}
+.sbs-home .sbs-bars .sbs-bar{
+  width:100%;border-radius:6px 6px 3px 3px;height:0;
+  background:linear-gradient(180deg,var(--sbs-green-light),var(--sbs-green));
+  transition:height 1.1s var(--sbs-ease);
+}
+.sbs-home .sbs-bars .sbs-bar.is-alt{background:linear-gradient(180deg,#CFEFE0,#A9E1C9);}
+.sbs-home .sbs-bars span{font-size:.6rem;color:var(--sbs-muted);font-weight:600;}
+
+/* activity */
+.sbs-home .sbs-activity li{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--sbs-line-2);align-items:flex-start;}
+.sbs-home .sbs-activity li:last-child{border-bottom:0;padding-bottom:0;}
+.sbs-home .sbs-activity .sbs-ic{
+  width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:var(--sbs-green-50);color:var(--sbs-green-dark);
+}
+.sbs-home .sbs-activity .sbs-ic svg{width:14px;height:14px;}
+.sbs-home .sbs-activity .sbs-ic.is-amber{background:#FDF4E5;color:#B4713A;}
+.sbs-home .sbs-activity .sbs-ic.is-slate{background:#F1F5F4;color:#5C6B66;}
+.sbs-home .sbs-activity strong{display:block;font-size:.73rem;font-weight:600;color:var(--sbs-ink);line-height:1.35;}
+.sbs-home .sbs-activity em{font-style:normal;font-size:.65rem;color:var(--sbs-muted);}
+
+/* floating cards */
+.sbs-home .sbs-float{
+  position:absolute;background:#fff;border:1px solid var(--sbs-line);border-radius:14px;
+  padding:11px 14px;box-shadow:var(--sbs-shadow-lg);z-index:2;display:flex;align-items:center;gap:10px;
+}
+.sbs-home .sbs-float__ic{
+  width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  background:var(--sbs-green-50);color:var(--sbs-green-dark);flex-shrink:0;
+}
+.sbs-home .sbs-float__ic svg{width:16px;height:16px;}
+.sbs-home .sbs-float b{display:block;font-size:.78rem;color:var(--sbs-ink);font-weight:700;letter-spacing:-.01em;}
+.sbs-home .sbs-float span{font-size:.65rem;color:var(--sbs-muted);font-weight:500;}
+.sbs-home .sbs-float--a{left:-26px;bottom:82px;animation:sbsFloat 7s ease-in-out infinite .6s;}
+.sbs-home .sbs-float--b{right:-18px;top:54px;animation:sbsFloat 9s ease-in-out infinite 1.4s;}
+.sbs-home .sbs-float--b .sbs-float__ic{background:#FDF4E5;color:#B4713A;}
+.sbs-home .sbs-pulsedot{position:relative;width:8px;height:8px;border-radius:50%;background:var(--sbs-green);flex-shrink:0;}
+.sbs-home .sbs-pulsedot::after{
+  content:"";position:absolute;inset:0;border-radius:50%;background:var(--sbs-green);
+  animation:sbsPulse 2.1s ease-out infinite;
+}
+@keyframes sbsPulse{0%{transform:scale(1);opacity:.6;}100%{transform:scale(3.2);opacity:0;}}
+
+/* ---------- value / workflow ---------- */
+.sbs-home .sbs-prob{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;
+  max-width:920px;margin:0 auto clamp(40px,5vw,58px);
+}
+.sbs-home .sbs-prob__card{border:1px solid var(--sbs-line);border-radius:var(--sbs-radius);padding:24px;background:#fff;}
+.sbs-home .sbs-prob__card.is-good{border-color:var(--sbs-green-100);background:linear-gradient(180deg,var(--sbs-green-50),#fff 70%);}
+.sbs-home .sbs-prob__card h3{margin-bottom:10px;font-size:1rem;}
+.sbs-home .sbs-prob__card p{font-size:.92rem;margin:0;}
+.sbs-home .sbs-scatter{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px;}
+.sbs-home .sbs-scatter span{
+  font-size:.72rem;font-weight:500;color:var(--sbs-muted);background:var(--sbs-bg-soft);
+  border:1px dashed var(--sbs-line);border-radius:7px;padding:5px 10px;
+}
+.sbs-home .sbs-prob__card.is-good .sbs-scatter span{
+  color:var(--sbs-green-deep);background:#fff;border:1px solid var(--sbs-green-100);border-style:solid;font-weight:600;
+}
+.sbs-home .sbs-flows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
+.sbs-home .sbs-flow{
+  border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);padding:26px 24px;background:#fff;
+  box-shadow:var(--sbs-shadow-sm);
+}
+.sbs-home .sbs-flow h3{font-size:.76rem;letter-spacing:.11em;text-transform:uppercase;color:var(--sbs-muted);margin-bottom:20px;}
+.sbs-home .sbs-flow ol{list-style:none;margin:0;padding:0;}
+.sbs-home .sbs-node{
+  display:flex;align-items:center;gap:12px;border:1px solid var(--sbs-line-2);border-radius:12px;
+  padding:12px 14px;background:#fff;transition:border-color .3s ease,box-shadow .3s ease,transform .3s ease;
+}
+.sbs-home .sbs-node:hover{border-color:var(--sbs-green-100);box-shadow:var(--sbs-shadow);transform:translateX(3px);}
+.sbs-home .sbs-node__ic{
+  width:32px;height:32px;border-radius:9px;background:var(--sbs-green-50);color:var(--sbs-green-dark);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sbs-home .sbs-node__ic svg{width:16px;height:16px;}
+.sbs-home .sbs-node b{font-size:.82rem;font-weight:700;color:var(--sbs-ink);letter-spacing:-.005em;display:block;}
+.sbs-home .sbs-node span{font-size:.7rem;color:var(--sbs-muted);}
+.sbs-home .sbs-connector{height:34px;margin-left:30px;width:2px;background:var(--sbs-line);position:relative;overflow:hidden;border-radius:2px;}
+.sbs-home .sbs-connector::after{
+  content:"";position:absolute;left:0;top:-100%;width:2px;height:100%;
+  background:linear-gradient(180deg,transparent,var(--sbs-green),transparent);
+}
+.sbs-home .is-visible .sbs-connector::after{animation:sbsRun 2.4s linear infinite;}
+.sbs-home .sbs-connector.d2::after{animation-delay:.35s;}
+.sbs-home .sbs-connector.d3::after{animation-delay:.7s;}
+.sbs-home .sbs-connector.d4::after{animation-delay:1.05s;}
+@keyframes sbsRun{0%{top:-100%;}100%{top:200%;}}
+
+/* ---------- features ---------- */
+.sbs-home .sbs-features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+.sbs-home .sbs-fcard{
+  position:relative;border:1px solid var(--sbs-line);border-radius:var(--sbs-radius);background:#fff;
+  padding:26px 24px 24px;overflow:hidden;
+  transition:transform .3s var(--sbs-ease),box-shadow .3s var(--sbs-ease),border-color .3s ease;
+}
+.sbs-home .sbs-fcard::before{
+  content:"";position:absolute;inset:0;opacity:0;transition:opacity .3s ease;pointer-events:none;
+  background:linear-gradient(160deg,rgba(14,159,110,.06),transparent 55%);
+}
+.sbs-home .sbs-fcard:hover{transform:translateY(-5px);box-shadow:var(--sbs-shadow-lg);border-color:var(--sbs-green-100);}
+.sbs-home .sbs-fcard:hover::before{opacity:1;}
+.sbs-home .sbs-fcard__ic{
+  width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(145deg,var(--sbs-green-50),#fff);border:1px solid var(--sbs-green-100);
+  color:var(--sbs-green-dark);margin-bottom:18px;transition:transform .3s var(--sbs-ease);
+}
+.sbs-home .sbs-fcard:hover .sbs-fcard__ic{transform:scale(1.06) rotate(-3deg);}
+.sbs-home .sbs-fcard__ic svg{width:21px;height:21px;}
+.sbs-home .sbs-fcard h3{margin-bottom:8px;}
+.sbs-home .sbs-fcard p{font-size:.88rem;margin:0;color:var(--sbs-body);}
+.sbs-home .sbs-fcard__arrow{
+  margin-top:16px;display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;
+  color:var(--sbs-green-dark);opacity:.62;transition:opacity .3s ease,gap .3s ease;
+}
+.sbs-home .sbs-fcard:hover .sbs-fcard__arrow{opacity:1;gap:10px;}
+.sbs-home .sbs-fcard__arrow svg{width:14px;height:14px;}
+
+/* ---------- differentiators ---------- */
+.sbs-home .sbs-diff{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
+.sbs-home .sbs-dcard{
+  position:relative;border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);background:#fff;
+  padding:34px 32px;overflow:hidden;transition:transform .3s var(--sbs-ease),box-shadow .3s var(--sbs-ease);
+}
+.sbs-home .sbs-dcard:hover{transform:translateY(-4px);box-shadow:var(--sbs-shadow-lg);}
+.sbs-home .sbs-dcard__num{
+  position:absolute;right:26px;top:22px;font-size:3.4rem;font-weight:800;line-height:1;
+  color:var(--sbs-green);opacity:.07;letter-spacing:-.05em;
+}
+.sbs-home .sbs-dcard__ic{
+  width:50px;height:50px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(140deg,var(--sbs-green),var(--sbs-green-dark));color:#fff;margin-bottom:20px;
+  box-shadow:0 8px 20px rgba(14,159,110,.25);
+}
+.sbs-home .sbs-dcard__ic svg{width:23px;height:23px;}
+.sbs-home .sbs-dcard h3{font-size:1.2rem;margin-bottom:10px;}
+.sbs-home .sbs-dcard p{font-size:.94rem;margin:0;max-width:44ch;}
+
+/* ---------- automation ---------- */
+.sbs-home .sbs-auto{background:linear-gradient(170deg,#0B1512 0%,#0F221B 48%,#0A1A14 100%);position:relative;overflow:hidden;}
+.sbs-home .sbs-auto::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(700px 420px at 20% 0%,rgba(14,159,110,.22),transparent 62%),
+             radial-gradient(620px 460px at 88% 92%,rgba(52,211,153,.14),transparent 62%);
+}
+.sbs-home .sbs-auto::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:52px 52px;
+}
+.sbs-home .sbs-auto .sbs-wrap{position:relative;z-index:1;}
+.sbs-home .sbs-auto h2{color:#fff;}
+.sbs-home .sbs-auto .sbs-head p{color:rgba(255,255,255,.7);}
+.sbs-home .sbs-auto .sbs-eyebrow{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.24);color:#6EE7B7;}
+.sbs-home .sbs-auto__grid{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(24px,3.5vw,46px);align-items:start;}
+.sbs-home .sbs-autoflow{
+  border:1px solid rgba(255,255,255,.1);border-radius:var(--sbs-radius-lg);padding:26px;
+  background:rgba(255,255,255,.035);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+}
+.sbs-home .sbs-autoflow__title{
+  display:flex;align-items:center;gap:10px;font-size:.7rem;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:22px;
+}
+.sbs-home .sbs-astep{
+  display:flex;align-items:center;gap:13px;border:1px solid rgba(255,255,255,.1);border-radius:13px;
+  padding:13px 15px;background:rgba(255,255,255,.04);
+  opacity:.38;transform:translateY(6px);transition:opacity .5s ease,transform .5s var(--sbs-ease),border-color .5s ease,background .5s ease;
+}
+.sbs-home .sbs-astep.is-on{opacity:1;transform:translateY(0);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.09);}
+.sbs-home .sbs-astep__ic{
+  width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:rgba(255,255,255,.07);color:#6EE7B7;transition:background .4s ease;
+}
+.sbs-home .sbs-astep.is-on .sbs-astep__ic{background:rgba(52,211,153,.18);}
+.sbs-home .sbs-astep__ic svg{width:17px;height:17px;}
+.sbs-home .sbs-astep b{display:block;font-size:.86rem;color:#fff;font-weight:600;letter-spacing:-.01em;}
+.sbs-home .sbs-astep span{font-size:.72rem;color:rgba(255,255,255,.55);}
+.sbs-home .sbs-astep__tick{
+  margin-left:auto;width:22px;height:22px;border-radius:50%;background:rgba(52,211,153,.18);color:#6EE7B7;
+  display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.6);
+  transition:opacity .4s ease,transform .4s var(--sbs-ease);flex-shrink:0;
+}
+.sbs-home .sbs-astep.is-on .sbs-astep__tick{opacity:1;transform:scale(1);}
+.sbs-home .sbs-astep__tick svg{width:12px;height:12px;}
+.sbs-home .sbs-aline{width:2px;height:24px;margin-left:32px;background:rgba(255,255,255,.12);position:relative;overflow:hidden;border-radius:2px;}
+.sbs-home .sbs-aline i{position:absolute;left:0;top:-100%;width:2px;height:100%;background:linear-gradient(180deg,transparent,#34D399,transparent);}
+.sbs-home .is-visible .sbs-aline i{animation:sbsRun 2s linear infinite;}
+.sbs-home .sbs-aline:nth-of-type(2) i{animation-delay:.3s;}
+.sbs-home .sbs-status{display:flex;flex-direction:column;gap:11px;}
+.sbs-home .sbs-status__card{
+  display:flex;align-items:center;gap:11px;border:1px solid rgba(255,255,255,.1);border-radius:12px;
+  padding:14px 16px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.88);font-size:.88rem;font-weight:500;
+  opacity:0;transform:translateX(14px);transition:opacity .5s ease,transform .5s var(--sbs-ease);
+}
+.sbs-home .sbs-status__card.is-on{opacity:1;transform:translateX(0);}
+.sbs-home .sbs-status__card i{
+  width:22px;height:22px;border-radius:50%;background:rgba(52,211,153,.18);color:#6EE7B7;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-style:normal;
+}
+.sbs-home .sbs-status__card i svg{width:12px;height:12px;}
+.sbs-home .sbs-note{
+  margin-top:20px;border-left:2px solid rgba(52,211,153,.45);padding:2px 0 2px 14px;
+  font-size:.84rem;color:rgba(255,255,255,.6);
+}
+.sbs-home .sbs-auto__side h3{color:#fff;font-size:1.15rem;margin-bottom:12px;}
+.sbs-home .sbs-auto__side>p{color:rgba(255,255,255,.66);font-size:.94rem;}
+
+/* ---------- inventory table ---------- */
+.sbs-home .sbs-tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.sbs-home table.sbs-table{width:100%;border-collapse:collapse;min-width:900px;font-size:.8rem;}
+.sbs-home table.sbs-table th{
+  text-align:left;font-size:.64rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--sbs-muted);padding:10px 12px;border-bottom:1px solid var(--sbs-line);white-space:nowrap;
+}
+.sbs-home table.sbs-table td{padding:13px 12px;border-bottom:1px solid var(--sbs-line-2);color:var(--sbs-body);vertical-align:middle;white-space:nowrap;}
+.sbs-home table.sbs-table tr:last-child td{border-bottom:0;}
+.sbs-home table.sbs-table tbody tr{transition:background .2s ease;}
+.sbs-home table.sbs-table tbody tr:hover{background:var(--sbs-bg-soft);}
+.sbs-home .sbs-prod{display:flex;align-items:center;gap:10px;}
+.sbs-home .sbs-prod__ic{
+  width:32px;height:32px;border-radius:9px;background:var(--sbs-bg-soft);border:1px solid var(--sbs-line-2);
+  display:flex;align-items:center;justify-content:center;color:var(--sbs-green-dark);flex-shrink:0;
+}
+.sbs-home .sbs-prod__ic svg{width:15px;height:15px;}
+.sbs-home .sbs-prod b{display:block;font-size:.82rem;color:var(--sbs-ink);font-weight:600;}
+.sbs-home .sbs-prod span{font-size:.68rem;color:var(--sbs-muted);}
+.sbs-home .sbs-mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+.sbs-home .sbs-badge{
+  display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:600;padding:4px 9px;border-radius:999px;
+  background:var(--sbs-green-50);color:var(--sbs-green-deep);border:1px solid var(--sbs-green-100);
+}
+.sbs-home .sbs-badge.is-amber{background:#FDF4E5;color:#96602C;border-color:#F4E2C6;}
+.sbs-home .sbs-badge.is-slate{background:#F1F5F4;color:#54635D;border-color:#E2E9E6;}
+.sbs-home .sbs-badge.is-blue{background:#EEF4FB;color:#3C5C80;border-color:#DCE7F3;}
+.sbs-home .sbs-serial{
+  font-size:.7rem;font-weight:600;color:var(--sbs-ink);background:var(--sbs-bg-soft);
+  border:1px solid var(--sbs-line-2);border-radius:6px;padding:3px 8px;display:inline-block;
+}
+.sbs-home .sbs-movement{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px;
+}
+.sbs-home .sbs-move{
+  display:flex;align-items:center;gap:11px;border:1px solid var(--sbs-line-2);border-radius:12px;padding:13px 14px;background:#fff;
+}
+.sbs-home .sbs-move__ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sbs-home .sbs-move__ic svg{width:15px;height:15px;}
+.sbs-home .sbs-move__ic.is-in{background:var(--sbs-green-50);color:var(--sbs-green-dark);}
+.sbs-home .sbs-move__ic.is-out{background:#FDF0EE;color:#A9543F;}
+.sbs-home .sbs-move__ic.is-adj{background:#F1F5F4;color:#54635D;}
+.sbs-home .sbs-move b{display:block;font-size:.8rem;color:var(--sbs-ink);font-weight:600;}
+.sbs-home .sbs-move span{font-size:.68rem;color:var(--sbs-muted);}
+.sbs-home .sbs-move__qty{margin-left:auto;font-size:.82rem;font-weight:700;}
+.sbs-home .sbs-move__qty.is-pos{color:var(--sbs-green-dark);}
+.sbs-home .sbs-move__qty.is-neg{color:#A9543F;}
+.sbs-home .sbs-statbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:26px;}
+.sbs-home .sbs-statbar .sbs-kpi{padding:16px 18px;}
+.sbs-home .sbs-statbar .sbs-kpi__value{font-size:1.3rem;}
+
+/* ---------- orders ---------- */
+.sbs-home .sbs-orders{display:grid;grid-template-columns:1fr auto 1fr;gap:22px;align-items:stretch;}
+.sbs-home .sbs-ordercol{border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);background:#fff;box-shadow:var(--sbs-shadow-sm);overflow:hidden;}
+.sbs-home .sbs-ordercol__head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;
+  border-bottom:1px solid var(--sbs-line-2);background:var(--sbs-bg-soft);
+}
+.sbs-home .sbs-ordercol__head h3{margin:0;font-size:.95rem;display:flex;align-items:center;gap:9px;}
+.sbs-home .sbs-ordercol__head h3 i{
+  width:28px;height:28px;border-radius:8px;background:#fff;border:1px solid var(--sbs-line);
+  display:flex;align-items:center;justify-content:center;color:var(--sbs-green-dark);
+}
+.sbs-home .sbs-ordercol__head h3 i svg{width:15px;height:15px;}
+.sbs-home .sbs-ordercol__body{padding:14px;display:flex;flex-direction:column;gap:12px;}
+.sbs-home .sbs-order{
+  border:1px solid var(--sbs-line-2);border-radius:13px;padding:14px;background:#fff;
+  transition:border-color .25s ease,box-shadow .25s ease,transform .25s var(--sbs-ease);
+}
+.sbs-home .sbs-order:hover{border-color:var(--sbs-green-100);box-shadow:var(--sbs-shadow);transform:translateY(-2px);}
+.sbs-home .sbs-order__top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.sbs-home .sbs-order__no{font-size:.72rem;font-weight:700;color:var(--sbs-muted);letter-spacing:.04em;}
+.sbs-home .sbs-order__party{font-size:.9rem;font-weight:700;color:var(--sbs-ink);margin-bottom:9px;letter-spacing:-.01em;}
+.sbs-home .sbs-order__lines{display:flex;flex-direction:column;gap:5px;margin-bottom:11px;}
+.sbs-home .sbs-order__line{display:flex;justify-content:space-between;gap:10px;font-size:.76rem;}
+.sbs-home .sbs-order__line span:first-child{color:var(--sbs-body);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sbs-home .sbs-order__line span:last-child{color:var(--sbs-ink);font-weight:600;flex-shrink:0;}
+.sbs-home .sbs-order__foot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-top:10px;border-top:1px dashed var(--sbs-line);font-size:.74rem;color:var(--sbs-muted);
+}
+.sbs-home .sbs-order__foot b{color:var(--sbs-ink);font-size:.88rem;}
+.sbs-home .sbs-bridge{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  min-width:150px;padding:20px 0;
+}
+.sbs-home .sbs-bridge__node{
+  width:100%;text-align:center;border:1px solid var(--sbs-line);border-radius:12px;padding:14px 12px;background:#fff;
+  font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--sbs-ink);
+  box-shadow:var(--sbs-shadow-sm);
+}
+.sbs-home .sbs-bridge__node.is-core{
+  background:linear-gradient(140deg,var(--sbs-green),var(--sbs-green-dark));color:#fff;border-color:transparent;
+  box-shadow:0 10px 26px rgba(14,159,110,.3);
+}
+.sbs-home .sbs-bridge__node small{display:block;font-size:.62rem;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--sbs-muted);margin-top:3px;}
+.sbs-home .sbs-bridge__node.is-core small{color:rgba(255,255,255,.78);}
+.sbs-home .sbs-bridge__line{width:2px;height:42px;background:var(--sbs-line);position:relative;overflow:hidden;}
+.sbs-home .sbs-bridge__line i{position:absolute;left:0;top:-100%;width:2px;height:100%;background:linear-gradient(180deg,transparent,var(--sbs-green),transparent);}
+.sbs-home .is-visible .sbs-bridge__line i{animation:sbsRun 2.2s linear infinite;}
+.sbs-home .sbs-bridge__line.d2 i{animation-delay:.6s;}
+
+/* ---------- invoice ---------- */
+.sbs-home .sbs-invoice-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:clamp(28px,4vw,54px);align-items:center;}
+.sbs-home .sbs-taglist{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px;}
+.sbs-home .sbs-taglist span{
+  display:inline-flex;align-items:center;gap:7px;font-size:.78rem;font-weight:600;color:var(--sbs-green-deep);
+  background:var(--sbs-green-50);border:1px solid var(--sbs-green-100);border-radius:999px;padding:7px 14px;
+}
+.sbs-home .sbs-taglist span svg{width:13px;height:13px;}
+.sbs-home .sbs-checks{margin-top:22px;display:flex;flex-direction:column;gap:11px;}
+.sbs-home .sbs-checks li{display:flex;gap:10px;align-items:flex-start;font-size:.9rem;color:var(--sbs-body);}
+.sbs-home .sbs-checks svg{width:18px;height:18px;color:var(--sbs-green);flex-shrink:0;margin-top:2px;}
+.sbs-home .sbs-inv{
+  background:#fff;border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);
+  box-shadow:var(--sbs-shadow-xl);overflow:hidden;font-size:.78rem;
+}
+.sbs-home .sbs-inv__head{
+  display:flex;justify-content:space-between;gap:20px;padding:26px 28px;
+  background:linear-gradient(135deg,#0F221B,#123A2B);color:#fff;flex-wrap:wrap;
+}
+.sbs-home .sbs-inv__co{display:flex;gap:13px;align-items:flex-start;min-width:0;}
+.sbs-home .sbs-inv__logo{
+  width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.82rem;color:#fff;flex-shrink:0;letter-spacing:-.02em;
+}
+.sbs-home .sbs-inv__co b{display:block;font-size:1rem;color:#fff;font-weight:700;letter-spacing:-.015em;margin-bottom:5px;}
+.sbs-home .sbs-inv__co p{margin:0;font-size:.71rem;color:rgba(255,255,255,.66);line-height:1.65;}
+.sbs-home .sbs-inv__title{text-align:right;flex-shrink:0;}
+.sbs-home .sbs-inv__title strong{display:block;font-size:1.3rem;font-weight:800;letter-spacing:.12em;color:#fff;margin-bottom:8px;}
+.sbs-home .sbs-inv__title p{margin:0;font-size:.71rem;color:rgba(255,255,255,.66);line-height:1.7;}
+.sbs-home .sbs-inv__title p b{color:#fff;font-weight:600;}
+.sbs-home .sbs-inv__meta{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:22px 28px;border-bottom:1px solid var(--sbs-line-2);}
+.sbs-home .sbs-inv__meta h5{font-size:.63rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sbs-muted);margin:0 0 9px;}
+.sbs-home .sbs-inv__meta b{font-size:.86rem;color:var(--sbs-ink);display:block;margin-bottom:4px;}
+.sbs-home .sbs-inv__meta p{margin:0;font-size:.73rem;color:var(--sbs-body);line-height:1.7;}
+.sbs-home .sbs-inv__items{width:100%;border-collapse:collapse;}
+.sbs-home .sbs-inv__items th{
+  text-align:left;font-size:.61rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sbs-muted);
+  padding:11px 12px;background:var(--sbs-bg-soft);border-bottom:1px solid var(--sbs-line-2);
+}
+.sbs-home .sbs-inv__items th:nth-child(n+3),.sbs-home .sbs-inv__items td:nth-child(n+3){text-align:right;}
+.sbs-home .sbs-inv__items td{padding:12px;border-bottom:1px solid var(--sbs-line-2);font-size:.75rem;color:var(--sbs-body);vertical-align:top;}
+.sbs-home .sbs-inv__items td:first-child{padding-left:28px;}
+.sbs-home .sbs-inv__items th:first-child{padding-left:28px;}
+.sbs-home .sbs-inv__items td:last-child{padding-right:28px;}
+.sbs-home .sbs-inv__items th:last-child{padding-right:28px;}
+.sbs-home .sbs-inv__items td b{display:block;color:var(--sbs-ink);font-size:.79rem;font-weight:600;margin-bottom:3px;}
+.sbs-home .sbs-inv__items td em{font-style:normal;font-size:.69rem;color:var(--sbs-muted);}
+.sbs-home .sbs-inv__bottom{display:grid;grid-template-columns:1fr 292px;gap:22px;padding:22px 28px 26px;}
+.sbs-home .sbs-inv__pay h5{font-size:.63rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sbs-muted);margin:0 0 9px;}
+.sbs-home .sbs-inv__pay p{margin:0;font-size:.72rem;line-height:1.8;color:var(--sbs-body);}
+.sbs-home .sbs-inv__pay p b{color:var(--sbs-ink);font-weight:600;}
+.sbs-home .sbs-inv__tot{border:1px solid var(--sbs-line-2);border-radius:13px;overflow:hidden;align-self:start;}
+.sbs-home .sbs-inv__row{display:flex;justify-content:space-between;gap:12px;padding:9px 15px;font-size:.76rem;color:var(--sbs-body);}
+.sbs-home .sbs-inv__row b{color:var(--sbs-ink);font-weight:600;}
+.sbs-home .sbs-inv__row.is-total{
+  background:linear-gradient(135deg,var(--sbs-green),var(--sbs-green-dark));color:#fff;padding:14px 15px;
+  font-size:.82rem;font-weight:700;
+}
+.sbs-home .sbs-inv__row.is-total b{color:#fff;font-size:1.02rem;letter-spacing:-.02em;}
+.sbs-home .sbs-inv__stamp{
+  position:absolute;right:-14px;bottom:44px;background:#fff;border:1px solid var(--sbs-line);
+  border-radius:12px;padding:11px 15px;box-shadow:var(--sbs-shadow-lg);display:flex;align-items:center;gap:9px;z-index:2;
+}
+.sbs-home .sbs-inv__stamp svg{width:17px;height:17px;color:var(--sbs-green);}
+.sbs-home .sbs-inv__stamp b{font-size:.78rem;color:var(--sbs-ink);}
+
+/* ---------- notifications ---------- */
+.sbs-home .sbs-notif-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(28px,4vw,54px);align-items:center;}
+.sbs-home .sbs-notif{
+  background:#fff;border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);box-shadow:var(--sbs-shadow-lg);overflow:hidden;
+}
+.sbs-home .sbs-notif__head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border-bottom:1px solid var(--sbs-line-2);
+}
+.sbs-home .sbs-notif__head h3{margin:0;font-size:.95rem;display:flex;align-items:center;gap:10px;}
+.sbs-home .sbs-notif__head h3 svg{width:18px;height:18px;color:var(--sbs-green-dark);}
+.sbs-home .sbs-notif__count{
+  font-size:.66rem;font-weight:700;color:#fff;background:var(--sbs-green);border-radius:999px;padding:3px 9px;
+}
+.sbs-home .sbs-notif__list{padding:12px;display:flex;flex-direction:column;gap:9px;max-height:none;}
+.sbs-home .sbs-nitem{
+  display:flex;gap:12px;align-items:flex-start;border:1px solid var(--sbs-line-2);border-radius:12px;padding:13px 14px;
+  background:#fff;opacity:0;transform:translateY(12px);
+  transition:opacity .55s ease,transform .55s var(--sbs-ease),border-color .25s ease,box-shadow .25s ease;
+}
+.sbs-home .sbs-nitem.is-on{opacity:1;transform:translateY(0);}
+.sbs-home .sbs-nitem:hover{border-color:var(--sbs-green-100);box-shadow:var(--sbs-shadow);}
+.sbs-home .sbs-nitem__ic{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sbs-home .sbs-nitem__ic svg{width:16px;height:16px;}
+.sbs-home .sbs-nitem__ic.is-red{background:#FDF0EE;color:#A9543F;}
+.sbs-home .sbs-nitem__ic.is-green{background:var(--sbs-green-50);color:var(--sbs-green-dark);}
+.sbs-home .sbs-nitem__ic.is-amber{background:#FDF4E5;color:#96602C;}
+.sbs-home .sbs-nitem__ic.is-blue{background:#EEF4FB;color:#3C5C80;}
+.sbs-home .sbs-nitem__ic.is-slate{background:#F1F5F4;color:#54635D;}
+.sbs-home .sbs-nitem b{display:block;font-size:.85rem;font-weight:600;color:var(--sbs-ink);line-height:1.4;margin-bottom:3px;}
+.sbs-home .sbs-nitem p{margin:0;font-size:.74rem;color:var(--sbs-muted);}
+.sbs-home .sbs-nitem__time{margin-left:auto;font-size:.68rem;color:var(--sbs-muted);white-space:nowrap;flex-shrink:0;padding-left:8px;}
+.sbs-home .sbs-notif__foot{padding:12px 20px;border-top:1px solid var(--sbs-line-2);background:var(--sbs-bg-soft);font-size:.7rem;color:var(--sbs-muted);text-align:center;}
+
+/* ---------- business dashboard ---------- */
+.sbs-home .sbs-bdash{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;}
+.sbs-home .sbs-bdash .sbs-panel{padding:20px;}
+.sbs-home .sbs-kpis--wide{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px;}
+.sbs-home .sbs-kpis--wide .sbs-kpi{padding:16px 18px;}
+.sbs-home .sbs-kpis--wide .sbs-kpi__value{font-size:1.22rem;}
+.sbs-home .sbs-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;}
+.sbs-home .sbs-legend li{display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--sbs-muted);font-weight:500;}
+.sbs-home .sbs-legend i{width:9px;height:9px;border-radius:3px;display:block;}
+.sbs-home .sbs-donut{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.sbs-home .sbs-donut svg{width:118px;height:118px;flex-shrink:0;}
+.sbs-home .sbs-donut__seg{fill:none;stroke-width:14;stroke-linecap:round;}
+.sbs-home .sbs-breakdown{flex:1;min-width:130px;display:flex;flex-direction:column;gap:9px;}
+.sbs-home .sbs-breakdown li{display:flex;align-items:center;gap:9px;font-size:.76rem;color:var(--sbs-body);}
+.sbs-home .sbs-breakdown i{width:9px;height:9px;border-radius:3px;flex-shrink:0;}
+.sbs-home .sbs-breakdown b{margin-left:auto;color:var(--sbs-ink);font-weight:700;font-size:.8rem;}
+.sbs-home .sbs-caption{text-align:center;margin-top:22px;font-size:.86rem;color:var(--sbs-muted);}
+
+/* ---------- roadmap ---------- */
+.sbs-home .sbs-road{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}
+.sbs-home .sbs-rcard{
+  position:relative;border:1px dashed #D8E2DE;border-radius:var(--sbs-radius);background:#FCFDFD;padding:24px 22px;
+  transition:transform .3s var(--sbs-ease),border-color .3s ease,background .3s ease,box-shadow .3s ease;
+}
+.sbs-home .sbs-rcard:hover{transform:translateY(-4px);border-color:var(--sbs-green-100);background:#fff;box-shadow:var(--sbs-shadow);}
+.sbs-home .sbs-rcard__ic{
+  width:42px;height:42px;border-radius:12px;background:#F2F6F5;border:1px solid var(--sbs-line-2);
+  color:var(--sbs-muted);display:flex;align-items:center;justify-content:center;margin-bottom:16px;transition:color .3s ease,background .3s ease;
+}
+.sbs-home .sbs-rcard:hover .sbs-rcard__ic{color:var(--sbs-green-dark);background:var(--sbs-green-50);}
+.sbs-home .sbs-rcard__ic svg{width:19px;height:19px;}
+.sbs-home .sbs-rcard h3{font-size:1rem;color:var(--sbs-ink-2);margin-bottom:7px;}
+.sbs-home .sbs-rcard p{font-size:.83rem;margin:0 0 15px;color:var(--sbs-muted);}
+.sbs-home .sbs-soon{
+  display:inline-flex;align-items:center;gap:6px;font-size:.62rem;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--sbs-muted);background:#F2F6F5;border:1px solid var(--sbs-line);
+  border-radius:999px;padding:5px 11px;
+}
+.sbs-home .sbs-soon::before{content:"";width:5px;height:5px;border-radius:50%;background:#B6C4BF;}
+.sbs-home .sbs-roadnote{
+  max-width:640px;margin:34px auto 0;text-align:center;font-size:.88rem;color:var(--sbs-muted);
+  border-top:1px solid var(--sbs-line);padding-top:24px;
+}
+
+/* ---------- pricing ---------- */
+.sbs-home .sbs-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start;}
+.sbs-home .sbs-plan{
+  border:1px solid var(--sbs-line);border-radius:var(--sbs-radius-lg);background:#fff;padding:32px 28px;
+  display:flex;flex-direction:column;transition:transform .3s var(--sbs-ease),box-shadow .3s var(--sbs-ease),border-color .3s ease;
+}
+.sbs-home .sbs-plan:hover{transform:translateY(-5px);box-shadow:var(--sbs-shadow-lg);border-color:var(--sbs-green-100);}
+.sbs-home .sbs-plan--focus{
+  border-color:var(--sbs-green-100);box-shadow:var(--sbs-shadow-lg);
+  background:linear-gradient(180deg,var(--sbs-green-50) 0%,#fff 24%);
+}
+.sbs-home .sbs-plan__top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;}
+.sbs-home .sbs-plan__name{font-size:.74rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sbs-ink);}
+.sbs-home .sbs-plan__price{display:flex;align-items:flex-end;gap:6px;margin-bottom:6px;}
+.sbs-home .sbs-plan__price strong{font-size:2.5rem;font-weight:800;color:var(--sbs-ink);letter-spacing:-.04em;line-height:1;}
+.sbs-home .sbs-plan__price span{font-size:.85rem;color:var(--sbs-muted);font-weight:500;padding-bottom:5px;}
+.sbs-home .sbs-plan__desc{font-size:.84rem;color:var(--sbs-muted);margin:0 0 22px;}
+.sbs-home .sbs-plan ul{display:flex;flex-direction:column;gap:10px;margin-bottom:26px;flex:1;}
+.sbs-home .sbs-plan ul li{display:flex;gap:10px;align-items:flex-start;font-size:.86rem;color:var(--sbs-body);}
+.sbs-home .sbs-plan ul svg{width:16px;height:16px;color:var(--sbs-green);flex-shrink:0;margin-top:3px;}
+.sbs-home .sbs-plan ul li.is-head{font-weight:700;color:var(--sbs-ink);}
+.sbs-home .sbs-pricenote{
+  max-width:660px;margin:30px auto 0;text-align:center;font-size:.84rem;color:var(--sbs-muted);
+}
+
+/* ---------- cta ---------- */
+.sbs-home .sbs-cta{padding:clamp(60px,7vw,96px) 0;}
+.sbs-home .sbs-cta__box{
+  position:relative;border-radius:28px;overflow:hidden;padding:clamp(46px,6vw,80px) clamp(24px,4vw,64px);
+  background:linear-gradient(150deg,#0B1512 0%,#0E2C21 52%,#0A1E17 100%);text-align:center;
+  box-shadow:0 40px 90px rgba(7,95,66,.22);
+}
+.sbs-home .sbs-cta__box::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(520px 320px at 50% 0%,rgba(52,211,153,.28),transparent 65%),
+             radial-gradient(420px 320px at 88% 100%,rgba(14,159,110,.2),transparent 62%);
+}
+.sbs-home .sbs-cta__box::after{
+  content:"";position:absolute;left:50%;bottom:-160px;width:560px;height:320px;transform:translateX(-50%);
+  background:radial-gradient(closest-side,rgba(52,211,153,.4),transparent 72%);filter:blur(30px);pointer-events:none;
+}
+.sbs-home .sbs-cta__inner{position:relative;z-index:1;max-width:680px;margin:0 auto;}
+.sbs-home .sbs-cta h2{color:#fff;margin-bottom:16px;}
+.sbs-home .sbs-cta p{color:rgba(255,255,255,.72);font-size:1.04rem;margin-bottom:30px;}
+.sbs-home .sbs-cta .sbs-eyebrow{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.25);color:#6EE7B7;}
+.sbs-home .sbs-cta__btns{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;}
+.sbs-home .sbs-cta__fine{margin:26px 0 0;font-size:.8rem;color:rgba(255,255,255,.5);}
+
+/* ---------- footer ---------- */
+.sbs-home .sbs-footer{border-top:1px solid var(--sbs-line);background:var(--sbs-bg-soft);padding:clamp(48px,6vw,72px) 0 28px;}
+.sbs-home .sbs-footer__grid{display:grid;grid-template-columns:1.6fr repeat(4,minmax(0,1fr));gap:32px;}
+.sbs-home .sbs-footer__brand p{font-size:.88rem;color:var(--sbs-body);max-width:280px;margin:16px 0 0;}
+.sbs-home .sbs-footer h4{font-size:.7rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--sbs-ink);margin:0 0 16px;}
+.sbs-home .sbs-footer ul{display:flex;flex-direction:column;gap:10px;}
+.sbs-home .sbs-footer ul a{font-size:.86rem;color:var(--sbs-body);transition:color .2s ease;}
+.sbs-home .sbs-footer ul a:hover{color:var(--sbs-green-dark);}
+.sbs-home .sbs-footer__bottom{
+  margin-top:44px;padding-top:22px;border-top:1px solid var(--sbs-line);
+  display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;
+  font-size:.8rem;color:var(--sbs-muted);
+}
+.sbs-home .sbs-footer__bottom ul{flex-direction:row;gap:18px;flex-wrap:wrap;}
+
+/* ---------- reveal ---------- */
+.sbs-home .sbs-reveal{opacity:0;transform:translateY(22px);transition:opacity .7s var(--sbs-ease),transform .7s var(--sbs-ease);}
+.sbs-home .sbs-reveal.is-visible{opacity:1;transform:none;}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .sbs-home .sbs-features{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sbs-home .sbs-road{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sbs-home .sbs-footer__grid{grid-template-columns:1fr 1fr 1fr;gap:28px;}
+  .sbs-home .sbs-footer__brand{grid-column:1 / -1;}
+  .sbs-home .sbs-invoice-grid,.sbs-home .sbs-notif-grid{grid-template-columns:1fr;}
+  .sbs-home .sbs-auto__grid{grid-template-columns:1fr;}
+  .sbs-home .sbs-bdash{grid-template-columns:1fr;}
+}
+@media (max-width:980px){
+  .sbs-home .sbs-menu,.sbs-home .sbs-actions{display:none;}
+  .sbs-home .sbs-burger{display:block;}
+  .sbs-home .sbs-mobile{display:block;}
+  .sbs-home .sbs-hero__grid{grid-template-columns:1fr;}
+  .sbs-home .sbs-heroviz{margin-top:14px;}
+  .sbs-home .sbs-float--a{left:0;bottom:-16px;}
+  .sbs-home .sbs-float--b{right:0;top:-18px;}
+  .sbs-home .sbs-orders{grid-template-columns:1fr;}
+  .sbs-home .sbs-bridge{flex-direction:row;min-width:0;width:100%;padding:0;gap:0;}
+  .sbs-home .sbs-bridge__line{width:100%;height:2px;min-width:20px;}
+  .sbs-home .sbs-bridge__line i{width:100%;height:2px;left:-100%;top:0;}
+  .sbs-home .is-visible .sbs-bridge__line i{animation:sbsRunX 2.2s linear infinite;}
+  @keyframes sbsRunX{0%{left:-100%;}100%{left:200%;}}
+  .sbs-home .sbs-plans{grid-template-columns:1fr;max-width:460px;margin:0 auto;}
+  .sbs-home .sbs-diff{grid-template-columns:1fr;}
+  .sbs-home .sbs-statbar{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sbs-home .sbs-movement{grid-template-columns:1fr;}
+  .sbs-home .sbs-inv__bottom{grid-template-columns:1fr;}
+  .sbs-home .sbs-inv__stamp{right:10px;bottom:auto;top:-16px;}
+}
+@media (max-width:720px){
+  .sbs-home .sbs-wrap{padding:0 18px;}
+  .sbs-home .sbs-prob,.sbs-home .sbs-flows{grid-template-columns:1fr;}
+  .sbs-home .sbs-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sbs-home .sbs-dash__split{grid-template-columns:1fr;}
+  .sbs-home .sbs-kpis--wide{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sbs-home .sbs-features{grid-template-columns:1fr;}
+  .sbs-home .sbs-road{grid-template-columns:1fr;}
+  .sbs-home .sbs-footer__grid{grid-template-columns:1fr 1fr;}
+  .sbs-home .sbs-hero__cta .sbs-btn{flex:1 1 100%;}
+  .sbs-home .sbs-cta__btns .sbs-btn{flex:1 1 100%;}
+  .sbs-home .sbs-inv__head{flex-direction:column;}
+  .sbs-home .sbs-inv__title{text-align:left;}
+  .sbs-home .sbs-inv__meta{grid-template-columns:1fr;}
+  .sbs-home .sbs-inv__items{font-size:.72rem;}
+  .sbs-home .sbs-inv__items th:nth-child(2),.sbs-home .sbs-inv__items td:nth-child(2){display:none;}
+  .sbs-home .sbs-inv__items td:first-child,.sbs-home .sbs-inv__items th:first-child{padding-left:18px;}
+  .sbs-home .sbs-inv__items td:last-child,.sbs-home .sbs-inv__items th:last-child{padding-right:18px;}
+  .sbs-home .sbs-inv__head,.sbs-home .sbs-inv__meta,.sbs-home .sbs-inv__bottom{padding-left:18px;padding-right:18px;}
+  .sbs-home .sbs-float{display:none;}
+}
+@media (max-width:420px){
+  .sbs-home .sbs-statbar{grid-template-columns:1fr;}
+  .sbs-home .sbs-footer__grid{grid-template-columns:1fr;}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  .sbs-home *,.sbs-home *::before,.sbs-home *::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;scroll-behavior:auto !important;
+  }
+  .sbs-home .sbs-reveal{opacity:1;transform:none;}
+  .sbs-home .sbs-astep,.sbs-home .sbs-status__card,.sbs-home .sbs-nitem{opacity:1;transform:none;}
+  .sbs-home .sbs-chart .sbs-line{stroke-dashoffset:0;}
+  .sbs-home .sbs-chart .sbs-area,.sbs-home .sbs-chart .sbs-pt{opacity:1;}
+}
+</style>
+
+<!-- ======================= HEADER ======================= -->
+<header class="sbs-header" id="sbs-header">
+  <div class="sbs-wrap">
+    <nav class="sbs-nav" aria-label="Primary navigation">
+      <a class="sbs-logo" href="#sbs-home" aria-label="SBS — Sharif Business Solutions, home">
+        <img class="sbs-logo__mark" src="/public/sbs-logo-black.png" alt="SBS">
+        <span class="sbs-logo__text">
+          <!-- <span class="sbs-logo__name">SBS</span>
+          <span class="sbs-logo__sub">Sharif Business Solutions</span> -->
+        </span>
+      </a>
+
+      <ul class="sbs-menu">
+        <li><a href="#platform">Platform</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#automation">Automation</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+      </ul>
+
+      <div class="sbs-actions">
+        <a class="sbs-link-login" href="https://app.sharifbusinesssolutions.com/login">Login</a>
+        <a class="sbs-btn sbs-btn--primary" href="#contact">Get Started</a>
+      </div>
+
+      <button class="sbs-burger" id="sbs-burger" type="button" aria-expanded="false" aria-controls="sbs-mobile" aria-label="Open navigation menu">
+        <span></span><span></span><span></span>
+      </button>
+    </nav>
+  </div>
+
+  <div class="sbs-mobile" id="sbs-mobile">
+    <div class="sbs-mobile__inner">
+      <a class="sbs-mlink" href="#platform">Platform</a>
+      <a class="sbs-mlink" href="#features">Features</a>
+      <a class="sbs-mlink" href="#automation">Automation</a>
+      <a class="sbs-mlink" href="#pricing">Pricing</a>
+      <a class="sbs-mlink" href="#roadmap">Roadmap</a>
+      <div class="sbs-mobile__cta">
+        <a class="sbs-btn sbs-btn--ghost" href="https://app.sharifbusinesssolutions.com/login">Login</a>
+        <a class="sbs-btn sbs-btn--primary" href="#contact">Get Started</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ======================= HERO ======================= -->
+<section class="sbs-hero" aria-labelledby="sbs-hero-title">
+  <div class="sbs-wrap">
+    <div class="sbs-hero__grid">
+
+      <div class="sbs-hero__copy sbs-reveal">
+        <p class="sbs-hero__badge"><i aria-hidden="true">◆</i> Business Management Software</p>
+        <h1 id="sbs-hero-title">Run Your Business. <span class="sbs-hl">All in One Place.</span></h1>
+        <p class="sbs-hero__lead">SBS brings your products, inventory, orders, customers, estimates, invoices, payments, employees, and business operations together in one connected platform.</p>
+        <p class="sbs-hero__sub">Built for businesses that want less scattered software and more connected operations.</p>
+
+        <div class="sbs-hero__cta">
+          <a class="sbs-btn sbs-btn--primary" href="#contact">Get Started
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <a class="sbs-btn sbs-btn--ghost" href="#platform">Explore Platform</a>
+        </div>
+
+        <ul class="sbs-trust">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Connected modules</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Serial &amp; asset tracking</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> VAT/TRN-ready invoicing</li>
+        </ul>
+      </div>
+
+      <!-- ---------- HERO DASHBOARD MOCKUP ---------- -->
+      <div class="sbs-heroviz sbs-reveal" role="img" aria-label="Illustration of the SBS dashboard showing demonstration business data: total sales, outstanding balance, inventory items, orders, a revenue chart, recent activity and notifications.">
+        <div class="sbs-app" data-animate="dash">
+          <div class="sbs-app__bar">
+            <span class="sbs-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="sbs-app__url">app.sharifbusinesssolutions.com/dashboard</span>
+            <span class="sbs-app__tag">Demo</span>
+          </div>
+          <div class="sbs-app__body">
+            <div class="sbs-dash__top">
+              <div class="sbs-dash__title">Business Overview <span>October 2026 &middot; All warehouses</span></div>
+              <span class="sbs-chip">Last 6 months</span>
+            </div>
+
+            <div class="sbs-kpis">
+              <div class="sbs-kpi">
+                <div class="sbs-kpi__label">Total Sales</div>
+                <div class="sbs-kpi__value"><small>AED</small> <span data-count="48250" data-decimals="0" data-format="group">0</span></div>
+                <div class="sbs-kpi__delta">▲ 12.4%</div>
+              </div>
+              <div class="sbs-kpi">
+                <div class="sbs-kpi__label">Outstanding</div>
+                <div class="sbs-kpi__value"><small>AED</small> <span data-count="12480" data-format="group">0</span></div>
+                <div class="sbs-kpi__delta is-down">▼ 3.1%</div>
+              </div>
+              <div class="sbs-kpi">
+                <div class="sbs-kpi__label">Inventory</div>
+                <div class="sbs-kpi__value"><span data-count="1284" data-format="group">0</span> <small>Items</small></div>
+                <div class="sbs-kpi__delta">▲ 4.8%</div>
+              </div>
+              <div class="sbs-kpi">
+                <div class="sbs-kpi__label">Orders</div>
+                <div class="sbs-kpi__value"><span data-count="126">0</span></div>
+                <div class="sbs-kpi__delta">▲ 9.2%</div>
+              </div>
+            </div>
+
+            <div class="sbs-dash__split">
+              <div class="sbs-panel">
+                <div class="sbs-panel__head">
+                  <h4>Revenue &amp; Purchases</h4>
+                  <em>AED &middot; monthly</em>
+                </div>
+                <div class="sbs-chart">
+                  <svg viewBox="0 0 320 118" preserveAspectRatio="none" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="sbsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#0E9F6E" stop-opacity=".22"/>
+                        <stop offset="100%" stop-color="#0E9F6E" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <line class="sbs-gridline" x1="0" y1="24" x2="320" y2="24"/>
+                    <line class="sbs-gridline" x1="0" y1="56" x2="320" y2="56"/>
+                    <line class="sbs-gridline" x1="0" y1="88" x2="320" y2="88"/>
+                    <path class="sbs-area" d="M0,86 L54,72 L108,78 L162,50 L216,44 L270,26 L320,18 L320,118 L0,118 Z"/>
+                    <path class="sbs-line" d="M0,86 L54,72 L108,78 L162,50 L216,44 L270,26 L320,18"/>
+                    <path class="sbs-line" style="stroke:#BFE0D2;stroke-width:1.8;stroke-dasharray:5 5;animation-delay:.3s" d="M0,98 L54,92 L108,88 L162,80 L216,74 L270,62 L320,58"/>
+                    <circle class="sbs-pt" cx="270" cy="26" r="4"/>
+                    <circle class="sbs-pulse" cx="316" cy="18" r="3.4">
+                      <animate attributeName="r" values="3.4;6.4;3.4" dur="2.4s" repeatCount="indefinite"/>
+                      <animate attributeName="opacity" values="1;.25;1" dur="2.4s" repeatCount="indefinite"/>
+                    </circle>
+                  </svg>
+                </div>
+                <div class="sbs-chart__x"><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span></div>
+              </div>
+
+              <div class="sbs-panel">
+                <div class="sbs-panel__head"><h4>Recent Activity</h4><em>Live</em></div>
+                <ul class="sbs-activity">
+                  <li>
+                    <span class="sbs-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+                    <span><strong>Invoice #2081 created</strong><em>AED 6,420 &middot; 2 min ago</em></span>
+                  </li>
+                  <li>
+                    <span class="sbs-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                    <span><strong>Payment recorded</strong><em>ABC Trading &middot; 14 min ago</em></span>
+                  </li>
+                  <li>
+                    <span class="sbs-ic is-amber" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+                    <span><strong>Low stock: Dell Latitude 7420</strong><em>6 units left &middot; 26 min ago</em></span>
+                  </li>
+                  <li>
+                    <span class="sbs-ic is-slate" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+                    <span><strong>PO-1023 received</strong><em>+ 40 units &middot; 1 hr ago</em></span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sbs-float sbs-float--a" aria-hidden="true">
+          <span class="sbs-float__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+          <span><b>Payment recorded</b><span>AED 4,150 &middot; Just now</span></span>
+        </div>
+
+        <div class="sbs-float sbs-float--b" aria-hidden="true">
+          <span class="sbs-float__ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
+          <span><b>3 low stock alerts</b><span>Warehouse A</span></span>
+          <span class="sbs-pulsedot"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ======================= VALUE PROPOSITION ======================= -->
+<section class="sbs-section sbs-section--soft" id="platform" aria-labelledby="sbs-value-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">The Platform</span>
+      <h2 id="sbs-value-title">One Platform. Connected Business Operations.</h2>
+      <p>Most businesses run their operation across spreadsheets, a separate inventory system, an invoicing tool, an order list, a folder of documents, and a messaging app. SBS brings those workflows into one connected system.</p>
+    </div>
+
+    <div class="sbs-prob">
+      <div class="sbs-prob__card sbs-reveal">
+        <h3>Scattered across tools</h3>
+        <p>Data is re-entered, stock counts drift, and nobody is sure which version is correct.</p>
+        <div class="sbs-scatter">
+          <span>Spreadsheets</span><span>Stock sheets</span><span>Invoice tool</span><span>Email threads</span><span>Chat groups</span><span>Local folders</span>
+        </div>
+      </div>
+      <div class="sbs-prob__card is-good sbs-reveal">
+        <h3>Connected in SBS</h3>
+        <p>One record flows through purchasing, inventory, sales, invoicing, and payments.</p>
+        <div class="sbs-scatter">
+          <span>Products</span><span>Inventory</span><span>Orders</span><span>Estimates</span><span>Invoices</span><span>Payments</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sbs-flows">
+      <div class="sbs-flow sbs-reveal">
+        <h3>Sales flow</h3>
+        <ol>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+            <span><b>Product</b><span>Variants, pricing, SKU</span></span>
+          </li>
+          <li class="sbs-connector" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v12H3z"/><path d="M3 11h18M9 7v12"/></svg></span>
+            <span><b>Inventory</b><span>Availability checked</span></span>
+          </li>
+          <li class="sbs-connector d2" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 11.3a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 7H6"/></svg></span>
+            <span><b>Sales Order</b><span>Quantities and pricing</span></span>
+          </li>
+          <li class="sbs-connector d3" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></span>
+            <span><b>Invoice</b><span>Taxes and totals</span></span>
+          </li>
+          <li class="sbs-connector d4" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+            <span><b>Payment</b><span>Balance updated</span></span>
+          </li>
+        </ol>
+      </div>
+
+      <div class="sbs-flow sbs-reveal">
+        <h3>Purchasing flow</h3>
+        <ol>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-7h6v7"/></svg></span>
+            <span><b>Supplier</b><span>Vendor details</span></span>
+          </li>
+          <li class="sbs-connector" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11v5m0 0-2-2m2 2 2-2"/></svg></span>
+            <span><b>Purchase Order</b><span>Costs and quantities</span></span>
+          </li>
+          <li class="sbs-connector d2" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span><b>Received Stock</b><span>Goods checked in</span></span>
+          </li>
+          <li class="sbs-connector d3" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v12H3z"/><path d="M3 11h18M9 7v12"/></svg></span>
+            <span><b>Inventory</b><span>Stock levels updated</span></span>
+          </li>
+          <li class="sbs-connector d4" aria-hidden="true"></li>
+          <li class="sbs-node">
+            <span class="sbs-node__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/></svg></span>
+            <span><b>Ready to Sell</b><span>Available for orders</span></span>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= FEATURES ======================= -->
+<section class="sbs-section" id="features" aria-labelledby="sbs-features-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Current Platform</span>
+      <h2 id="sbs-features-title">Everything You Need to Run the Operation.</h2>
+      <p>Powerful business tools designed to work together instead of living in separate systems.</p>
+    </div>
+
+    <div class="sbs-features">
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>
+        <h3>Products</h3>
+        <p>Manage products, variants, pricing, and product information from one centralized system.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></div>
+        <h3>Inventory</h3>
+        <p>Track stock levels, inventory movements, adjustments, and availability.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14"/></svg></div>
+        <h3>Serial &amp; Asset Tracking</h3>
+        <p>Track individual serialized products and business assets throughout their lifecycle.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11v5m0 0-2-2m2 2 2-2"/></svg></div>
+        <h3>Purchase Orders</h3>
+        <p>Create and manage purchase orders while keeping purchasing connected to inventory.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 11.3a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 7H6"/></svg></div>
+        <h3>Sales Orders</h3>
+        <p>Manage customer orders and connect products, quantities, pricing, and fulfillment workflows.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h3>Customers</h3>
+        <p>Keep customer information organized and connected to estimates, invoices, orders, and payments.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h3M8 14h3M8 18h3M15 10h1v8h-1z"/></svg></div>
+        <h3>Estimates</h3>
+        <p>Create professional estimates with products, services, pricing, taxes, and totals.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div>
+        <h3>Invoices</h3>
+        <p>Create professional business invoices with company information, customer information, VAT/TRN details, line items, taxes, totals, and payment information.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div>
+        <h3>Payments</h3>
+        <p>Track payments and connect payment activity to your business transactions.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <h3>Employees</h3>
+        <p>Manage employee information and support organized business operations.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>
+        <h3>Expenses</h3>
+        <p>Track business expenses and maintain visibility over operational spending.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V7a2 2 0 0 1 2-2h3.5l2 2.5H18a2 2 0 0 1 2 2V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z"/></svg></div>
+        <h3>Documents</h3>
+        <p>Keep important business documents organized and accessible.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div>
+        <h3>Reports</h3>
+        <p>Turn your business data into useful operational and financial insights.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        <h3>Notifications</h3>
+        <p>Keep important business events visible through a centralized notification system.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+      <article class="sbs-fcard sbs-reveal">
+        <div class="sbs-fcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.6 1.6 0 0 0 15 19.4a1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.09A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.09A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 9 4.6h.08A1.6 1.6 0 0 0 10 3.13V3a2 2 0 1 1 4 0v.09a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 19.4 9v.08a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.09a1.6 1.6 0 0 0-1.47 1Z"/></svg></div>
+        <h3>Settings</h3>
+        <p>Configure company information, business preferences, operational settings, and platform behavior.</p>
+        <span class="sbs-fcard__arrow">Explore <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ======================= DIFFERENTIATORS ======================= -->
+<section class="sbs-section sbs-section--soft" aria-labelledby="sbs-diff-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Why SBS</span>
+      <h2 id="sbs-diff-title">More Than Just Another Business App.</h2>
+      <p>SBS is designed around connected business workflows, not isolated features.</p>
+    </div>
+
+    <div class="sbs-diff">
+      <article class="sbs-dcard sbs-reveal">
+        <span class="sbs-dcard__num" aria-hidden="true">01</span>
+        <div class="sbs-dcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6h7M6 8.5v7M18 8.5v7M8.5 18h7"/></svg></div>
+        <h3>Connected Operations</h3>
+        <p>Products, inventory, orders, estimates, invoices, and payments are designed to work together.</p>
+      </article>
+
+      <article class="sbs-dcard sbs-reveal">
+        <span class="sbs-dcard__num" aria-hidden="true">02</span>
+        <div class="sbs-dcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L9 22l9-11.5h-6.5L13 2Z"/></svg></div>
+        <h3>Business Automation</h3>
+        <p>Reduce repetitive work with automated actions, workflow triggers, status updates, and notifications.</p>
+      </article>
+
+      <article class="sbs-dcard sbs-reveal">
+        <span class="sbs-dcard__num" aria-hidden="true">03</span>
+        <div class="sbs-dcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M7 5v14M11 5v14M14 5v14M18 5v14M21 5v14"/></svg></div>
+        <h3>Serial &amp; Asset Visibility</h3>
+        <p>Know exactly what asset or serialized product you have, where it belongs, and how it moves through your operation.</p>
+      </article>
+
+      <article class="sbs-dcard sbs-reveal">
+        <span class="sbs-dcard__num" aria-hidden="true">04</span>
+        <div class="sbs-dcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg></div>
+        <h3>Built to Expand</h3>
+        <p>SBS is designed as a modular platform that can grow with your business.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= AUTOMATION ======================= -->
+<section class="sbs-section sbs-auto" id="automation" aria-labelledby="sbs-auto-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Business Automation</span>
+      <h2 id="sbs-auto-title">Stop Repeating the Same Work.</h2>
+      <p>SBS connects important business actions so information can move through your workflows without unnecessary manual work.</p>
+    </div>
+
+    <div class="sbs-auto__grid">
+      <div class="sbs-autoflow sbs-reveal" data-auto="flow">
+        <div class="sbs-autoflow__title"><span class="sbs-pulsedot" aria-hidden="true"></span> Example workflow</div>
+
+        <ol>
+          <li class="sbs-astep" data-step="0">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 11.3a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 7H6"/></svg></span>
+            <span><b>Sales order created</b><span>SO-2214 &middot; ABC Trading</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+          <li class="sbs-aline" aria-hidden="true"><i></i></li>
+          <li class="sbs-astep" data-step="1">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+            <span><b>Inventory checked</b><span>Availability confirmed</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+          <li class="sbs-aline" aria-hidden="true"><i></i></li>
+          <li class="sbs-astep" data-step="2">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v12H3z"/><path d="M3 11h18M9 7v12"/></svg></span>
+            <span><b>Stock updated</b><span>Warehouse A &middot; −4 units</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+          <li class="sbs-aline" aria-hidden="true"><i></i></li>
+          <li class="sbs-astep" data-step="3">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></span>
+            <span><b>Invoice generated</b><span>INV-2081 &middot; AED 6,420</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+          <li class="sbs-aline" aria-hidden="true"><i></i></li>
+          <li class="sbs-astep" data-step="4">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+            <span><b>Payment recorded</b><span>Bank transfer &middot; partial</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+          <li class="sbs-aline" aria-hidden="true"><i></i></li>
+          <li class="sbs-astep" data-step="5">
+            <span class="sbs-astep__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
+            <span><b>Notification created</b><span>Sent to the operations team</span></span>
+            <span class="sbs-astep__tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </li>
+        </ol>
+      </div>
+
+      <div class="sbs-auto__side sbs-reveal">
+        <h3>Designed to automate connected business workflows.</h3>
+        <p>Instead of re-entering the same information in five places, SBS is built so a single business action can update the records that depend on it.</p>
+
+        <div class="sbs-status" data-auto="status">
+          <div class="sbs-status__card"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i> Order updated</div>
+          <div class="sbs-status__card"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i> Inventory updated</div>
+          <div class="sbs-status__card"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i> Invoice created</div>
+          <div class="sbs-status__card"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i> Payment recorded</div>
+          <div class="sbs-status__card"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i> Notification generated</div>
+        </div>
+
+        <p class="sbs-note">Automation coverage varies by workflow and continues to expand as the platform develops. The sequence shown here is an illustration of how connected actions are designed to work.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= INVENTORY ======================= -->
+<section class="sbs-section" aria-labelledby="sbs-inv-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Inventory &amp; Assets</span>
+      <h2 id="sbs-inv-title">Know What You Have. Where It Is. What Happened.</h2>
+      <p>From products and variants to inventory movements and serialized assets, SBS gives businesses greater visibility over their operational data.</p>
+    </div>
+
+    <div class="sbs-statbar sbs-reveal">
+      <div class="sbs-kpi">
+        <div class="sbs-kpi__label">Items in stock</div>
+        <div class="sbs-kpi__value"><span data-count="1284" data-format="group">0</span></div>
+      </div>
+      <div class="sbs-kpi">
+        <div class="sbs-kpi__label">Stock value</div>
+        <div class="sbs-kpi__value"><small>AED</small> <span data-count="742900" data-format="group">0</span></div>
+      </div>
+      <div class="sbs-kpi">
+        <div class="sbs-kpi__label">Serialized assets</div>
+        <div class="sbs-kpi__value"><span data-count="386">0</span></div>
+      </div>
+      <div class="sbs-kpi">
+        <div class="sbs-kpi__label">Low stock alerts</div>
+        <div class="sbs-kpi__value"><span data-count="7">0</span></div>
+      </div>
+    </div>
+
+    <div class="sbs-app sbs-reveal">
+      <div class="sbs-app__bar">
+        <span class="sbs-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="sbs-app__url">app.sharifbusinesssolutions.com/inventory</span>
+        <span class="sbs-app__tag">Demo Data</span>
+      </div>
+      <div class="sbs-app__body">
+        <div class="sbs-dash__top">
+          <div class="sbs-dash__title">Inventory <span>3 products &middot; 2 warehouses</span></div>
+          <span class="sbs-chip">Filter: All warehouses</span>
+        </div>
+
+        <div class="sbs-tablewrap">
+          <table class="sbs-table">
+            <caption class="sbs-visually-hidden" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Demonstration inventory data</caption>
+            <thead>
+              <tr>
+                <th scope="col">Product</th>
+                <th scope="col">SKU</th>
+                <th scope="col">Variant</th>
+                <th scope="col">Warehouse</th>
+                <th scope="col">Available</th>
+                <th scope="col">Reserved</th>
+                <th scope="col">Cost</th>
+                <th scope="col">Selling Price</th>
+                <th scope="col">Serial Number</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="sbs-prod">
+                    <span class="sbs-prod__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg></span>
+                    <span><b>Dell Latitude 7420</b><span>Business laptop</span></span>
+                  </span>
+                </td>
+                <td class="sbs-mono">DL-7420-I7</td>
+                <td>i7 / 16GB / 512GB</td>
+                <td>Warehouse A</td>
+                <td class="sbs-mono"><b style="color:var(--sbs-ink)">6</b></td>
+                <td class="sbs-mono">2</td>
+                <td class="sbs-mono">AED 2,850</td>
+                <td class="sbs-mono">AED 3,690</td>
+                <td><span class="sbs-serial">SN-4Q8X21947</span></td>
+                <td><span class="sbs-badge is-amber">Low stock</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="sbs-prod">
+                    <span class="sbs-prod__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg></span>
+                    <span><b>HP EliteBook 840</b><span>Business laptop</span></span>
+                  </span>
+                </td>
+                <td class="sbs-mono">HP-840-G8</td>
+                <td>i5 / 16GB / 512GB</td>
+                <td>Warehouse A</td>
+                <td class="sbs-mono"><b style="color:var(--sbs-ink)">24</b></td>
+                <td class="sbs-mono">5</td>
+                <td class="sbs-mono">AED 2,410</td>
+                <td class="sbs-mono">AED 3,150</td>
+                <td><span class="sbs-serial">SN-7HB50382</span></td>
+                <td><span class="sbs-badge">In stock</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="sbs-prod">
+                    <span class="sbs-prod__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg></span>
+                    <span><b>Lenovo ThinkPad T14</b><span>Business laptop</span></span>
+                  </span>
+                </td>
+                <td class="sbs-mono">LN-T14-G3</td>
+                <td>i7 / 32GB / 1TB</td>
+                <td>Warehouse B</td>
+                <td class="sbs-mono"><b style="color:var(--sbs-ink)">13</b></td>
+                <td class="sbs-mono">1</td>
+                <td class="sbs-mono">AED 3,120</td>
+                <td class="sbs-mono">AED 4,080</td>
+                <td><span class="sbs-serial">SN-9TP11265</span></td>
+                <td><span class="sbs-badge is-blue">Reserved</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sbs-movement">
+          <div class="sbs-move">
+            <span class="sbs-move__ic is-in" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span>
+            <span><b>Stock received</b><span>PO-1023 &middot; Warehouse A</span></span>
+            <span class="sbs-move__qty is-pos">+40</span>
+          </div>
+          <div class="sbs-move">
+            <span class="sbs-move__ic is-out" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>
+            <span><b>Order fulfilled</b><span>SO-2214 &middot; Warehouse A</span></span>
+            <span class="sbs-move__qty is-neg">−4</span>
+          </div>
+          <div class="sbs-move">
+            <span class="sbs-move__ic is-adj" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h6"/></svg></span>
+            <span><b>Adjustment</b><span>Stock count &middot; Warehouse B</span></span>
+            <span class="sbs-move__qty is-pos">+2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= ORDERS & PURCHASING ======================= -->
+<section class="sbs-section sbs-section--soft" aria-labelledby="sbs-orders-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Orders &amp; Purchasing</span>
+      <h2 id="sbs-orders-title">Connect Buying and Selling.</h2>
+      <p>Purchase order management and sales order management share the same inventory, so what you buy and what you sell stay in step.</p>
+    </div>
+
+    <div class="sbs-orders">
+      <div class="sbs-ordercol sbs-reveal">
+        <div class="sbs-ordercol__head">
+          <h3><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11v5m0 0-2-2m2 2 2-2"/></svg></i> Purchase Orders</h3>
+          <span class="sbs-chip">Incoming</span>
+        </div>
+        <div class="sbs-ordercol__body">
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">PO-1023</span>
+              <span class="sbs-badge">Received</span>
+            </div>
+            <div class="sbs-order__party">Gulf Tech Distribution FZE</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>Dell Latitude 7420 &times; 25</span><span>AED 71,250</span></div>
+              <div class="sbs-order__line"><span>HP EliteBook 840 &times; 15</span><span>AED 36,150</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Expected 08 Oct 2026</span><b>AED 107,400</b></div>
+          </article>
+
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">PO-1024</span>
+              <span class="sbs-badge is-amber">Partially received</span>
+            </div>
+            <div class="sbs-order__party">Emirates Hardware Supply LLC</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>Lenovo ThinkPad T14 &times; 12</span><span>AED 37,440</span></div>
+              <div class="sbs-order__line"><span>Docking Station &times; 20</span><span>AED 9,800</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Expected 16 Oct 2026</span><b>AED 47,240</b></div>
+          </article>
+
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">PO-1025</span>
+              <span class="sbs-badge is-slate">Draft</span>
+            </div>
+            <div class="sbs-order__party">Northline Components Trading</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>SSD 1TB NVMe &times; 60</span><span>AED 18,600</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Expected 24 Oct 2026</span><b>AED 18,600</b></div>
+          </article>
+        </div>
+      </div>
+
+      <div class="sbs-bridge sbs-reveal" aria-hidden="true">
+        <div class="sbs-bridge__node">Purchasing<small>Cost in</small></div>
+        <div class="sbs-bridge__line"><i></i></div>
+        <div class="sbs-bridge__node is-core">Inventory<small>Single source of stock</small></div>
+        <div class="sbs-bridge__line d2"><i></i></div>
+        <div class="sbs-bridge__node">Sales<small>Revenue out</small></div>
+      </div>
+
+      <div class="sbs-ordercol sbs-reveal">
+        <div class="sbs-ordercol__head">
+          <h3><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 11.3a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 7H6"/></svg></i> Sales Orders</h3>
+          <span class="sbs-chip">Outgoing</span>
+        </div>
+        <div class="sbs-ordercol__body">
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">SO-2214</span>
+              <span class="sbs-badge">Fulfilled</span>
+            </div>
+            <div class="sbs-order__party">ABC Trading LLC</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>Dell Latitude 7420 &times; 4</span><span>AED 14,760</span></div>
+              <div class="sbs-order__line"><span>Docking Station &times; 4</span><span>AED 2,760</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Invoiced &middot; INV-2081</span><b>AED 17,520</b></div>
+          </article>
+
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">SO-2215</span>
+              <span class="sbs-badge is-blue">Processing</span>
+            </div>
+            <div class="sbs-order__party">Al Noor Technical Trading LLC</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>HP EliteBook 840 &times; 6</span><span>AED 18,900</span></div>
+              <div class="sbs-order__line"><span>SSD 1TB NVMe &times; 6</span><span>AED 2,340</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Ship 12 Oct 2026</span><b>AED 21,240</b></div>
+          </article>
+
+          <article class="sbs-order">
+            <div class="sbs-order__top">
+              <span class="sbs-order__no">SO-2216</span>
+              <span class="sbs-badge is-slate">Awaiting stock</span>
+            </div>
+            <div class="sbs-order__party">Horizon Facilities Management</div>
+            <div class="sbs-order__lines">
+              <div class="sbs-order__line"><span>Lenovo ThinkPad T14 &times; 10</span><span>AED 40,800</span></div>
+            </div>
+            <div class="sbs-order__foot"><span>Linked to PO-1024</span><b>AED 40,800</b></div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= INVOICE ======================= -->
+<section class="sbs-section" aria-labelledby="sbs-invoice-title">
+  <div class="sbs-wrap">
+    <div class="sbs-invoice-grid">
+      <div class="sbs-reveal">
+        <span class="sbs-eyebrow">Invoicing</span>
+        <h2 id="sbs-invoice-title">Professional Invoices. Built for Your Business.</h2>
+        <p>Create invoices that look like they belong to your business—not someone else's software.</p>
+
+        <ul class="sbs-checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Your company details, logo, and TRN on every document</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Line items with descriptions, quantities, unit prices, and tax</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Subtotal, discount, VAT, and grand total calculated for you</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Payment information and balances connected to the customer record</li>
+        </ul>
+
+        <div class="sbs-taglist">
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Professional</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Branded</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Business-ready</span>
+        </div>
+      </div>
+
+      <div class="sbs-reveal" style="position:relative;">
+        <div class="sbs-inv" role="img" aria-label="Example invoice mockup for a fictional company, Al Noor Technical Trading LLC, showing company details, customer billing details, line items, VAT and totals.">
+          <div class="sbs-inv__head">
+            <div class="sbs-inv__co">
+              <span class="sbs-inv__logo" aria-hidden="true">ANT</span>
+              <div>
+                <b>Al Noor Technical Trading LLC</b>
+                <p>
+                  Office 1204, Business Bay Tower<br>
+                  Dubai, United Arab Emirates<br>
+                  +971 4 555 0142 &middot; accounts@alnoortech.example<br>
+                  TRN: 100412345600003
+                </p>
+              </div>
+            </div>
+            <div class="sbs-inv__title">
+              <strong>INVOICE</strong>
+              <p>
+                No. <b>INV-2081</b><br>
+                Issued <b>02 Oct 2026</b><br>
+                Due <b>16 Oct 2026</b>
+              </p>
+            </div>
+          </div>
+
+          <div class="sbs-inv__meta">
+            <div>
+              <h5>Bill To</h5>
+              <b>ABC Trading LLC</b>
+              <p>
+                Warehouse 7, Al Quoz Industrial 3<br>
+                Dubai, United Arab Emirates<br>
+                +971 4 555 0188 &middot; finance@abctrading.example<br>
+                TRN: 100987654300003
+              </p>
+            </div>
+            <div>
+              <h5>Reference</h5>
+              <b>Sales Order SO-2214</b>
+              <p>
+                Payment terms: Net 14<br>
+                Currency: AED<br>
+                Prepared by: Operations<br>
+                Status: <span class="sbs-badge is-amber" style="vertical-align:middle;">Partially paid</span>
+              </p>
+            </div>
+          </div>
+
+          <table class="sbs-inv__items">
+            <thead>
+              <tr>
+                <th scope="col">Product / Service</th>
+                <th scope="col">Description</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Unit Price</th>
+                <th scope="col">Tax</th>
+                <th scope="col">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Dell Latitude 7420</b><em>SKU DL-7420-I7</em></td>
+                <td>i7 / 16GB / 512GB, 3-year warranty</td>
+                <td class="sbs-mono">4</td>
+                <td class="sbs-mono">3,690.00</td>
+                <td class="sbs-mono">5%</td>
+                <td class="sbs-mono">14,760.00</td>
+              </tr>
+              <tr>
+                <td><b>Docking Station</b><em>SKU DS-USBC-90W</em></td>
+                <td>USB-C 90W, dual display output</td>
+                <td class="sbs-mono">4</td>
+                <td class="sbs-mono">690.00</td>
+                <td class="sbs-mono">5%</td>
+                <td class="sbs-mono">2,760.00</td>
+              </tr>
+              <tr>
+                <td><b>On-site Setup</b><em>Service</em></td>
+                <td>Device imaging and deployment</td>
+                <td class="sbs-mono">1</td>
+                <td class="sbs-mono">850.00</td>
+                <td class="sbs-mono">5%</td>
+                <td class="sbs-mono">850.00</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="sbs-inv__bottom">
+            <div class="sbs-inv__pay">
+              <h5>Payment Information</h5>
+              <p>
+                Bank: <b>Emirates Commercial Bank</b><br>
+                Account name: <b>Al Noor Technical Trading LLC</b><br>
+                IBAN: <b>AE07 0331 2345 6789 0123 456</b><br>
+                Reference: <b>INV-2081</b><br>
+                Received to date: <b>AED 6,000.00</b>
+              </p>
+            </div>
+            <div class="sbs-inv__tot">
+              <div class="sbs-inv__row"><span>Subtotal</span><b class="sbs-mono">AED 18,370.00</b></div>
+              <div class="sbs-inv__row"><span>Discount</span><b class="sbs-mono">− AED 370.00</b></div>
+              <div class="sbs-inv__row"><span>VAT (5%)</span><b class="sbs-mono">AED 900.00</b></div>
+              <div class="sbs-inv__row is-total"><span>Grand Total</span><b class="sbs-mono">AED 18,900.00</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sbs-inv__stamp" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <b>VAT / TRN ready</b>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= NOTIFICATIONS ======================= -->
+<section class="sbs-section sbs-section--soft" aria-labelledby="sbs-notif-title">
+  <div class="sbs-wrap">
+    <div class="sbs-notif-grid">
+      <div class="sbs-reveal">
+        <span class="sbs-eyebrow">Notifications</span>
+        <h2 id="sbs-notif-title">Important Activity. One Place.</h2>
+        <p>Overdue invoices, received purchase orders, low stock, recorded payments, and updated estimates all surface in a single notification center—so the things that need attention don't get lost in a chat group.</p>
+        <ul class="sbs-checks">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Events generated from real business activity across modules</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Each notification links back to the record it came from</li>
+        </ul>
+      </div>
+
+      <div class="sbs-reveal">
+        <div class="sbs-notif">
+          <div class="sbs-notif__head">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg> Notifications</h3>
+            <span class="sbs-notif__count">5 new</span>
+          </div>
+          <div class="sbs-notif__list" data-auto="notif">
+            <div class="sbs-nitem">
+              <span class="sbs-nitem__ic is-red" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+              <span><b>Invoice #2081 is overdue</b><p>ABC Trading LLC &middot; AED 12,900 outstanding</p></span>
+              <span class="sbs-nitem__time">Just now</span>
+            </div>
+            <div class="sbs-nitem">
+              <span class="sbs-nitem__ic is-green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+              <span><b>Payment received from ABC Trading</b><p>AED 6,000 &middot; Bank transfer</p></span>
+              <span class="sbs-nitem__time">5 min ago</span>
+            </div>
+            <div class="sbs-nitem">
+              <span class="sbs-nitem__ic is-amber" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+              <span><b>Inventory for Dell Latitude 7420 is low</b><p>6 available &middot; Warehouse A</p></span>
+              <span class="sbs-nitem__time">18 min ago</span>
+            </div>
+            <div class="sbs-nitem">
+              <span class="sbs-nitem__ic is-blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+              <span><b>Purchase Order #PO-1023 was received</b><p>Gulf Tech Distribution FZE &middot; 40 units added</p></span>
+              <span class="sbs-nitem__time">42 min ago</span>
+            </div>
+            <div class="sbs-nitem">
+              <span class="sbs-nitem__ic is-slate" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+              <span><b>Estimate #1048 was updated</b><p>Horizon Facilities Management &middot; AED 40,800</p></span>
+              <span class="sbs-nitem__time">1 hr ago</span>
+            </div>
+          </div>
+          <div class="sbs-notif__foot">Demonstration notifications shown with sample data.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= BUSINESS DASHBOARD ======================= -->
+<section class="sbs-section" aria-labelledby="sbs-bdash-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Reports &amp; Insight</span>
+      <h2 id="sbs-bdash-title">See Your Business Clearly.</h2>
+      <p>Sales, purchases, inventory, invoices, payments, and expenses reported from the same underlying data.</p>
+    </div>
+
+    <div class="sbs-app sbs-reveal">
+      <div class="sbs-app__bar">
+        <span class="sbs-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="sbs-app__url">app.sharifbusinesssolutions.com/reports</span>
+        <span class="sbs-app__tag">Demo Data</span>
+      </div>
+      <div class="sbs-app__body">
+        <div class="sbs-kpis sbs-kpis--wide">
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Sales</div>
+            <div class="sbs-kpi__value"><small>AED</small> <span data-count="48250" data-format="group">0</span></div>
+            <div class="sbs-kpi__delta">▲ 12.4% vs last month</div>
+          </div>
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Purchases</div>
+            <div class="sbs-kpi__value"><small>AED</small> <span data-count="31740" data-format="group">0</span></div>
+            <div class="sbs-kpi__delta is-down">▼ 2.6% vs last month</div>
+          </div>
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Expenses</div>
+            <div class="sbs-kpi__value"><small>AED</small> <span data-count="9120" data-format="group">0</span></div>
+            <div class="sbs-kpi__delta is-down">▼ 1.4% vs last month</div>
+          </div>
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Inventory Value</div>
+            <div class="sbs-kpi__value"><small>AED</small> <span data-count="742900" data-format="group">0</span></div>
+          </div>
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Invoices Issued</div>
+            <div class="sbs-kpi__value"><span data-count="64">0</span></div>
+          </div>
+          <div class="sbs-kpi">
+            <div class="sbs-kpi__label">Payments Received</div>
+            <div class="sbs-kpi__value"><small>AED</small> <span data-count="35770" data-format="group">0</span></div>
+          </div>
+        </div>
+
+        <div class="sbs-bdash">
+          <div class="sbs-panel">
+            <div class="sbs-panel__head"><h4>Sales vs Purchases</h4><em>Last 6 months &middot; AED</em></div>
+            <ul class="sbs-bars" data-bars>
+              <li><span class="sbs-bar" data-h="46"></span><span>May</span></li>
+              <li><span class="sbs-bar is-alt" data-h="34"></span><span>Jun</span></li>
+              <li><span class="sbs-bar" data-h="58"></span><span>Jul</span></li>
+              <li><span class="sbs-bar is-alt" data-h="41"></span><span>Aug</span></li>
+              <li><span class="sbs-bar" data-h="74"></span><span>Sep</span></li>
+              <li><span class="sbs-bar is-alt" data-h="52"></span><span>Sep</span></li>
+              <li><span class="sbs-bar" data-h="92"></span><span>Oct</span></li>
+              <li><span class="sbs-bar is-alt" data-h="61"></span><span>Oct</span></li>
+            </ul>
+            <ul class="sbs-legend">
+              <li><i style="background:linear-gradient(180deg,#34D399,#0E9F6E)"></i> Sales</li>
+              <li><i style="background:#BFE0D2"></i> Purchases</li>
+            </ul>
+          </div>
+
+          <div class="sbs-panel">
+            <div class="sbs-panel__head"><h4>Where the money sits</h4><em>Current</em></div>
+            <div class="sbs-donut">
+              <svg viewBox="0 0 42 42" aria-hidden="true">
+                <circle class="sbs-donut__seg" cx="21" cy="21" r="15.9" stroke="#EEF2F0"/>
+                <circle class="sbs-donut__seg" cx="21" cy="21" r="15.9" stroke="#0E9F6E" stroke-dasharray="52 48" stroke-dashoffset="25"/>
+                <circle class="sbs-donut__seg" cx="21" cy="21" r="15.9" stroke="#6EE7B7" stroke-dasharray="26 74" stroke-dashoffset="-27"/>
+                <circle class="sbs-donut__seg" cx="21" cy="21" r="15.9" stroke="#CBD9D4" stroke-dasharray="22 78" stroke-dashoffset="-53"/>
+              </svg>
+              <ul class="sbs-breakdown">
+                <li><i style="background:#0E9F6E"></i> Paid invoices <b>52%</b></li>
+                <li><i style="background:#6EE7B7"></i> Outstanding <b>26%</b></li>
+                <li><i style="background:#CBD9D4"></i> Expenses <b>22%</b></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="sbs-caption sbs-reveal">Your business data, connected in one view.</p>
+  </div>
+</section>
+
+<!-- ======================= ROADMAP ======================= -->
+<section class="sbs-section sbs-section--soft" id="roadmap" aria-labelledby="sbs-road-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Roadmap</span>
+      <h2 id="sbs-road-title">An Expanding Platform.</h2>
+      <p>SBS is continuously evolving to support more of the way businesses operate. The capabilities below are planned and not yet part of the current platform.</p>
+    </div>
+
+    <div class="sbs-road">
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></div>
+        <h3>CRM</h3>
+        <p>Relationship history, pipeline context, and customer communication in one place.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></div>
+        <h3>Leads</h3>
+        <p>Capture and qualify new business before it becomes an estimate or order.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5"/></svg></div>
+        <h3>Jobs &amp; Field Service</h3>
+        <p>Scheduling, job tracking, and on-site work connected to inventory and invoicing.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V9l5-4 5 4v12"/><path d="M13 21V13l4-3 4 3v8"/><path d="M2 21h20"/></svg></div>
+        <h3>Advanced Multi-Warehouse</h3>
+        <p>Deeper transfer, allocation, and location-level controls across sites.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>Warranty &amp; RMA</h3>
+        <p>Returns, replacements, and warranty history tied to serial numbers.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20v-4"/></svg></div>
+        <h3>Advanced Analytics</h3>
+        <p>Deeper operational and financial analysis across longer time horizons.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M7 14h5"/></svg></div>
+        <h3>B2B Client Portal</h3>
+        <p>A dedicated space for clients to view documents, orders, and balances.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+
+      <article class="sbs-rcard sbs-reveal">
+        <div class="sbs-rcard__ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3A5 5 0 0 0 13.5 3.5l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3A5 5 0 0 0 10.5 20.5l1.7-1.7"/></svg></div>
+        <h3>Additional Integrations</h3>
+        <p>More connections between SBS and the tools businesses already use.</p>
+        <span class="sbs-soon">Coming Soon</span>
+      </article>
+    </div>
+
+    <p class="sbs-roadnote sbs-reveal">Roadmap items are in planning or development and are not available in the current platform. Timelines may change as the product evolves.</p>
+  </div>
+</section>
+
+<!-- ======================= PRICING ======================= -->
+<section class="sbs-section" id="pricing" aria-labelledby="sbs-pricing-title">
+  <div class="sbs-wrap">
+    <div class="sbs-head sbs-reveal">
+      <span class="sbs-eyebrow">Pricing</span>
+      <h2 id="sbs-pricing-title">Simple Plans for Growing Businesses.</h2>
+      <p>Transparent pricing for the platform we're building. Subscriptions are not open yet—plans below show the intended structure.</p>
+    </div>
+
+    <div class="sbs-plans">
+
+      <article class="sbs-plan sbs-reveal">
+        <div class="sbs-plan__top">
+          <span class="sbs-plan__name">Starter</span>
+          <span class="sbs-soon">Coming Soon</span>
+        </div>
+        <div class="sbs-plan__price"><strong>$29</strong><span>/month</span></div>
+        <p class="sbs-plan__desc">Core business management for smaller operations.</p>
+        <ul>
+          <li class="is-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Core business management</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Products</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Inventory</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Customers</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Estimates</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Invoices</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Basic reports</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Documents</li>
+        </ul>
+        <button class="sbs-btn sbs-btn--soon" type="button" disabled aria-disabled="true">Coming Soon</button>
+      </article>
+
+      <article class="sbs-plan sbs-plan--focus sbs-reveal">
+        <div class="sbs-plan__top">
+          <span class="sbs-plan__name">Pro</span>
+          <span class="sbs-soon">Coming Soon</span>
+        </div>
+        <div class="sbs-plan__price"><strong>$79</strong><span>/month</span></div>
+        <p class="sbs-plan__desc">Full operational depth for connected inventory and orders.</p>
+        <ul>
+          <li class="is-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Everything in Starter</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Advanced inventory</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Serial &amp; asset tracking</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Sales orders</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Purchase orders</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Employees</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Expenses</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Payments</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Automation</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Advanced reports</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Notifications</li>
+        </ul>
+        <button class="sbs-btn sbs-btn--soon" type="button" disabled aria-disabled="true">Coming Soon</button>
+      </article>
+
+      <article class="sbs-plan sbs-reveal">
+        <div class="sbs-plan__top">
+          <span class="sbs-plan__name">Business</span>
+          <span class="sbs-soon">Coming Soon</span>
+        </div>
+        <div class="sbs-plan__price"><strong>Custom</strong></div>
+        <p class="sbs-plan__desc">For larger operations with expanded requirements.</p>
+        <ul>
+          <li class="is-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Everything in Pro</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Expanded operational controls</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Multi-warehouse capabilities</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Advanced analytics</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Warranty &amp; RMA</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> B2B client portal</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Expanded automation</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Additional business capabilities</li>
+        </ul>
+        <button class="sbs-btn sbs-btn--soon" type="button" disabled aria-disabled="true">Coming Soon</button>
+      </article>
+    </div>
+
+    <p class="sbs-pricenote sbs-reveal">Plan contents include capabilities currently on the SBS roadmap. Availability of individual features may change before subscriptions open.</p>
+  </div>
+</section>
+
+<!-- ======================= FINAL CTA ======================= -->
+<section class="sbs-cta" id="contact" aria-labelledby="sbs-cta-title">
+  <div class="sbs-wrap">
+    <div class="sbs-cta__box sbs-reveal">
+      <div class="sbs-cta__inner">
+        <span class="sbs-eyebrow">Early Access</span>
+        <h2 id="sbs-cta-title">Ready to Bring Your Business Together?</h2>
+        <p>SBS is opening the platform to early businesses while we continue expanding the product.</p>
+        <div class="sbs-cta__btns">
+          <a class="sbs-btn sbs-btn--white" href="#contact">Get Early Access
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <a class="sbs-btn sbs-btn--light" href="#contact">Talk to Us</a>
+        </div>
+        <p class="sbs-cta__fine">Early access places are limited while the platform continues to develop.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ======================= FOOTER ======================= -->
+<footer class="sbs-footer">
+  <div class="sbs-wrap">
+    <div class="sbs-footer__grid">
+      <div class="sbs-footer__brand">
+        <a class="sbs-logo" href="#sbs-home" aria-label="SBS — Sharif Business Solutions">
+          <img class="sbs-logo__mark" src="/sbs-logo-png" alt="SBS">
+          <span class="sbs-logo__text">
+            <span class="sbs-logo__name">SBS</span>
+            <span class="sbs-logo__sub">Sharif Business Solutions</span>
+          </span>
+        </a>
+        <p>Modern business management software for connected business operations.</p>
+      </div>
+
+      <nav aria-label="Platform links">
+        <h4>Platform</h4>
+        <ul>
+          <li><a href="#features">Products</a></li>
+          <li><a href="#features">Inventory</a></li>
+          <li><a href="#features">Sales Orders</a></li>
+          <li><a href="#features">Purchase Orders</a></li>
+          <li><a href="#features">Customers</a></li>
+          <li><a href="#features">Estimates</a></li>
+          <li><a href="#features">Invoices</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label="Operations links">
+        <h4>Operations</h4>
+        <ul>
+          <li><a href="#features">Payments</a></li>
+          <li><a href="#features">Employees</a></li>
+          <li><a href="#features">Expenses</a></li>
+          <li><a href="#features">Documents</a></li>
+          <li><a href="#features">Reports</a></li>
+          <li><a href="#features">Notifications</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label="Company links">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#platform">About</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#roadmap">Roadmap</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-label="Legal links">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#contact">Privacy Policy</a></li>
+          <li><a href="#contact">Terms</a></li>
+          <li><a href="#contact">Cookie Policy</a></li>
+        </ul>
+      </nav>
+    </div>
+
+    <div class="sbs-footer__bottom">
+      <span>&copy; 2026 Sharif Business Solutions. All rights reserved.</span>
+      <ul>
+        <li><a href="#contact">Privacy</a></li>
+        <li><a href="#contact">Terms</a></li>
+        <li><a href="#contact">Cookies</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.getElementById('sbs-home');
+  if (!root || root.dataset.sbsInit === '1') return;
+  root.dataset.sbsInit = '1';
+
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- sticky header state ---------- */
+  var header = root.querySelector('#sbs-header');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      if (header) header.classList.toggle('is-scrolled', window.pageYOffset > 12);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- mobile menu ---------- */
+  var burger = root.querySelector('#sbs-burger');
+  var mobile = root.querySelector('#sbs-mobile');
+  function closeMenu() {
+    if (!burger || !mobile) return;
+    burger.setAttribute('aria-expanded', 'false');
+    burger.setAttribute('aria-label', 'Open navigation menu');
+    mobile.classList.remove('is-open');
+  }
+  if (burger && mobile) {
+    burger.addEventListener('click', function () {
+      var open = burger.getAttribute('aria-expanded') === 'true';
+      burger.setAttribute('aria-expanded', open ? 'false' : 'true');
+      burger.setAttribute('aria-label', open ? 'Open navigation menu' : 'Close navigation menu');
+      mobile.classList.toggle('is-open', !open);
+    });
+    mobile.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', closeMenu);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeMenu();
+    });
+  }
+
+  /* ---------- smooth in-page scrolling (scoped links only) ---------- */
+  root.querySelectorAll('a[href^="#"]').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      var id = link.getAttribute('href');
+      if (!id || id === '#') return;
+      var target = root.querySelector(id);
+      if (!target) return;
+      e.preventDefault();
+      var offset = header ? header.getBoundingClientRect().height : 0;
+      var top = target.getBoundingClientRect().top + window.pageYOffset - offset - 10;
+      window.scrollTo({ top: top, behavior: reduced ? 'auto' : 'smooth' });
+    });
+  });
+
+  /* ---------- number counting ---------- */
+  function animateCount(el) {
+    if (el.dataset.done === '1') return;
+    el.dataset.done = '1';
+    var target = parseFloat(el.getAttribute('data-count')) || 0;
+    var group = el.getAttribute('data-format') === 'group';
+    function render(v) {
+      var n = Math.round(v);
+      el.textContent = group ? n.toLocaleString('en-US') : String(n);
+    }
+    if (reduced) { render(target); return; }
+    var dur = 1400, start = null;
+    function step(ts) {
+      if (start === null) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      render(target * eased);
+      if (p < 1) window.requestAnimationFrame(step);
+    }
+    window.requestAnimationFrame(step);
+  }
+
+  /* ---------- staggered sequences ---------- */
+  function runSequence(nodes, gap, cls) {
+    nodes.forEach(function (n, i) {
+      window.setTimeout(function () { n.classList.add(cls); }, reduced ? 0 : i * gap);
+    });
+  }
+
+  /* ---------- bar chart ---------- */
+  function drawBars(list) {
+    list.querySelectorAll('.sbs-bar').forEach(function (bar, i) {
+      var h = parseFloat(bar.getAttribute('data-h')) || 0;
+      window.setTimeout(function () { bar.style.height = h + '%'; }, reduced ? 0 : i * 80);
+    });
+  }
+
+  /* ---------- intersection observer ---------- */
+  var revealItems = root.querySelectorAll('.sbs-reveal');
+  var counters = root.querySelectorAll('[data-count]');
+
+  function activate(el) {
+    el.classList.add('is-visible');
+
+    el.querySelectorAll('[data-count]').forEach(animateCount);
+    if (el.hasAttribute('data-count')) animateCount(el);
+
+    var flow = el.querySelector('[data-auto="flow"]') || (el.getAttribute('data-auto') === 'flow' ? el : null);
+    if (flow && flow.dataset.done !== '1') {
+      flow.dataset.done = '1';
+      runSequence(Array.prototype.slice.call(flow.querySelectorAll('.sbs-astep')), 520, 'is-on');
+    }
+
+    var status = el.querySelector('[data-auto="status"]');
+    if (status && status.dataset.done !== '1') {
+      status.dataset.done = '1';
+      runSequence(Array.prototype.slice.call(status.querySelectorAll('.sbs-status__card')), 380, 'is-on');
+    }
+
+    var notif = el.querySelector('[data-auto="notif"]');
+    if (notif && notif.dataset.done !== '1') {
+      notif.dataset.done = '1';
+      runSequence(Array.prototype.slice.call(notif.querySelectorAll('.sbs-nitem')), 220, 'is-on');
+    }
+
+    var bars = el.querySelector('[data-bars]');
+    if (bars && bars.dataset.done !== '1') {
+      bars.dataset.done = '1';
+      drawBars(bars);
+    }
+  }
+
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        activate(entry.target);
+        io.unobserve(entry.target);
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -60px 0px' });
+
+    revealItems.forEach(function (el) { io.observe(el); });
+    counters.forEach(function (el) {
+      if (!el.closest('.sbs-reveal')) io.observe(el);
+    });
+  } else {
+    revealItems.forEach(activate);
+    counters.forEach(animateCount);
+  }
+
+  /* ---------- automation loop (subtle replay) ---------- */
+  var flowBox = root.querySelector('[data-auto="flow"]');
+  if (flowBox && !reduced) {
+    window.setInterval(function () {
+      if (flowBox.dataset.done !== '1') return;
+      var steps = Array.prototype.slice.call(flowBox.querySelectorAll('.sbs-astep'));
+      steps.forEach(function (s) { s.classList.remove('is-on'); });
+      runSequence(steps, 520, 'is-on');
+    }, 11000);
+  }
+})();
+</script>
+
+</div>
+<!-- ============ END SBS HOMEPAGE ============ -->
