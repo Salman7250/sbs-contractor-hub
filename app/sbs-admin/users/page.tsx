@@ -1,56 +1,169 @@
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import UsersPageClient from "./user-management";
+
+type AuthUser = {
+  id: string;
+  email?: string | null;
+  created_at: string;
+  updated_at: string;
+  last_sign_in_at?: string | null;
+  email_confirmed_at?: string | null;
+  banned_until?: string | null;
+  user_metadata?: Record<string, unknown>;
+};
+
+type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+type Profile = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type Membership = {
+  id: string;
+  company_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+};
 
 export default async function AdminUsersPage() {
   await requirePlatformAdmin();
 
   const supabase = await createClient();
 
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!serviceRoleKey || !supabaseUrl) {
+    throw new Error(
+      "Supabase service-role configuration is missing."
+    );
+  }
+
+  const adminClient = createSupabaseClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+
   const [
+    companiesResult,
     profilesResult,
     membershipsResult,
-    companiesResult,
     platformAdminsResult,
   ] = await Promise.all([
     supabase
+      .from("companies")
+      .select(
+        "id, name, slug, status, created_at"
+      )
+      .order("name", {
+        ascending: true,
+      }),
+
+    supabase
       .from("profiles")
-      .select("id, full_name, created_at, updated_at")
-      .order("created_at", { ascending: false }),
+      .select(
+        "id, full_name, avatar_url, created_at, updated_at"
+      ),
 
     supabase
       .from("company_members")
-      .select("id, company_id, user_id, role, created_at"),
-
-    supabase
-      .from("companies")
-      .select("id, name, slug"),
+      .select(
+        "id, company_id, user_id, role, created_at"
+      ),
 
     supabase
       .from("platform_admins")
-      .select("user_id, role, created_at"),
+      .select(
+        "user_id, role, created_at"
+      ),
   ]);
 
+  if (companiesResult.error) {
+    throw new Error(
+      companiesResult.error.message
+    );
+  }
+
   if (profilesResult.error) {
-    throw new Error(profilesResult.error.message);
+    throw new Error(
+      profilesResult.error.message
+    );
   }
 
   if (membershipsResult.error) {
-    throw new Error(membershipsResult.error.message);
-  }
-
-  if (companiesResult.error) {
-    throw new Error(companiesResult.error.message);
+    throw new Error(
+      membershipsResult.error.message
+    );
   }
 
   if (platformAdminsResult.error) {
-    throw new Error(platformAdminsResult.error.message);
+    throw new Error(
+      platformAdminsResult.error.message
+    );
   }
 
-  const profiles = profilesResult.data ?? [];
-  const memberships = membershipsResult.data ?? [];
-  const companies = companiesResult.data ?? [];
-  const platformAdmins = platformAdminsResult.data ?? [];
+  const companies =
+    (companiesResult.data ?? []) as Company[];
+
+  const profiles =
+    (profilesResult.data ?? []) as Profile[];
+
+  const memberships =
+    (membershipsResult.data ?? []) as Membership[];
+
+  const platformAdmins =
+    platformAdminsResult.data ?? [];
+
+  const authUsers: AuthUser[] = [];
+
+  let page = 1;
+
+  while (true) {
+    const {
+      data,
+      error,
+    } =
+      await adminClient.auth.admin.listUsers({
+        page,
+        perPage: 1000,
+      });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    authUsers.push(
+      ...(data.users as AuthUser[])
+    );
+
+    if (data.users.length < 1000) {
+      break;
+    }
+
+    page += 1;
+  }
 
   const companyMap = new Map(
     companies.map((company) => [
@@ -59,19 +172,19 @@ export default async function AdminUsersPage() {
     ])
   );
 
-  const membershipMap = new Map<
-    string,
-    (typeof memberships)[number]
-  >();
+  const profileMap = new Map(
+    profiles.map((profile) => [
+      profile.id,
+      profile,
+    ])
+  );
 
-  for (const membership of memberships) {
-    if (!membershipMap.has(membership.user_id)) {
-      membershipMap.set(
-        membership.user_id,
-        membership
-      );
-    }
-  }
+  const authUserMap = new Map(
+    authUsers.map((user) => [
+      user.id,
+      user,
+    ])
+  );
 
   const platformAdminMap = new Map(
     platformAdmins.map((admin) => [
@@ -80,486 +193,238 @@ export default async function AdminUsersPage() {
     ])
   );
 
-  const users = profiles.map((profile) => {
-    const membership = membershipMap.get(profile.id);
-    const company = membership
-      ? companyMap.get(membership.company_id)
-      : null;
+  const companyUsers = companies.map(
+    (company) => {
+      const companyMemberships =
+        memberships.filter(
+          (membership) =>
+            membership.company_id ===
+            company.id
+        );
 
-    const platformAdmin = platformAdminMap.get(
-      profile.id
-    );
+      const users =
+        companyMemberships
+          .map((membership) => {
+            const authUser =
+              authUserMap.get(
+                membership.user_id
+              );
 
-    return {
-      ...profile,
-      membership,
-      company,
-      platformAdmin,
-    };
-  });
+            const profile =
+              profileMap.get(
+                membership.user_id
+              );
 
-  const totalUsers = users.length;
+            if (!authUser) {
+              return null;
+            }
 
-  const companyUsers = users.filter(
-    (user) => user.membership
-  ).length;
+            return {
+              membershipId:
+                membership.id,
 
-  const platformAdminUsers = users.filter(
-    (user) => user.platformAdmin
-  ).length;
+              userId:
+                membership.user_id,
 
-  const unassignedUsers = users.filter(
-    (user) =>
-      !user.membership && !user.platformAdmin
-  ).length;
+              fullName:
+                profile?.full_name ??
+                getMetadataName(
+                  authUser.user_metadata
+                ) ??
+                "Unnamed User",
 
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
-            User Management
-          </div>
+              avatarUrl:
+                profile?.avatar_url ??
+                null,
 
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
-            Users
-          </h1>
+              email:
+                authUser.email ?? "",
 
-          <p className="mt-2 max-w-2xl text-slate-400">
-            Manage users across the SBS platform, view their
-            company memberships, roles, and administrative access.
-          </p>
-        </div>
+              role:
+                membership.role,
 
-        <Link
-          href="/sbs-admin"
-          className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
-        >
-          ← Dashboard
-        </Link>
-      </div>
+              createdAt:
+                membership.created_at,
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <UserStat
-          label="Total Users"
-          value={totalUsers}
-          icon="♙"
-        />
+              lastSignInAt:
+                authUser.last_sign_in_at ??
+                null,
 
-        <UserStat
-          label="Company Users"
-          value={companyUsers}
-          icon="◫"
-        />
+              emailConfirmedAt:
+                authUser.email_confirmed_at ??
+                null,
 
-        <UserStat
-          label="Platform Admins"
-          value={platformAdminUsers}
-          icon="★"
-        />
+              bannedUntil:
+                authUser.banned_until ??
+                null,
 
-        <UserStat
-          label="Unassigned"
-          value={unassignedUsers}
-          icon="?"
-          warning={unassignedUsers > 0}
-        />
-      </div>
+              isPlatformAdmin:
+                platformAdminMap.has(
+                  membership.user_id
+                ),
+            };
+          })
+          .filter(
+            (
+              user
+            ): user is NonNullable<
+              typeof user
+            > =>
+              Boolean(user)
+          );
 
-      {/* Main Users Table */}
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-        <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="font-semibold text-white">
-              All Users
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Users currently known to the SBS application.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-xs text-slate-400">
-            {totalUsers.toLocaleString()}{" "}
-            {totalUsers === 1 ? "user" : "users"}
-          </div>
-        </div>
-
-        {users.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
-              <thead className="border-b border-white/10 bg-white/[0.02]">
-                <tr>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    User
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Company
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Role
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Account Type
-                  </th>
-
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Joined
-                  </th>
-
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-white/10">
-                {users.map((user) => {
-                  const isPlatformAdmin =
-                    Boolean(user.platformAdmin);
-
-                  const companyName =
-                    user.company?.name ?? null;
-
-                  const role =
-                    isPlatformAdmin
-                      ? user.platformAdmin?.role
-                      : user.membership?.role;
-
-                  return (
-                    <tr
-                      key={user.id}
-                      className="transition hover:bg-white/[0.025]"
-                    >
-                      {/* User */}
-                      <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-white">
-                            {getInitials(
-                              user.full_name
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-white">
-                              {user.full_name ||
-                                "Unnamed User"}
-                            </div>
-
-                            <div className="mt-1 max-w-[300px] truncate font-mono text-[10px] text-slate-600">
-                              {user.id}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Company */}
-                      <td className="px-6 py-5">
-                        {companyName ? (
-                          <div>
-                            <div className="font-medium text-slate-200">
-                              {companyName}
-                            </div>
-
-                            <div className="mt-1 text-xs text-slate-500">
-                              {user.company?.slug ||
-                                "No slug"}
-                            </div>
-                          </div>
-                        ) : isPlatformAdmin ? (
-                          <span className="text-sm text-slate-400">
-                            SBS Platform
-                          </span>
-                        ) : (
-                          <span className="text-sm text-slate-600">
-                            No company
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Role */}
-                      <td className="px-6 py-5">
-                        {role ? (
-                          <RoleBadge
-                            role={role}
-                            platformAdmin={
-                              isPlatformAdmin
-                            }
-                          />
-                        ) : (
-                          <span className="text-sm text-slate-600">
-                            —
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Account Type */}
-                      <td className="px-6 py-5">
-                        {isPlatformAdmin ? (
-                          <span className="inline-flex rounded-full bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-400">
-                            Platform Admin
-                          </span>
-                        ) : user.membership ? (
-                          <span className="inline-flex rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400">
-                            Company User
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-slate-500">
-                            Unassigned
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Joined */}
-                      <td className="px-6 py-5">
-                        <div className="text-sm text-slate-300">
-                          {formatDate(
-                            user.created_at
-                          )}
-                        </div>
-
-                        <div className="mt-1 text-xs text-slate-600">
-                          {formatRelativeDate(
-                            user.created_at
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Action */}
-                      <td className="px-6 py-5 text-right">
-                        <button
-                          type="button"
-                          disabled
-                          className="rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-600"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyUsers />
-        )}
-      </section>
-
-      {/* Information panel */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <InfoCard
-          title="Company Membership"
-          description="A user becomes a company user when they have an entry in company_members."
-          icon="◫"
-        />
-
-        <InfoCard
-          title="Platform Access"
-          description="Platform administrators are controlled separately through platform_admins."
-          icon="★"
-        />
-
-        <InfoCard
-          title="User Profiles"
-          description="Profile information is stored separately from authentication credentials."
-          icon="♙"
-        />
-      </section>
-    </div>
-  );
-}
-
-function UserStat({
-  label,
-  value,
-  icon,
-  warning = false,
-}: {
-  label: string;
-  value: number;
-  icon: string;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex items-start justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm text-slate-200">
-          {icon}
-        </div>
-
-        <div
-          className={`h-2 w-2 rounded-full ${
-            warning
-              ? "bg-amber-400"
-              : "bg-emerald-400"
-          }`}
-        />
-      </div>
-
-      <div className="mt-5">
-        <div className="text-3xl font-bold tracking-tight text-white">
-          {value.toLocaleString()}
-        </div>
-
-        <div className="mt-1 text-sm text-slate-500">
-          {label}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RoleBadge({
-  role,
-  platformAdmin,
-}: {
-  role: string;
-  platformAdmin: boolean;
-}) {
-  const normalized = role.toLowerCase();
-
-  let className =
-    "bg-white/5 text-slate-300";
-
-  if (platformAdmin) {
-    className =
-      "bg-purple-500/10 text-purple-400";
-  } else if (normalized === "owner") {
-    className =
-      "bg-emerald-500/10 text-emerald-400";
-  } else if (normalized === "admin") {
-    className =
-      "bg-blue-500/10 text-blue-400";
-  } else if (
-    normalized === "manager" ||
-    normalized === "staff"
-  ) {
-    className =
-      "bg-amber-500/10 text-amber-400";
-  }
-
-  return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${className}`}
-    >
-      {role.replace(/_/g, " ")}
-    </span>
-  );
-}
-
-function InfoCard({
-  title,
-  description,
-  icon,
-}: {
-  title: string;
-  description: string;
-  icon: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-sm text-slate-300">
-        {icon}
-      </div>
-
-      <h3 className="mt-4 text-sm font-semibold text-white">
-        {title}
-      </h3>
-
-      <p className="mt-2 text-xs leading-5 text-slate-500">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function EmptyUsers() {
-  return (
-    <div className="p-12 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-xl text-slate-500">
-        ♙
-      </div>
-
-      <h3 className="mt-5 font-semibold text-slate-300">
-        No users found
-      </h3>
-
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
-        Users will appear here once they have a profile
-        in the SBS platform.
-      </p>
-    </div>
-  );
-}
-
-function getInitials(
-  name: string | null
-) {
-  if (!name?.trim()) {
-    return "U";
-  }
-
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2);
-
-  return parts
-    .map((part) =>
-      part.charAt(0).toUpperCase()
-    )
-    .join("");
-}
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString(
-    undefined,
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+      return {
+        ...company,
+        users,
+      };
     }
   );
+
+  const companyUserCount =
+    companyUsers.reduce(
+      (total, company) =>
+        total + company.users.length,
+      0
+    );
+
+  const activeUserCount =
+    companyUsers.reduce(
+      (total, company) =>
+        total +
+        company.users.filter(
+          (user) =>
+            !user.bannedUntil
+        ).length,
+      0
+    );
+
+  const pendingUserCount =
+    companyUsers.reduce(
+      (total, company) =>
+        total +
+        company.users.filter(
+          (user) =>
+            !user.emailConfirmedAt
+        ).length,
+      0
+    );
+
+  const unassignedUsers =
+    authUsers.filter(
+      (authUser) =>
+        !memberships.some(
+          (membership) =>
+            membership.user_id ===
+            authUser.id
+        ) &&
+        !platformAdminMap.has(
+          authUser.id
+        )
+    );
+
+  const platformAdminUsers =
+    authUsers.filter((authUser) =>
+      platformAdminMap.has(
+        authUser.id
+      )
+    );
+
+  const companiesWithUsers =
+    companyUsers.filter(
+      (company) =>
+        company.users.length > 0
+    ).length;
+
+  return (
+    <UsersPageClient
+      companies={companyUsers}
+      stats={{
+        totalCompanies:
+          companies.length,
+
+        companiesWithUsers,
+
+        totalUsers:
+          companyUserCount,
+
+        activeUsers:
+          activeUserCount,
+
+        pendingUsers:
+          pendingUserCount,
+
+        platformAdmins:
+          platformAdminUsers.length,
+
+        unassignedUsers:
+          unassignedUsers.length,
+      }}
+      platformAdmins={platformAdminUsers.map(
+        (authUser) => {
+          const profile =
+            profileMap.get(
+              authUser.id
+            );
+
+          const admin =
+            platformAdminMap.get(
+              authUser.id
+            );
+
+          return {
+            id: authUser.id,
+
+            fullName:
+              profile?.full_name ??
+              getMetadataName(
+                authUser.user_metadata
+              ) ??
+              "Platform Administrator",
+
+            avatarUrl:
+              profile?.avatar_url ??
+              null,
+
+            email:
+              authUser.email ?? "",
+
+            role:
+              admin?.role ??
+              "admin",
+
+            lastSignInAt:
+              authUser.last_sign_in_at ??
+              null,
+
+            emailConfirmedAt:
+              authUser.email_confirmed_at ??
+              null,
+
+            createdAt:
+              authUser.created_at,
+
+            bannedUntil:
+              authUser.banned_until ??
+              null,
+          };
+        }
+      )}
+    />
+  );
 }
 
-function formatRelativeDate(date: string) {
-  const created = new Date(date).getTime();
-  const now = Date.now();
-
-  const days = Math.floor(
-    (now - created) /
-      (1000 * 60 * 60 * 24)
-  );
-
-  if (days <= 0) {
-    return "Today";
+function getMetadataName(
+  metadata?: Record<string, unknown>
+) {
+  if (!metadata) {
+    return null;
   }
 
-  if (days === 1) {
-    return "Yesterday";
-  }
+  const value =
+    metadata.full_name ??
+    metadata.name;
 
-  if (days < 30) {
-    return `${days} days ago`;
-  }
-
-  const months = Math.floor(days / 30);
-
-  if (months < 12) {
-    return `${months} ${
-      months === 1 ? "month" : "months"
-    } ago`;
-  }
-
-  const years = Math.floor(months / 12);
-
-  return `${years} ${
-    years === 1 ? "year" : "years"
-  } ago`;
+  return typeof value === "string"
+    ? value
+    : null;
 }

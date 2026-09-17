@@ -1,0 +1,251 @@
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.card,
+.infoCard,
+.loadingCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.card {
+  padding: 26px;
+}
+
+.cardHeader {
+  padding-bottom: 22px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #16a34a;
+}
+
+.heading {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.subheading {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.profileGrid {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 42px;
+  padding-top: 26px;
+}
+
+.photoPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.largeAvatar {
+  border-radius: 50%;
+  background: #111827;
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: 700;
+  border: 4px solid #f1f5f9;
+  box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.photoActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.photoHint,
+.fieldHint {
+  margin: 9px 0 0;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.formPanel {
+  max-width: 560px;
+}
+
+.label {
+  display: block;
+  margin: 0 0 7px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.input {
+  width: 100%;
+  height: 42px;
+  margin-bottom: 18px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid #dbe3eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input:focus {
+  border-color: #35a866;
+  box-shadow: 0 0 0 3px rgba(53, 168, 102, 0.09);
+}
+
+.readonly {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: default;
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.primaryButton,
+.secondaryButton {
+  height: 38px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.primaryButton {
+  border: 1px solid #16803a;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.secondaryButton {
+  border: 1px solid #dbe3eb;
+  background: #ffffff;
+  color: #475569;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.error,
+.success {
+  margin-top: 18px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.infoCard {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 18px 20px;
+}
+
+.infoIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #ecfdf3;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.infoCard h3 {
+  margin: 1px 0 3px;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.infoCard p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.loadingCard {
+  padding: 26px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .card {
+    padding: 20px;
+  }
+
+  .profileGrid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .formPanel {
+    max-width: none;
+  }
+}

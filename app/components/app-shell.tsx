@@ -12,6 +12,8 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import NotificationCenter from "@/app/components/notification-center";
+import styles from "./app-shell.module.css";
+import UserAvatar from "@/app/components/user-avatar";
 
 type AppShellProps = {
   children: ReactNode;
@@ -138,6 +140,7 @@ type WorkspaceCompany = {
 
 type WorkspaceProfile = {
   full_name: string | null;
+  avatar_url: string | null;
 };
 
 type SearchResult = {
@@ -1332,7 +1335,7 @@ export default function AppShell({
       }
 
       // Fetch permissions and company details in parallel.
-      const [permissionResult, companyResult] =
+      const [permissionResult, companyResult, profileResult] =
         await Promise.all([
           supabase.rpc(
             "employee_get_my_permissions",
@@ -1346,6 +1349,11 @@ export default function AppShell({
               "id, name, currency, timezone, business_type"
             )
             .eq("id", companyId)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("full_name, avatar_url")
+            .eq("id", user.id)
             .maybeSingle(),
         ]);
 
@@ -1409,21 +1417,34 @@ export default function AppShell({
         );
       }
 
+      const {
+        data: profileData,
+        error: profileError,
+      } = profileResult;
+
+      if (profileError) {
+        console.error(
+          "Failed to load profile:",
+          profileError,
+        );
+      }
+
+      const metadata = user.user_metadata ?? {};
+      const metadataFullName =
+        typeof metadata.full_name === "string"
+          ? metadata.full_name
+          : typeof metadata.name === "string"
+            ? metadata.name
+            : null;
+
+      setProfile({
+        full_name:
+          profileData?.full_name ?? metadataFullName,
+        avatar_url: profileData?.avatar_url ?? null,
+      });
+
       setPermissionsLoaded(true);
     }
-
-    const metadata = user.user_metadata ?? {};
-
-    const fullName =
-      typeof metadata.full_name === "string"
-        ? metadata.full_name
-        : typeof metadata.name === "string"
-        ? metadata.name
-        : null;
-
-    setProfile({
-      full_name: fullName,
-    });
 
     if (!membershipData?.company_id) {
       setPermissionKeys(new Set());
@@ -1441,14 +1462,40 @@ export default function AppShell({
 }, [supabase]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadWorkspace();
-    }, 0);
+  void loadWorkspace();
 
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [loadWorkspace]);
+  const handleProfileUpdated = (
+    event: Event,
+  ) => {
+    const customEvent =
+      event as CustomEvent<{
+        full_name?: string | null;
+        avatar_url?: string | null;
+      }>;
+
+    setProfile((current) => ({
+      full_name:
+        customEvent.detail?.full_name ??
+        current?.full_name ??
+        null,
+      avatar_url:
+        customEvent.detail?.avatar_url ??
+        null,
+    }));
+  };
+
+  window.addEventListener(
+    "sbs-profile-updated",
+    handleProfileUpdated,
+  );
+
+  return () => {
+    window.removeEventListener(
+      "sbs-profile-updated",
+      handleProfileUpdated,
+    );
+  };
+}, [loadWorkspace]);
 
   useEffect(() => {
     if (!permissionsLoaded) {
@@ -1797,1083 +1844,8 @@ export default function AppShell({
   ]);
 
   return (
-    <div className="sbs-app-shell">
-      <style jsx global>{`
-        .sbs-app-shell {
-          min-height: 100vh;
-          background: #f8fafc;
-          color: #0f172a;
-          font-family:
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            Roboto,
-            Helvetica,
-            Arial,
-            sans-serif;
-          -webkit-font-smoothing: antialiased;
-        }
-
-        /* ================================
-           SIDEBAR
-        ================================= */
-
-        .sbs-sidebar {
-          position: fixed;
-          inset: 0 auto 0 0;
-          width: 270px;
-          height: 100vh;
-          background: #090d0b;
-          border-right: 1px solid #1d2821;
-          z-index: 100;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          transition:
-            transform 0.25s
-            cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .sbs-sidebar-header {
-          height: 70px;
-          padding: 0 20px;
-          display: flex;
-          align-items: center;
-          border-bottom: 1px solid #1d2821;
-          flex-shrink: 0;
-          background: #090d0b;
-        }
-
-        .sbs-brand {
-          width: 100%;
-          height: 54px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 0;
-          text-decoration: none;
-          color: inherit;
-          background: transparent;
-          border: none;
-          padding: 0;
-          cursor: pointer;
-          text-align: center;
-        }
-
-        .sbs-brand-logo {
-  width: 205px;
-  height: 50px;
-  object-fit: contain;
-  object-position: center;
-  display: block;
-  background: transparent;
-  flex-shrink: 0;
-  transform: translateY(10px);
-}
-
-        .sbs-sidebar-scroll {
-          flex: 1;
-          min-height: 0;
-          overflow-y: auto;
-          padding: 20px 12px;
-        }
-
-        .sbs-sidebar-scroll::-webkit-scrollbar {
-          width: 4px;
-        }
-
-        .sbs-sidebar-scroll::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .sbs-sidebar-scroll::-webkit-scrollbar-thumb {
-          background: #2a382f;
-          border-radius: 99px;
-        }
-
-        .sbs-nav-section {
-          margin-bottom: 22px;
-        }
-
-        .sbs-nav-section-label {
-          padding: 0 10px;
-          margin-bottom: 8px;
-          font-size: 10px;
-          line-height: 1;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          color: #637068;
-          text-transform: uppercase;
-        }
-
-        .sbs-nav-list {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .sbs-nav-button {
-          position: relative;
-          width: 100%;
-          height: 40px;
-          border: 1px solid transparent;
-          border-radius: 8px;
-          padding: 0 10px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: transparent;
-          color: #e0e7e2;
-          font: inherit;
-          font-size: 14px;
-          font-weight: 600;
-          text-align: left;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            color 0.15s ease,
-            border-color 0.15s ease;
-        }
-
-        .sbs-nav-button:hover:not(.disabled) {
-          background: #1b2821;
-          color: #f0f5f2;
-          border-color: #2b3d32;
-        }
-
-        .sbs-nav-button.active {
-          background: #173d27;
-          color: #6ee7a0;
-          border-color: #285c3b;
-          font-weight: 650;
-          box-shadow:
-            inset 3px 0 0 #35c46f,
-            0 4px 12px
-              rgba(0, 0, 0, 0.14);
-        }
-
-        .sbs-nav-button.active:hover {
-          background: #1b472d;
-          color: #7ee7aa;
-        }
-
-        .sbs-nav-button.disabled {
-          color: #4c5851;
-          cursor: not-allowed;
-        }
-
-        .sbs-nav-icon {
-          width: 18px;
-          height: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          color: inherit;
-        }
-
-        .sbs-nav-button.active
-          .sbs-nav-icon {
-          color: #6ee7a0;
-        }
-
-        .sbs-nav-label {
-          flex: 1;
-          min-width: 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-coming-soon {
-          font-size: 9px;
-          line-height: 1;
-          font-weight: 600;
-          color: #68756d;
-          background: #151b17;
-          border: 1px solid #263129;
-          padding: 3px 6px;
-          border-radius: 4px;
-          flex-shrink: 0;
-        }
-
-        /* ================================
-           NESTED NAVIGATION
-        ================================= */
-
-        .sbs-nav-sub-list {
-          margin: 3px 0 6px 18px;
-          padding-left: 15px;
-          border-left: 1px solid #26352c;
-        }
-
-        .sbs-nav-sub-button {
-          position: relative;
-          width: 100%;
-          min-height: 36px;
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          padding: 7px 10px 7px 12px;
-          border: 1px solid transparent;
-          border-radius: 7px;
-          background: transparent;
-          color: #cbd5cf;
-          font: inherit;
-          font-size: 13.5px;
-          font-weight: 600;
-          text-align: left;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            color 0.15s ease,
-            border-color 0.15s ease;
-        }
-
-        .sbs-nav-sub-button:hover:not(.disabled) {
-          background: #1b2821;
-          color: #f0f5f2;
-          border-color: #2b3d32;
-        }
-
-        .sbs-nav-sub-button.active {
-          background: #173d27;
-          color: #6ee7a0;
-          border-color: #285c3b;
-          font-weight: 600;
-          box-shadow:
-            inset 2px 0 0 #35c46f;
-        }
-
-        .sbs-nav-sub-button.disabled {
-          cursor: not-allowed;
-          opacity: 0.35;
-        }
-
-        .sbs-nav-sub-icon {
-          width: 14px;
-          height: 14px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          color: inherit;
-        }
-
-        .sbs-nav-sub-button.active
-          .sbs-nav-sub-icon {
-          color: #6ee7a0;
-        }
-
-        .sbs-nav-sub-label {
-          min-width: 0;
-          flex: 1;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        /* ================================
-           SIDEBAR FOOTER
-        ================================= */
-
-        .sbs-sidebar-footer {
-          padding: 14px 12px;
-          border-top: 1px solid #1d2821;
-          flex-shrink: 0;
-          background: #090d0b;
-        }
-
-        .sbs-company-card {
-          border: 1px solid #26342c;
-          border-radius: 9px;
-          padding: 9px 10px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 0;
-          background: #111813;
-        }
-
-        .sbs-company-avatar {
-          width: 32px;
-          height: 32px;
-          border-radius: 7px;
-          background: #1d2b23;
-          color: #7ee7aa;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 11px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .sbs-company-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .sbs-company-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: #edf4ef;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-company-type {
-          margin-top: 2px;
-          font-size: 10px;
-          color: #78857d;
-          text-transform: capitalize;
-        }
-
-        .sbs-logout-button {
-          width: 100%;
-          margin-top: 8px;
-          height: 34px;
-          border: 1px solid #26342c;
-          border-radius: 7px;
-          background: #111813;
-          color: #89958e;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .sbs-logout-button:hover:not(:disabled) {
-          background: #261517;
-          border-color: #542326;
-          color: #f87171;
-        }
-
-        .sbs-logout-button:disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-
-        /* ================================
-           MAIN AREA
-        ================================= */
-
-        .sbs-main-area {
-          min-height: 100vh;
-          margin-left: 270px;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-        }
-
-        /* ================================
-           TOPBAR
-        ================================= */
-
-        .sbs-topbar {
-          height: 70px;
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.88
-          );
-          backdrop-filter: blur(14px);
-          border-bottom: 1px solid #e2e8f0;
-          display: flex;
-          align-items: center;
-          padding: 0 32px;
-          gap: 16px;
-        }
-
-        .sbs-mobile-menu {
-          display: none;
-          width: 36px;
-          height: 36px;
-          border: 1px solid #e2e8f0;
-          background: #ffffff;
-          border-radius: 7px;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          color: #334155;
-          flex-shrink: 0;
-        }
-
-        .sbs-mobile-menu:hover {
-          background: #f8fafc;
-        }
-
-        /* ================================
-           SMART SEARCH
-        ================================= */
-
-        .sbs-topbar-search {
-          position: relative;
-          width: min(420px, 100%);
-        }
-
-        .sbs-search-form {
-          position: relative;
-          z-index: 2;
-        }
-
-        .sbs-search-icon {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #94a3b8;
-          pointer-events: none;
-          display: flex;
-          align-items: center;
-        }
-
-        .sbs-search-input {
-          width: 100%;
-          height: 38px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          border-radius: 8px;
-          outline: none;
-          padding: 0 38px 0 36px;
-          font: inherit;
-          font-size: 13px;
-          color: #0f172a;
-          transition:
-            border-color 0.15s ease,
-            background 0.15s ease,
-            box-shadow 0.15s ease;
-          box-sizing: border-box;
-        }
-
-        .sbs-search-input::placeholder {
-          color: #94a3b8;
-        }
-
-        .sbs-search-input:focus {
-          background: #ffffff;
-          border-color: #35a866;
-          box-shadow:
-            0 0 0 3px
-              rgba(53, 168, 102, 0.1);
-        }
-
-        .sbs-search-results {
-          position: absolute;
-          top: calc(100% + 8px);
-          left: 0;
-          width: 100%;
-          min-width: 330px;
-          background: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 11px;
-          box-shadow:
-            0 20px 45px
-              rgba(15, 23, 42, 0.14),
-            0 5px 14px
-              rgba(15, 23, 42, 0.06);
-          padding: 6px;
-          z-index: 600;
-          overflow: hidden;
-        }
-
-        .sbs-search-results-header {
-          padding: 7px 9px 6px;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          color: #94a3b8;
-          text-transform: uppercase;
-        }
-
-        .sbs-search-result {
-          width: 100%;
-          min-height: 48px;
-          border: 0;
-          border-radius: 8px;
-          padding: 7px 9px;
-          display: flex;
-          align-items: center;
-          gap: 11px;
-          background: transparent;
-          color: #334155;
-          font: inherit;
-          text-align: left;
-          cursor: pointer;
-          transition:
-            background 0.12s ease,
-            color 0.12s ease;
-        }
-
-        .sbs-search-result:hover,
-        .sbs-search-result.selected {
-          background: #f0fdf4;
-          color: #15803d;
-        }
-
-        .sbs-search-result-icon {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          background: #f1f5f9;
-          color: #64748b;
-        }
-
-        .sbs-search-result:hover
-          .sbs-search-result-icon,
-        .sbs-search-result.selected
-          .sbs-search-result-icon {
-          background: #dcfce7;
-          color: #16a34a;
-        }
-
-        .sbs-search-result-copy {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .sbs-search-result-label {
-          font-size: 12.5px;
-          font-weight: 600;
-          color: #0f172a;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-search-result:hover
-          .sbs-search-result-label,
-        .sbs-search-result.selected
-          .sbs-search-result-label {
-          color: #15803d;
-        }
-
-        .sbs-search-result-section {
-          margin-top: 2px;
-          font-size: 10.5px;
-          color: #94a3b8;
-        }
-
-        .sbs-search-result-soon {
-          flex-shrink: 0;
-          font-size: 9px;
-          font-weight: 600;
-          color: #94a3b8;
-          background: #f1f5f9;
-          border-radius: 5px;
-          padding: 4px 6px;
-        }
-
-        .sbs-search-empty {
-          padding: 18px 12px;
-          text-align: center;
-          font-size: 12px;
-          color: #94a3b8;
-        }
-
-        .sbs-search-footer {
-          margin-top: 4px;
-          padding: 7px 9px 5px;
-          border-top: 1px solid #f1f5f9;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 10px;
-          color: #94a3b8;
-        }
-
-        .sbs-search-key {
-          padding: 2px 5px;
-          border: 1px solid #e2e8f0;
-          border-radius: 4px;
-          background: #f8fafc;
-          color: #64748b;
-          font-size: 9px;
-          font-weight: 600;
-        }
-
-        .sbs-topbar-spacer {
-          flex: 1;
-        }
-
-        .sbs-topbar-company {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          min-width: 0;
-          max-width: 220px;
-          padding: 5px 10px;
-          background: #f8fafc;
-          border: 1px solid #e9eef2;
-          border-radius: 7px;
-        }
-
-        .sbs-topbar-company-name {
-          font-size: 12px;
-          font-weight: 500;
-          color: #475569;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-notification-wrapper {
-          position: relative;
-          flex-shrink: 0;
-          z-index: 200;
-          display: flex;
-          align-items: center;
-        }
-
-        /* ================================
-           PROFILE
-        ================================= */
-
-        .sbs-profile-wrapper {
-          position: relative;
-          flex-shrink: 0;
-          z-index: 500;
-        }
-
-        .sbs-profile {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          min-width: 0;
-          padding-left: 12px;
-          border-left: 1px solid #e2e8f0;
-        }
-
-        .sbs-profile-trigger {
-          border: 1px solid transparent;
-          background: transparent;
-          border-radius: 9px;
-          padding: 4px 7px 4px 5px;
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            border-color 0.15s ease;
-        }
-
-        .sbs-profile-trigger:hover,
-        .sbs-profile-trigger.open {
-          background: #f8fafc;
-          border-color: #e2e8f0;
-        }
-
-        .sbs-profile-avatar {
-          width: 34px;
-          height: 34px;
-          border-radius: 50%;
-          background: #111827;
-          color: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 11px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .sbs-profile-name {
-          max-width: 140px;
-          font-size: 12.5px;
-          font-weight: 600;
-          color: #0f172a;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-profile-chevron {
-          width: 16px;
-          height: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #64748b;
-          transition:
-            transform 0.15s ease;
-        }
-
-        .sbs-profile-trigger.open
-          .sbs-profile-chevron {
-          transform: rotate(90deg);
-        }
-
-        /* ================================
-           PROFILE DROPDOWN
-        ================================= */
-
-        .sbs-profile-dropdown {
-          position: absolute;
-          top: calc(100% + 10px);
-          right: 0;
-          width: 255px;
-          background: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          box-shadow:
-            0 20px 45px
-              rgba(15, 23, 42, 0.14),
-            0 5px 14px
-              rgba(15, 23, 42, 0.06);
-          padding: 7px;
-          z-index: 700;
-          animation:
-            sbs-profile-menu-in
-            0.14s ease-out;
-        }
-
-        @keyframes sbs-profile-menu-in {
-          from {
-            opacity: 0;
-            transform: translateY(-5px);
-          }
-
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .sbs-profile-dropdown-header {
-          padding: 10px 10px 12px;
-          border-bottom: 1px solid #f1f5f9;
-          margin-bottom: 5px;
-        }
-
-        .sbs-profile-dropdown-user {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .sbs-profile-dropdown-avatar {
-          width: 38px;
-          height: 38px;
-          border-radius: 50%;
-          background: #111827;
-          color: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 12px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .sbs-profile-dropdown-name {
-          font-size: 13px;
-          font-weight: 700;
-          color: #0f172a;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-profile-dropdown-company {
-          margin-top: 3px;
-          font-size: 11px;
-          color: #64748b;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .sbs-profile-menu-item {
-          width: 100%;
-          height: 39px;
-          border: 0;
-          border-radius: 8px;
-          padding: 0 10px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: transparent;
-          color: #475569;
-          font: inherit;
-          font-size: 12.5px;
-          font-weight: 500;
-          text-align: left;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            color 0.15s ease;
-        }
-
-        .sbs-profile-menu-item:hover {
-          background: #f0fdf4;
-          color: #16a34a;
-        }
-
-        .sbs-profile-menu-icon {
-          width: 18px;
-          height: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: inherit;
-          flex-shrink: 0;
-        }
-
-        .sbs-profile-menu-divider {
-          height: 1px;
-          background: #f1f5f9;
-          margin: 6px 4px;
-        }
-
-        .sbs-profile-menu-item.logout {
-          color: #64748b;
-        }
-
-        .sbs-profile-menu-item.logout:hover {
-          background: #fef2f2;
-          color: #dc2626;
-        }
-
-        /* ================================
-           CONTENT
-        ================================= */
-
-        .sbs-content {
-          padding: 32px 32px 48px;
-          max-width: 1600px;
-          width: 100%;
-          margin: 0 auto;
-          box-sizing: border-box;
-        }
-
-        .sbs-page-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 20px;
-          margin-bottom: 28px;
-        }
-
-        .sbs-page-header-copy {
-          min-width: 0;
-        }
-
-        .sbs-page-title {
-          margin: 0;
-          font-size: 24px;
-          line-height: 1.25;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          color: #0f172a;
-        }
-
-        .sbs-page-description {
-          margin: 4px 0 0;
-          font-size: 13px;
-          line-height: 1.5;
-          color: #64748b;
-        }
-
-        .sbs-page-actions {
-          flex-shrink: 0;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        /* ================================
-           MOBILE OVERLAY
-        ================================= */
-
-        .sbs-mobile-overlay {
-          display: none;
-        }
-
-        /* ================================
-           TABLET
-        ================================= */
-
-        @media (max-width: 1024px) {
-          .sbs-sidebar {
-            width: 250px;
-          }
-
-          .sbs-main-area {
-            margin-left: 250px;
-          }
-
-          .sbs-topbar {
-            padding: 0 24px;
-          }
-
-          .sbs-content {
-            padding: 24px 24px 40px;
-          }
-
-          .sbs-topbar-search {
-            width: min(360px, 100%);
-          }
-        }
-
-        /* ================================
-           MOBILE
-        ================================= */
-
-        @media (max-width: 868px) {
-          .sbs-sidebar {
-            width: 270px;
-            transform: translateX(-100%);
-            box-shadow: none;
-          }
-
-          .sbs-sidebar.mobile-open {
-            transform: translateX(0);
-            box-shadow:
-              12px 0 30px
-              rgba(15, 23, 42, 0.25);
-          }
-
-          .sbs-main-area {
-            margin-left: 0;
-          }
-
-          .sbs-mobile-menu {
-            display: flex;
-          }
-
-          .sbs-mobile-overlay {
-            position: fixed;
-            inset: 0;
-            display: block;
-            background: rgba(
-              15,
-              23,
-              42,
-              0.4
-            );
-            backdrop-filter: blur(2px);
-            z-index: 90;
-            border: none;
-            padding: 0;
-            margin: 0;
-            cursor: pointer;
-          }
-
-          .sbs-topbar {
-            padding: 0 16px;
-          }
-
-          .sbs-topbar-search {
-            flex: 1;
-            min-width: 0;
-            width: auto;
-          }
-
-          .sbs-topbar-company,
-          .sbs-profile-name {
-            display: none;
-          }
-
-          .sbs-profile {
-            padding-left: 0;
-            border-left: none;
-          }
-
-          .sbs-profile-trigger {
-            padding-right: 3px;
-          }
-
-          .sbs-profile-chevron {
-            display: none;
-          }
-
-          .sbs-profile-dropdown {
-            position: fixed;
-            top: 60px;
-            right: 12px;
-            width: min(
-              255px,
-              calc(100vw - 24px)
-            );
-          }
-
-          .sbs-notification-wrapper {
-            z-index: 300;
-          }
-
-          .sbs-search-results {
-            min-width: 0;
-            width: min(
-              100vw - 32px,
-              420px
-            );
-          }
-
-          .sbs-content {
-            padding: 20px 16px 32px;
-          }
-        }
-
-        /* ================================
-           SMALL MOBILE
-        ================================= */
-
-        @media (max-width: 640px) {
-          .sbs-topbar {
-            height: 64px;
-            gap: 9px;
-          }
-
-          .sbs-sidebar-header {
-            height: 64px;
-          }
-
-          .sbs-topbar-search {
-            min-width: 0;
-          }
-
-          .sbs-search-input {
-            font-size: 12px;
-          }
-
-          .sbs-page-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
-            margin-bottom: 20px;
-          }
-
-          .sbs-page-title {
-            font-size: 20px;
-          }
-
-          .sbs-page-actions {
-            width: 100%;
-          }
-
-          .sbs-search-results {
-            position: fixed;
-            top: 60px;
-            left: 12px;
-            width: calc(100vw - 24px);
-          }
-        }
-      `}</style>
+    <div className={`${styles.shellRoot} sbs-app-shell`}>
+      
 
       {mobileSidebarOpen && (
         <button
@@ -3347,9 +2319,12 @@ export default function AppShell({
                 }
                 aria-label="Open account menu"
               >
-                <div className="sbs-profile-avatar">
-                  {initials}
-                </div>
+                <UserAvatar
+                  name={profile?.full_name || company?.name || "SBS"}
+                  avatarUrl={profile?.avatar_url}
+                  size={34}
+                  className="sbs-profile-avatar"
+                />
 
                 <span className="sbs-profile-name">
                   {profile?.full_name ||
@@ -3372,9 +2347,12 @@ export default function AppShell({
               >
                 <div className="sbs-profile-dropdown-header">
                   <div className="sbs-profile-dropdown-user">
-                    <div className="sbs-profile-dropdown-avatar">
-                      {initials}
-                    </div>
+                    <UserAvatar
+                      name={profile?.full_name || company?.name || "SBS"}
+                      avatarUrl={profile?.avatar_url}
+                      size={38}
+                      className="sbs-profile-dropdown-avatar"
+                    />
 
                     <div
                       style={{
@@ -3403,7 +2381,7 @@ export default function AppShell({
                       false
                     );
                     router.push(
-                      "/settings"
+                      "/profile"
                     );
                   }}
                 >
@@ -3415,10 +2393,29 @@ export default function AppShell({
                   </span>
 
                   <span>
-                    Account Settings
+                    My Profile
                   </span>
                 </button>
+<button
+  type="button"
+  className="sbs-profile-menu-item"
+  role="menuitem"
+  onClick={() => {
+    setProfileMenuOpen(false);
+    router.push("/settings");
+  }}
+>
+  <span className="sbs-profile-menu-icon">
+    <Icon
+      name="settings"
+      size={17}
+    />
+  </span>
 
+  <span>
+    Settings
+  </span>
+</button>
                 <button
                   type="button"
                   className="sbs-profile-menu-item"

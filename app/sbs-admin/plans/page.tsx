@@ -1,661 +1,568 @@
+import {
+  Building2,
+  CheckCircle2,
+  CircleDollarSign,
+  Layers3,
+} from "lucide-react";
+
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { createClient } from "@/lib/supabase/server";
+import PlanManagement from "./plan-management";
 
-type Plan = {
+type PlanRow = {
   id: string;
   name: string;
   slug: string;
+  description: string | null;
+  monthly_price: number | null;
+  yearly_price: number | null;
+  currency: string | null;
+  is_active: boolean;
+  is_popular: boolean;
+  paypal_product_id: string | null;
+  paypal_monthly_plan_id: string | null;
+  paypal_yearly_plan_id: string | null;
+};
 
-  monthly_price:
-    | number
-    | null;
-
-  yearly_price:
-    | number
-    | null;
-
+type ModuleRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
   is_active: boolean;
 };
 
-const descriptions: Record<
-  string,
-  string
-> = {
-  starter:
-    "Essential tools for small businesses getting started with SBS.",
-
-  professional:
-    "Advanced business management tools for growing companies.",
-
-  business:
-    "Complete business operations platform for established companies.",
-
-  enterprise:
-    "Custom SBS deployment with advanced access and support.",
+type PlanModuleRow = {
+  plan_id: string;
+  module_id: string;
 };
 
-const moduleCounts: Record<
-  string,
-  number
-> = {
-  starter: 4,
-  professional: 8,
-  business: 12,
-  enterprise: 999,
+type PlanLimitRow = {
+  id: string;
+  plan_id: string;
+  limit_key: string;
+  limit_value: number | null;
+  is_unlimited: boolean;
 };
 
-const popularPlans = new Set([
-  "professional",
-]);
+type SubscriptionRow = {
+  plan_id: string;
+  company_id: string;
+};
 
 export default async function AdminPlansPage() {
   await requirePlatformAdmin();
 
-  const supabase =
-    await createClient();
+  const supabase = await createClient();
 
-  const {
-    data: plans,
-    error,
-  } = await supabase
-    .from("plans")
-    .select(
-      `
-        id,
-        name,
-        slug,
-        monthly_price,
-        yearly_price,
-        is_active
-      `
-    )
-    .order(
-      "monthly_price",
-      {
+  const [
+    plansResult,
+    modulesResult,
+    planModulesResult,
+    planLimitsResult,
+    subscriptionsResult,
+  ] = await Promise.all([
+    supabase
+      .from("plans")
+      .select(
+        `
+          id,
+          name,
+          slug,
+          description,
+          monthly_price,
+          yearly_price,
+          currency,
+          is_active,
+          is_popular,
+          paypal_product_id,
+          paypal_monthly_plan_id,
+          paypal_yearly_plan_id
+        `
+      )
+      .order("monthly_price", {
         ascending: true,
         nullsFirst: false,
-      }
-    );
+      }),
 
-  if (error) {
+    supabase
+      .from("modules")
+      .select(
+        `
+          id,
+          name,
+          slug,
+          description,
+          is_active
+        `
+      )
+      .order("name", {
+        ascending: true,
+      }),
+
+    supabase
+      .from("plan_modules")
+      .select(
+        `
+          plan_id,
+          module_id
+        `
+      ),
+
+    supabase
+      .from("plan_limits")
+      .select(
+        `
+          id,
+          plan_id,
+          limit_key,
+          limit_value,
+          is_unlimited
+        `
+      ),
+
+    supabase
+      .from("subscriptions")
+      .select(
+        `
+          plan_id,
+          company_id
+        `
+      )
+      .in("status", [
+        "trialing",
+        "active",
+        "past_due",
+        "paused",
+      ]),
+  ]);
+
+  /*
+   * ---------------------------------------------------------
+   * ERROR HANDLING
+   * ---------------------------------------------------------
+   */
+
+  if (plansResult.error) {
     throw new Error(
-      error.message ||
-        "Unable to load plans."
+      plansResult.error.message ||
+        "Unable to load subscription plans."
     );
   }
 
-  const activePlans =
-    (plans ?? []).filter(
-      (plan) =>
-        plan.is_active === true
+  if (modulesResult.error) {
+    throw new Error(
+      modulesResult.error.message ||
+        "Unable to load platform modules."
+    );
+  }
+
+  if (planModulesResult.error) {
+    throw new Error(
+      planModulesResult.error.message ||
+        "Unable to load plan modules."
+    );
+  }
+
+  if (planLimitsResult.error) {
+    throw new Error(
+      planLimitsResult.error.message ||
+        "Unable to load plan limits."
+    );
+  }
+
+  if (subscriptionsResult.error) {
+    throw new Error(
+      subscriptionsResult.error.message ||
+        "Unable to load plan subscriptions."
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * PLANS
+   * ---------------------------------------------------------
+   */
+
+  const plans: PlanRow[] = (
+    plansResult.data ?? []
+  ).map((plan) => ({
+    id: plan.id,
+    name: plan.name,
+    slug: plan.slug,
+    description: plan.description,
+    monthly_price:
+      plan.monthly_price !== null
+        ? Number(plan.monthly_price)
+        : null,
+    yearly_price:
+      plan.yearly_price !== null
+        ? Number(plan.yearly_price)
+        : null,
+    currency: plan.currency,
+    is_active: Boolean(plan.is_active),
+    is_popular: Boolean(plan.is_popular),
+    paypal_product_id:
+      plan.paypal_product_id ?? null,
+    paypal_monthly_plan_id:
+      plan.paypal_monthly_plan_id ?? null,
+    paypal_yearly_plan_id:
+      plan.paypal_yearly_plan_id ?? null,
+  }));
+
+  /*
+   * ---------------------------------------------------------
+   * MODULES
+   * ---------------------------------------------------------
+   */
+
+  const modules: ModuleRow[] = (
+    modulesResult.data ?? []
+  ).map((module) => ({
+    id: module.id,
+    name: module.name,
+    slug: module.slug,
+    description: module.description,
+    is_active: Boolean(module.is_active),
+  }));
+
+  /*
+   * ---------------------------------------------------------
+   * PLAN MODULE ASSIGNMENTS
+   * ---------------------------------------------------------
+   */
+
+  const planModules: PlanModuleRow[] = (
+    planModulesResult.data ?? []
+  ).map((row) => ({
+    plan_id: row.plan_id,
+    module_id: row.module_id,
+  }));
+
+  /*
+   * ---------------------------------------------------------
+   * PLAN LIMITS
+   * ---------------------------------------------------------
+   *
+   * IMPORTANT:
+   * Include the database ID because plan-management.tsx
+   * expects each PlanLimit to have an id.
+   * ---------------------------------------------------------
+   */
+
+  const planLimits: PlanLimitRow[] = (
+    planLimitsResult.data ?? []
+  ).map((row) => ({
+    id: row.id,
+    plan_id: row.plan_id,
+    limit_key: row.limit_key,
+    limit_value:
+      row.limit_value !== null
+        ? Number(row.limit_value)
+        : null,
+    is_unlimited: Boolean(row.is_unlimited),
+  }));
+
+  /*
+   * ---------------------------------------------------------
+   * COMPANY COUNTS
+   * ---------------------------------------------------------
+   *
+   * Count unique companies per plan.
+   */
+
+  const companiesByPlan = new Map<
+    string,
+    Set<string>
+  >();
+
+  for (
+    const subscription of
+      (subscriptionsResult.data ??
+        []) as SubscriptionRow[]
+  ) {
+    if (!subscription.plan_id) {
+      continue;
+    }
+
+    if (!companiesByPlan.has(subscription.plan_id)) {
+      companiesByPlan.set(
+        subscription.plan_id,
+        new Set<string>()
+      );
+    }
+
+    companiesByPlan
+      .get(subscription.plan_id)!
+      .add(subscription.company_id);
+  }
+
+  const companyCounts: Record<string, number> =
+    Object.fromEntries(
+      Array.from(companiesByPlan.entries()).map(
+        ([planId, companies]) => [
+          planId,
+          companies.size,
+        ]
+      )
     );
 
   /*
-   * Get the number of companies
-   * subscribed to each plan.
+   * ---------------------------------------------------------
+   * MODULE COUNTS
+   * ---------------------------------------------------------
    */
-  const planIds =
-    activePlans.map(
-      (plan) => plan.id
-    );
 
-  let subscriptions:
-    | Array<{
-        plan_id: string;
-        company_id: string;
-      }>
-    | null = null;
+  const moduleCountsMap = new Map<
+    string,
+    number
+  >();
 
-  if (planIds.length > 0) {
-    const {
-      data: subscriptionRows,
-    } = await supabase
-      .from("subscriptions")
-      .select(
-        "plan_id, company_id"
-      )
-      .in(
-        "plan_id",
-        planIds
-      )
-      .in(
-        "status",
-        [
-          "trialing",
-          "active",
-          "past_due",
-          "paused",
-        ]
-      );
-
-    subscriptions =
-      subscriptionRows;
-  }
-
-  const companyCounts =
-    new Map<string, number>();
-
-  for (const subscription of
-    subscriptions ?? []) {
-    companyCounts.set(
-      subscription.plan_id,
-      (companyCounts.get(
-        subscription.plan_id
-      ) ?? 0) + 1
+  for (const row of planModules) {
+    moduleCountsMap.set(
+      row.plan_id,
+      (moduleCountsMap.get(row.plan_id) ?? 0) + 1
     );
   }
 
-  const totalCompanies =
-    Array.from(
-      companyCounts.values()
-    ).reduce(
-      (total, count) =>
-        total + count,
-      0
+  const moduleCounts: Record<string, number> =
+    Object.fromEntries(
+      moduleCountsMap.entries()
     );
 
-  const pricedPlans =
-    activePlans.filter(
+  /*
+   * ---------------------------------------------------------
+   * ACTIVE PLANS
+   * ---------------------------------------------------------
+   */
+
+  const activePlans = plans.filter(
+    (plan) => plan.is_active
+  );
+
+  /*
+   * ---------------------------------------------------------
+   * SUBSCRIBED COMPANIES
+   * ---------------------------------------------------------
+   */
+
+  const subscribedCompanies = Array.from(
+    companiesByPlan.values()
+  ).reduce(
+    (total, companies) =>
+      total + companies.size,
+    0
+  );
+
+  /*
+   * ---------------------------------------------------------
+   * ACTIVE SUBSCRIPTIONS
+   * ---------------------------------------------------------
+   */
+
+  const activeSubscriptions = (
+    subscriptionsResult.data ?? []
+  ).filter((subscription) =>
+    activePlans.some(
       (plan) =>
-        plan.monthly_price !==
-        null
-    );
+        plan.id === subscription.plan_id
+    )
+  );
 
-  const averagePrice =
-    pricedPlans.length > 0
-      ? pricedPlans.reduce(
+  /*
+   * ---------------------------------------------------------
+   * AVERAGE MONTHLY PRICE
+   * ---------------------------------------------------------
+   */
+
+  const pricedActivePlans = activePlans.filter(
+    (plan) => plan.monthly_price !== null
+  );
+
+  const averageMonthlyPrice =
+    pricedActivePlans.length > 0
+      ? pricedActivePlans.reduce(
           (total, plan) =>
             total +
-            Number(
-              plan.monthly_price ??
-                0
-            ),
+            Number(plan.monthly_price ?? 0),
           0
-        ) /
-        pricedPlans.length
+        ) / pricedActivePlans.length
       : 0;
+
+  /*
+   * ---------------------------------------------------------
+   * PAGE
+   * ---------------------------------------------------------
+   */
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* =====================================================
+          HEADER
+      ====================================================== */}
+
       <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">
+            <Layers3 className="h-4 w-4" />
             Platform Management
           </div>
 
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
             Plans & Pricing
           </h1>
 
-          <p className="mt-2 max-w-2xl text-slate-400">
-            Configure the SaaS plans that
-            determine pricing, module access,
-            limits, and subscription options
-            for SBS customers.
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+            Manage SBS subscription plans, pricing,
+            module access, resource limits, and
+            customer subscription configuration.
           </p>
         </div>
-
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 opacity-50"
-        >
-          + Create Plan
-        </button>
       </div>
 
-      {/* Stats */}
+      {/* =====================================================
+          STATS
+      ====================================================== */}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <PlanStat
           label="Total Plans"
-          value={activePlans.length}
-          icon="◈"
-        />
-
-        <PlanStat
-          label="Active Plans"
-          value={
-            activePlans.filter(
-              (plan) =>
-                plan.is_active
-            ).length
-          }
-          icon="✓"
+          value={plans.length}
+          detail={`${activePlans.length} active`}
+          icon={Layers3}
         />
 
         <PlanStat
           label="Subscribed Companies"
-          value={totalCompanies}
-          icon="◫"
+          value={subscribedCompanies}
+          detail={`${activeSubscriptions.length} active subscription records`}
+          icon={Building2}
         />
 
         <PlanStat
-          label="Avg. Monthly Price"
-          value={`$${averagePrice.toFixed(
-            0
-          )}`}
-          icon="$"
-        />
-      </div>
-
-      {/* Pricing Cards */}
-      <section>
-        <div className="mb-5">
-          <h2 className="font-semibold text-white">
-            Available Plans
-          </h2>
-
-          <p className="mt-1 text-xs text-slate-500">
-            Plans available for customer
-            subscriptions.
-          </p>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-4">
-          {activePlans.map(
-            (plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                companyCount={
-                  companyCounts.get(
-                    plan.id
-                  ) ?? 0
-                }
-              />
-            )
+          label="Average Monthly Price"
+          value={formatCurrency(
+            averageMonthlyPrice,
+            "USD"
           )}
-        </div>
-      </section>
+          detail="Across active paid plans"
+          icon={CircleDollarSign}
+        />
 
-      {/* Plan Management Table */}
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-        <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="font-semibold text-white">
-              Plan Configuration
-            </h2>
+        <PlanStat
+          label="Active Plans"
+          value={activePlans.length}
+          detail={
+            plans.length - activePlans.length > 0
+              ? `${
+                  plans.length -
+                  activePlans.length
+                } inactive`
+              : "All plans active"
+          }
+          icon={CheckCircle2}
+        />
+      </div>
 
-            <p className="mt-1 text-xs text-slate-500">
-              Pricing and subscription
-              configuration for each tier.
-            </p>
-          </div>
+      {/* =====================================================
+          PLAN MANAGEMENT
+      ====================================================== */}
 
-          <div className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-xs text-slate-500">
-            {activePlans.length} configured
-            plans
-          </div>
-        </div>
+      <PlanManagement
+  plans={plans}
+  modules={modules}
+  planModules={planModules}
+  planLimits={planLimits}
+/>
+      {/* =====================================================
+          BILLING ARCHITECTURE
+      ====================================================== */}
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-left">
-            <thead className="border-b border-white/10 bg-white/[0.02]">
-              <tr>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Plan
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Monthly
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Yearly
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Modules
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Companies
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Status
-                </th>
-
-                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-white/10">
-              {activePlans.map(
-                (plan) => (
-                  <tr
-                    key={plan.id}
-                    className="transition hover:bg-white/[0.025]"
-                  >
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-white">
-                          {plan.name.charAt(
-                            0
-                          )}
-                        </div>
-
-                        <div>
-                          <div className="font-medium text-white">
-                            {plan.name}
-                          </div>
-
-                          <div className="mt-1 font-mono text-[10px] text-slate-600">
-                            {plan.slug}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-5">
-                      {plan.monthly_price !==
-                      null ? (
-                        <span className="text-sm text-slate-200">
-                          $
-                          {
-                            plan.monthly_price
-                          }
-
-                          <span className="text-xs text-slate-600">
-                            /mo
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-slate-500">
-                          Custom
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-5">
-                      {plan.yearly_price !==
-                      null ? (
-                        <span className="text-sm text-slate-200">
-                          $
-                          {
-                            plan.yearly_price
-                          }
-
-                          <span className="text-xs text-slate-600">
-                            /yr
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-slate-500">
-                          Custom
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <span className="text-sm text-slate-300">
-                        {getModuleCount(
-                          plan.slug
-                        )}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <span className="text-sm text-slate-300">
-                        {companyCounts.get(
-                          plan.id
-                        ) ?? 0}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <StatusBadge
-                        status={
-                          plan.is_active
-                            ? "active"
-                            : "inactive"
-                        }
-                      />
-                    </td>
-
-                    <td className="px-6 py-5">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          disabled
-                          className="rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-600"
-                        >
-                          Manage
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Pricing Architecture */}
-      <section className="grid gap-5 lg:grid-cols-2">
+      <section className="grid gap-5 lg:grid-cols-3">
         <ArchitectureCard
-          icon="$"
-          title="Centralized Pricing"
-          description="SBS plan pricing is stored centrally so subscription pricing remains consistent across the platform."
+          icon={CircleDollarSign}
+          title="Catalog Pricing"
+          description="The plan catalog stores the current public price. Changing a plan price will affect future subscriptions, not automatically rewrite existing customer subscription pricing."
         />
 
         <ArchitectureCard
-          icon="◈"
+          icon={Layers3}
           title="Module Entitlements"
-          description="Each plan grants access to a defined set of SBS modules through the entitlement system."
+          description="Plan access is driven by plan_modules and the existing entitlement system rather than hardcoded plan checks inside individual modules."
+        />
+
+        <ArchitectureCard
+          icon={Building2}
+          title="Customer Subscriptions"
+          description="Customer subscriptions remain separate from the plan catalog so billing history, locked-in pricing, discounts, and grandfathered rates can be preserved."
         />
       </section>
     </div>
   );
 }
 
-function getModuleCount(
-  slug: string
-) {
-  return moduleCounts[slug] ?? 0;
-}
-
-function getDescription(
-  slug: string
-) {
-  return (
-    descriptions[slug] ??
-    "Sharif Business Solutions subscription plan."
-  );
-}
-
-function PlanCard({
-  plan,
-  companyCount,
-}: {
-  plan: Plan;
-  companyCount: number;
-}) {
-  const popular =
-    popularPlans.has(
-      plan.slug
-    );
-
-  const modules =
-    getModuleCount(
-      plan.slug
-    );
-
-  return (
-    <div
-      className={`relative overflow-hidden rounded-2xl border ${
-        popular
-          ? "border-emerald-500/30 bg-emerald-500/[0.04]"
-          : "border-white/10 bg-white/[0.03]"
-      } p-6`}
-    >
-      {popular && (
-        <div className="absolute right-4 top-4 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-          Popular
-        </div>
-      )}
-
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-white">
-        {plan.name.charAt(
-          0
-        )}
-      </div>
-
-      <h3 className="mt-5 text-lg font-semibold text-white">
-        {plan.name}
-      </h3>
-
-      <p className="mt-2 min-h-[48px] text-xs leading-5 text-slate-500">
-        {getDescription(
-          plan.slug
-        )}
-      </p>
-
-      <div className="mt-6">
-        {plan.monthly_price !==
-        null ? (
-          <>
-            <span className="text-3xl font-bold tracking-tight text-white">
-              $
-              {
-                plan.monthly_price
-              }
-            </span>
-
-            <span className="ml-1 text-xs text-slate-600">
-              /month
-            </span>
-          </>
-        ) : (
-          <span className="text-2xl font-bold text-white">
-            Custom
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2 text-xs text-slate-600">
-        {plan.yearly_price !==
-        null
-          ? `$${plan.yearly_price} billed annually`
-          : "Contact SBS for pricing"}
-      </div>
-
-      <div className="my-6 border-t border-white/10" />
-
-      <div className="space-y-3">
-        <FeatureRow
-          label="Available modules"
-          value={
-            modules === 999
-              ? "All modules"
-              : `${modules}`
-          }
-        />
-
-        <FeatureRow
-          label="Companies"
-          value={`${companyCount}`}
-        />
-
-        <FeatureRow
-          label="Status"
-          value={
-            plan.is_active
-              ? "active"
-              : "inactive"
-          }
-        />
-      </div>
-    </div>
-  );
-}
-
-function FeatureRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 text-xs">
-      <span className="text-slate-500">
-        {label}
-      </span>
-
-      <span className="font-medium text-slate-300">
-        {value}
-      </span>
-    </div>
-  );
-}
+/* ============================================================
+   STAT CARD
+============================================================ */
 
 function PlanStat({
   label,
   value,
-  icon,
+  detail,
+  icon: Icon,
 }: {
   label: string;
-  value: number | string;
-  icon: string;
+  value: string | number;
+  detail: string;
+  icon: React.ComponentType<{
+    className?: string;
+  }>;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm text-slate-200">
-        {icon}
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+        <Icon className="h-5 w-5" />
       </div>
 
       <div className="mt-5">
-        <div className="text-3xl font-bold tracking-tight text-white">
+        <div className="text-2xl font-bold tracking-tight text-slate-900">
           {value}
         </div>
 
-        <div className="mt-1 text-sm text-slate-500">
+        <div className="mt-1 text-sm font-medium text-slate-700">
           {label}
+        </div>
+
+        <div className="mt-1 text-xs text-slate-400">
+          {detail}
         </div>
       </div>
     </div>
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: string;
-}) {
-  return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium capitalize ${
-        status === "active"
-          ? "bg-emerald-500/10 text-emerald-400"
-          : "bg-slate-500/10 text-slate-400"
-      }`}
-    >
-      {status}
-    </span>
-  );
-}
+/* ============================================================
+   ARCHITECTURE CARD
+============================================================ */
 
 function ArchitectureCard({
-  icon,
+  icon: Icon,
   title,
   description,
 }: {
-  icon: string;
+  icon: React.ComponentType<{
+    className?: string;
+  }>;
   title: string;
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-sm text-slate-300">
-        {icon}
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+        <Icon className="h-5 w-5" />
       </div>
 
-      <h3 className="mt-4 text-sm font-semibold text-white">
+      <h3 className="mt-4 text-sm font-semibold text-slate-900">
         {title}
       </h3>
 
@@ -664,4 +571,31 @@ function ArchitectureCard({
       </p>
     </div>
   );
+}
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function formatCurrency(
+  amount: number,
+  currency: string,
+  withDecimals = true
+) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: withDecimals
+        ? 2
+        : 0,
+      maximumFractionDigits: withDecimals
+        ? 2
+        : 0,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(
+      withDecimals ? 2 : 0
+    )}`;
+  }
 }
