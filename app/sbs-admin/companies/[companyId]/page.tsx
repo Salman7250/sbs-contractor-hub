@@ -7,6 +7,7 @@ import {
   Clock3,
   CreditCard,
   Database,
+  DollarSign,
   Globe,
   Mail,
   MapPin,
@@ -15,11 +16,11 @@ import {
   Shield,
   ShieldAlert,
   Users,
-  Warehouse,
 } from "lucide-react";
 
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { createClient } from "@/lib/supabase/server";
+import CompanyAdminControls from "./company-admin-controls";
 
 type PageProps = {
   params: Promise<{
@@ -75,9 +76,13 @@ type Plan = {
   id: string;
   name: string;
   slug: string;
+  description: string | null;
   monthly_price: number | null;
   yearly_price: number | null;
   currency: string | null;
+  is_active: boolean | null;
+  is_popular: boolean | null;
+  sort_order: number | null;
 };
 
 type Module = {
@@ -96,7 +101,7 @@ type PlanModule = {
 type Entitlement = {
   company_id: string;
   module_id: string;
-  access: boolean;
+  access: string;
   source: string | null;
   expires_at: string | null;
   reason: string | null;
@@ -121,30 +126,24 @@ type CompanyLimitOverride = {
 function formatDate(value: string | null) {
   if (!value) return "—";
 
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "—";
-
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return new Date(value).toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    },
+  );
 }
 
 function formatMoney(
   amount: number | null,
-  currency = "USD"
+  currency = "USD",
 ) {
-  if (amount === null || amount === undefined) {
+  if (
+    amount === null ||
+    amount === undefined
+  ) {
     return "—";
   }
 
@@ -155,7 +154,9 @@ function formatMoney(
   }).format(amount);
 }
 
-function statusClasses(status: string | null) {
+function statusClasses(
+  status: string | null,
+) {
   switch (status) {
     case "active":
       return "bg-emerald-50 text-emerald-700 ring-emerald-600/10";
@@ -176,7 +177,9 @@ function statusClasses(status: string | null) {
   }
 }
 
-function subscriptionClasses(status: string | null) {
+function subscriptionClasses(
+  status: string | null,
+) {
   switch (status) {
     case "active":
       return "bg-emerald-50 text-emerald-700";
@@ -196,18 +199,30 @@ function subscriptionClasses(status: string | null) {
   }
 }
 
-function prettyStatus(status: string | null) {
+function prettyStatus(
+  status: string | null,
+) {
   if (!status) return "Unknown";
 
-  if (status === "trialing") return "Trialing";
+  if (status === "trialing") {
+    return "Trialing";
+  }
 
-  if (status === "past_due") return "Past due";
+  if (status === "past_due") {
+    return "Past due";
+  }
 
-  if (status === "cancelled" || status === "canceled") {
+  if (
+    status === "cancelled" ||
+    status === "canceled"
+  ) {
     return "Cancelled";
   }
 
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  return (
+    status.charAt(0).toUpperCase() +
+    status.slice(1)
+  );
 }
 
 function prettyLimitKey(key: string) {
@@ -216,7 +231,7 @@ function prettyLimitKey(key: string) {
     .replace(/_per_year/g, " / year")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
+      letter.toUpperCase(),
     );
 }
 
@@ -226,14 +241,19 @@ function getInitials(name: string) {
     .split(/\s+/)
     .filter(Boolean);
 
-  if (parts.length === 0) return "CO";
+  if (parts.length === 0) {
+    return "CO";
+  }
 
   if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
+    return parts[0]
+      .slice(0, 2)
+      .toUpperCase();
   }
 
   return (
-    parts[0][0] + parts[parts.length - 1][0]
+    parts[0][0] +
+    parts[parts.length - 1][0]
   ).toUpperCase();
 }
 
@@ -283,7 +303,7 @@ export default async function CompanyControlCenter({
           legal_registration_type,
           authority_name,
           created_at
-        `
+        `,
       )
       .eq("id", companyId)
       .maybeSingle(),
@@ -308,10 +328,12 @@ export default async function CompanyControlCenter({
           current_period_end,
           cancel_at_period_end,
           canceled_at
-        `
+        `,
       )
       .eq("company_id", companyId)
-      .order("created_at", { ascending: false }),
+      .order("created_at", {
+        ascending: false,
+      }),
 
     supabase
       .from("plans")
@@ -320,11 +342,18 @@ export default async function CompanyControlCenter({
           id,
           name,
           slug,
+          description,
           monthly_price,
           yearly_price,
-          currency
-        `
-      ),
+          currency,
+          is_active,
+          is_popular,
+          sort_order
+        `,
+      )
+      .order("sort_order", {
+        ascending: true,
+      }),
 
     supabase
       .from("modules")
@@ -335,13 +364,15 @@ export default async function CompanyControlCenter({
           slug,
           description,
           is_active
-        `
+        `,
       )
       .order("name"),
 
     supabase
       .from("plan_modules")
-      .select("plan_id, module_id"),
+      .select(
+        "plan_id, module_id",
+      ),
 
     supabase
       .from("company_entitlements")
@@ -353,7 +384,7 @@ export default async function CompanyControlCenter({
           source,
           expires_at,
           reason
-        `
+        `,
       )
       .eq("company_id", companyId),
 
@@ -365,7 +396,7 @@ export default async function CompanyControlCenter({
           limit_key,
           limit_value,
           is_unlimited
-        `
+        `,
       ),
 
     supabase
@@ -378,7 +409,7 @@ export default async function CompanyControlCenter({
           is_unlimited,
           expires_at,
           reason
-        `
+        `,
       )
       .eq("company_id", companyId),
 
@@ -389,7 +420,9 @@ export default async function CompanyControlCenter({
   ]);
 
   if (companyResult.error) {
-    throw new Error(companyResult.error.message);
+    throw new Error(
+      companyResult.error.message,
+    );
   }
 
   if (!companyResult.data) {
@@ -412,8 +445,8 @@ export default async function CompanyControlCenter({
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              The requested company does not exist or is no
-              longer available.
+              The requested company does not
+              exist or is no longer available.
             </p>
           </div>
         </div>
@@ -421,58 +454,83 @@ export default async function CompanyControlCenter({
     );
   }
 
-  const company = companyResult.data as Company;
-
   if (subscriptionResult.error) {
-    throw new Error(subscriptionResult.error.message);
+    throw new Error(
+      subscriptionResult.error.message,
+    );
   }
 
   if (plansResult.error) {
-    throw new Error(plansResult.error.message);
+    throw new Error(
+      plansResult.error.message,
+    );
   }
 
   if (modulesResult.error) {
-    throw new Error(modulesResult.error.message);
+    throw new Error(
+      modulesResult.error.message,
+    );
   }
 
   if (planModulesResult.error) {
-    throw new Error(planModulesResult.error.message);
+    throw new Error(
+      planModulesResult.error.message,
+    );
   }
 
   if (entitlementsResult.error) {
-    throw new Error(entitlementsResult.error.message);
+    throw new Error(
+      entitlementsResult.error.message,
+    );
   }
 
   if (planLimitsResult.error) {
-    throw new Error(planLimitsResult.error.message);
+    throw new Error(
+      planLimitsResult.error.message,
+    );
   }
 
   if (overridesResult.error) {
-    throw new Error(overridesResult.error.message);
+    throw new Error(
+      overridesResult.error.message,
+    );
   }
 
   if (membersResult.error) {
-    throw new Error(membersResult.error.message);
+    throw new Error(
+      membersResult.error.message,
+    );
   }
 
+  const company =
+    companyResult.data as Company;
+
   const subscriptions =
-    (subscriptionResult.data ?? []) as Subscription[];
+    (subscriptionResult.data ??
+      []) as Subscription[];
 
-  const plans = (plansResult.data ?? []) as Plan[];
+  const plans =
+    (plansResult.data ?? []) as Plan[];
 
-  const modules = (modulesResult.data ?? []) as Module[];
+  const modules =
+    (modulesResult.data ??
+      []) as Module[];
 
   const planModules =
-    (planModulesResult.data ?? []) as PlanModule[];
+    (planModulesResult.data ??
+      []) as PlanModule[];
 
   const entitlements =
-    (entitlementsResult.data ?? []) as Entitlement[];
+    (entitlementsResult.data ??
+      []) as Entitlement[];
 
   const planLimits =
-    (planLimitsResult.data ?? []) as PlanLimit[];
+    (planLimitsResult.data ??
+      []) as PlanLimit[];
 
   const overrides =
-    (overridesResult.data ?? []) as CompanyLimitOverride[];
+    (overridesResult.data ??
+      []) as CompanyLimitOverride[];
 
   const memberCount =
     membersResult.data?.length ?? 0;
@@ -481,14 +539,16 @@ export default async function CompanyControlCenter({
     subscriptions.find(
       (item) =>
         item.status === "active" ||
-        item.status === "trialing"
+        item.status === "trialing",
     ) ??
     subscriptions[0] ??
     null;
 
   const currentPlan = subscription?.plan_id
     ? plans.find(
-        (plan) => plan.id === subscription.plan_id
+        (plan) =>
+          plan.id ===
+          subscription.plan_id,
       ) ?? null
     : null;
 
@@ -497,9 +557,13 @@ export default async function CompanyControlCenter({
         planModules
           .filter(
             (item) =>
-              item.plan_id === currentPlan.id
+              item.plan_id ===
+              currentPlan.id,
           )
-          .map((item) => item.module_id)
+          .map(
+            (item) =>
+              item.module_id,
+          ),
       )
     : new Set<string>();
 
@@ -507,95 +571,126 @@ export default async function CompanyControlCenter({
     entitlements.map((item) => [
       item.module_id,
       item,
-    ])
+    ]),
   );
 
-  const enabledModules = modules.filter((module) => {
-    const entitlement = entitlementMap.get(module.id);
+  const enabledModules =
+    modules.filter((module) => {
+      const entitlement =
+        entitlementMap.get(
+          module.id,
+        );
 
-    if (entitlement) {
-      return entitlement.access;
-    }
+      if (entitlement) {
+        return (
+          entitlement.access ===
+          "enabled"
+        );
+      }
 
-    return currentPlanModules.has(module.id);
-  });
+      return currentPlanModules.has(
+        module.id,
+      );
+    });
 
-  const activeModuleCount = enabledModules.length;
+  const activeModuleCount =
+    enabledModules.length;
 
-  const moduleRows = modules.map((module) => {
-    const entitlement =
-      entitlementMap.get(module.id);
+  const moduleRows = modules.map(
+    (module) => {
+      const entitlement =
+        entitlementMap.get(
+          module.id,
+        );
 
-    const includedInPlan =
-      currentPlanModules.has(module.id);
+      const includedInPlan =
+        currentPlanModules.has(
+          module.id,
+        );
 
-    const enabled = entitlement
-      ? entitlement.access
-      : includedInPlan;
+      const enabled = entitlement
+        ? entitlement.access ===
+          "enabled"
+        : includedInPlan;
 
-    const isOverride = Boolean(
-      entitlement &&
-        entitlement.source &&
-        entitlement.source !== "subscription" &&
-        entitlement.source !== "plan"
-    );
+      const isOverride =
+        Boolean(
+          entitlement &&
+            entitlement.source &&
+            entitlement.source !==
+              "subscription" &&
+            entitlement.source !==
+              "plan",
+        );
 
-    return {
-      module,
-      includedInPlan,
-      enabled,
-      entitlement,
-      isOverride,
-    };
-  });
+      return {
+        module,
+        includedInPlan,
+        enabled,
+        entitlement,
+        isOverride,
+      };
+    },
+  );
 
   const limitMap = new Map(
     planLimits
       .filter(
         (limit) =>
           !currentPlan ||
-          limit.plan_id === currentPlan.id
+          limit.plan_id ===
+            currentPlan.id,
       )
       .map((limit) => [
         limit.limit_key,
         limit,
-      ])
+      ]),
   );
 
   const overrideMap = new Map(
     overrides.map((override) => [
       override.limit_key,
       override,
-    ])
+    ]),
   );
 
-  const allLimitKeys = Array.from(
-    new Set([
-      ...limitMap.keys(),
-      ...overrideMap.keys(),
-    ])
-  ).sort();
+  const allLimitKeys =
+    Array.from(
+      new Set([
+        ...limitMap.keys(),
+        ...overrideMap.keys(),
+      ]),
+    ).sort();
 
-  const effectiveLimits = allLimitKeys.map(
-    (limitKey) => {
-      const base = limitMap.get(limitKey);
-      const override =
-        overrideMap.get(limitKey);
+  const effectiveLimits =
+    allLimitKeys.map(
+      (limitKey) => {
+        const base =
+          limitMap.get(
+            limitKey,
+          );
 
-      const effective = override ?? base;
+        const override =
+          overrideMap.get(
+            limitKey,
+          );
 
-      return {
-        key: limitKey,
-        base,
-        override,
-        effective,
-      };
-    }
-  );
+        const effective =
+          override ?? base;
+
+        return {
+          key: limitKey,
+          base,
+          override,
+          effective,
+        };
+      },
+    );
 
   const isTrial =
     company.status === "trial" ||
-    subscription?.status === "trialing";
+    subscription?.status ===
+      "trialing";
 
   const trialDaysRemaining =
     subscription?.trial_ends_at
@@ -603,17 +698,31 @@ export default async function CompanyControlCenter({
           0,
           Math.ceil(
             (new Date(
-              subscription.trial_ends_at
+              subscription.trial_ends_at,
             ).getTime() -
               Date.now()) /
-              (1000 * 60 * 60 * 24)
-          )
+              (1000 *
+                60 *
+                60 *
+                24),
+          ),
         )
       : null;
 
+  const activePlans = plans
+    .filter(
+      (plan) =>
+        plan.is_active !== false,
+    )
+    .sort(
+      (a, b) =>
+        (a.sort_order ?? 0) -
+        (b.sort_order ?? 0),
+    );
+
   return (
     <div className="min-h-full bg-[#f3f5f8]">
-      {/* Breadcrumb / back */}
+      {/* Back */}
       <div className="mb-6">
         <Link
           href="/sbs-admin/companies"
@@ -624,7 +733,9 @@ export default async function CompanyControlCenter({
         </Link>
       </div>
 
-      {/* Company Header */}
+      {/* =====================================================
+          COMPANY HEADER
+          ===================================================== */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-6 py-6 lg:px-7">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
@@ -637,7 +748,9 @@ export default async function CompanyControlCenter({
                 />
               ) : (
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-lg font-bold text-white">
-                  {getInitials(company.name)}
+                  {getInitials(
+                    company.name,
+                  )}
                 </div>
               )}
 
@@ -649,16 +762,18 @@ export default async function CompanyControlCenter({
 
                   <span
                     className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${statusClasses(
-                      company.status
+                      company.status,
                     )}`}
                   >
-                    {company.status || "Unknown"}
+                    {company.status ||
+                      "Unknown"}
                   </span>
                 </div>
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
                   <span>
-                    {company.slug || "No slug"}
+                    {company.slug ||
+                      "No slug"}
                   </span>
 
                   <span className="hidden text-slate-300 sm:inline">
@@ -666,54 +781,126 @@ export default async function CompanyControlCenter({
                   </span>
 
                   <span>
-                    Joined {formatDate(company.created_at)}
+                    Joined{" "}
+                    {formatDate(
+                      company.created_at,
+                    )}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <AdminButton label="Change Plan" />
-
-              <AdminButton label="Extend Trial" />
-
-              <AdminButton
-                label="Suspend Company"
-                danger
-              />
-            </div>
+            <CompanyAdminControls
+              companyId={
+                company.id
+              }
+              companyName={
+                company.name
+              }
+              companyStatus={
+                company.status
+              }
+              subscription={
+                subscription
+                  ? {
+                      id: subscription.id,
+                      status:
+                        subscription.status,
+                      billing_cycle:
+                        subscription.billing_cycle,
+                      trial_ends_at:
+                        subscription.trial_ends_at,
+                    }
+                  : null
+              }
+              plans={activePlans}
+              modules={modules}
+              moduleRows={moduleRows.map(
+                (row) => ({
+                  module: row.module,
+                  enabled:
+                    row.enabled,
+                  includedInPlan:
+                    row.includedInPlan,
+                  isOverride:
+                    row.isOverride,
+                  reason:
+                    row.entitlement
+                      ?.reason ??
+                    null,
+                }),
+              )}
+              limitRows={effectiveLimits.map(
+                (row) => ({
+                  key: row.key,
+                  base: row.base
+                    ? {
+                        limit_value:
+                          row.base
+                            .limit_value,
+                        is_unlimited:
+                          row.base
+                            .is_unlimited,
+                      }
+                    : null,
+                  override:
+                    row.override
+                      ? {
+                          limit_value:
+                            row.override
+                              .limit_value,
+                          is_unlimited:
+                            row.override
+                              .is_unlimited,
+                        }
+                      : null,
+                }),
+              )}
+            />
           </div>
         </div>
 
         <div className="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
           <HeaderMetric
-            icon={<CreditCard className="h-4 w-4" />}
+            icon={
+              <CreditCard className="h-4 w-4" />
+            }
             label="Current Plan"
-            value={currentPlan?.name ?? "No plan"}
+            value={
+              currentPlan?.name ??
+              "No plan"
+            }
           />
 
           <HeaderMetric
-            icon={<Users className="h-4 w-4" />}
+            icon={
+              <Users className="h-4 w-4" />
+            }
             label="Users"
             value={memberCount.toString()}
           />
 
           <HeaderMetric
-            icon={<Package className="h-4 w-4" />}
+            icon={
+              <Package className="h-4 w-4" />
+            }
             label="Active Modules"
             value={`${activeModuleCount} / ${modules.length}`}
           />
 
           <HeaderMetric
-            icon={<DollarSignIcon />}
+            icon={
+              <DollarSignIcon />
+            }
             label="Monthly Value"
             value={
-              subscription?.amount
+              subscription?.amount !=
+              null
                 ? formatMoney(
                     subscription.amount,
                     subscription.currency ||
-                      company.currency ||
-                      "USD"
+                      currentPlan?.currency ||
+                      "USD",
                   )
                 : "—"
             }
@@ -721,42 +908,59 @@ export default async function CompanyControlCenter({
         </div>
       </section>
 
-      {/* Overview */}
+      {/* =====================================================
+          OVERVIEW
+          ===================================================== */}
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section
+          id="company-information"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm"
+        >
           <SectionHeader
-            icon={<Building2 className="h-5 w-5" />}
+            icon={
+              <Building2 className="h-5 w-5" />
+            }
             title="Company Information"
             description="Business identity and contact information."
           />
 
           <div className="grid gap-x-8 gap-y-6 p-6 sm:grid-cols-2">
             <InfoItem
-              icon={<Building2 className="h-4 w-4" />}
+              icon={
+                <Building2 className="h-4 w-4" />
+              }
               label="Business Name"
               value={company.name}
             />
 
             <InfoItem
-              icon={<Globe className="h-4 w-4" />}
+              icon={
+                <Globe className="h-4 w-4" />
+              }
               label="Website"
               value={company.website}
             />
 
             <InfoItem
-              icon={<Mail className="h-4 w-4" />}
+              icon={
+                <Mail className="h-4 w-4" />
+              }
               label="Business Email"
               value={company.email}
             />
 
             <InfoItem
-              icon={<Phone className="h-4 w-4" />}
+              icon={
+                <Phone className="h-4 w-4" />
+              }
               label="Phone"
               value={company.phone}
             />
 
             <InfoItem
-              icon={<Package className="h-4 w-4" />}
+              icon={
+                <Package className="h-4 w-4" />
+              }
               label="Business Type"
               value={
                 company.business_type
@@ -769,13 +973,19 @@ export default async function CompanyControlCenter({
             />
 
             <InfoItem
-              icon={<Globe className="h-4 w-4" />}
+              icon={
+                <Globe className="h-4 w-4" />
+              }
               label="Timezone"
-              value={company.timezone}
+              value={
+                company.timezone
+              }
             />
 
             <InfoItem
-              icon={<MapPin className="h-4 w-4" />}
+              icon={
+                <MapPin className="h-4 w-4" />
+              }
               label="Address"
               value={[
                 company.address_line1,
@@ -791,19 +1001,29 @@ export default async function CompanyControlCenter({
             />
 
             <InfoItem
-              icon={<Shield className="h-4 w-4" />}
+              icon={
+                <Shield className="h-4 w-4" />
+              }
               label="Tax Registration Number"
-              value={company.tax_registration_number}
+              value={
+                company.tax_registration_number
+              }
             />
 
             <InfoItem
-              icon={<Shield className="h-4 w-4" />}
+              icon={
+                <Shield className="h-4 w-4" />
+              }
               label="Trade License Number"
-              value={company.trade_license_number}
+              value={
+                company.trade_license_number
+              }
             />
 
             <InfoItem
-              icon={<Building2 className="h-4 w-4" />}
+              icon={
+                <Building2 className="h-4 w-4" />
+              }
               label="Legal Registration"
               value={
                 company.legal_registration_type
@@ -811,17 +1031,28 @@ export default async function CompanyControlCenter({
             />
 
             <InfoItem
-              icon={<Building2 className="h-4 w-4" />}
+              icon={
+                <Building2 className="h-4 w-4" />
+              }
               label="Authority"
-              value={company.authority_name}
+              value={
+                company.authority_name
+              }
             />
           </div>
         </section>
 
-        {/* Subscription */}
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* ===================================================
+            SUBSCRIPTION
+            =================================================== */}
+        <section
+          id="subscription"
+          className="rounded-2xl border border-slate-200 bg-white shadow-sm"
+        >
           <SectionHeader
-            icon={<CreditCard className="h-5 w-5" />}
+            icon={
+              <CreditCard className="h-5 w-5" />
+            }
             title="Subscription"
             description="Current billing and subscription state."
           />
@@ -840,34 +1071,38 @@ export default async function CompanyControlCenter({
                   </div>
                 </div>
 
-                {subscription && (
+                {subscription ? (
                   <span
                     className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${subscriptionClasses(
-                      subscription.status
+                      subscription.status,
                     )}`}
                   >
                     {prettyStatus(
-                      subscription.status
+                      subscription.status,
                     )}
                   </span>
-                )}
+                ) : null}
               </div>
 
-              {currentPlan && (
+              {currentPlan ? (
                 <div className="mt-3 text-sm text-slate-500">
                   {formatMoney(
                     subscription?.amount ??
-                      currentPlan.monthly_price,
+                      (subscription?.billing_cycle ===
+                      "yearly"
+                        ? currentPlan.yearly_price
+                        : currentPlan.monthly_price),
                     subscription?.currency ||
                       currentPlan.currency ||
-                      "USD"
+                      "USD",
                   )}
+
                   {subscription?.billing_cycle ===
-                    "yearly"
+                  "yearly"
                     ? " / year"
                     : " / month"}
                 </div>
-              )}
+              ) : null}
             </div>
 
             <SubscriptionRow
@@ -878,7 +1113,7 @@ export default async function CompanyControlCenter({
                       .charAt(0)
                       .toUpperCase() +
                     subscription.billing_cycle.slice(
-                      1
+                      1,
                     )
                   : "—"
               }
@@ -887,7 +1122,8 @@ export default async function CompanyControlCenter({
             <SubscriptionRow
               label="Started"
               value={formatDate(
-                subscription?.started_at ?? null
+                subscription?.started_at ??
+                  null,
               )}
             />
 
@@ -896,9 +1132,9 @@ export default async function CompanyControlCenter({
               value={
                 subscription
                   ? `${formatDate(
-                      subscription.current_period_start
+                      subscription.current_period_start,
                     )} – ${formatDate(
-                      subscription.current_period_end
+                      subscription.current_period_end,
                     )}`
                   : "—"
               }
@@ -907,11 +1143,12 @@ export default async function CompanyControlCenter({
             <SubscriptionRow
               label="Trial Ends"
               value={formatDate(
-                subscription?.trial_ends_at ?? null
+                subscription?.trial_ends_at ??
+                  null,
               )}
             />
 
-            {isTrial && (
+            {isTrial ? (
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                 <div className="flex gap-3">
                   <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
@@ -930,9 +1167,9 @@ export default async function CompanyControlCenter({
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {subscription?.cancel_at_period_end && (
+            {subscription?.cancel_at_period_end ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex gap-3">
                   <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -943,26 +1180,58 @@ export default async function CompanyControlCenter({
                     </div>
 
                     <p className="mt-1 text-xs text-amber-700">
-                      This subscription is set to
-                      cancel at the end of its current
+                      This subscription is
+                      scheduled to cancel at
+                      the end of the current
                       billing period.
                     </p>
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
+
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              <Link
+                href="#subscription"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Billing details
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+
+              <Link
+                href="/sbs-admin/payments"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Payments
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </section>
       </div>
 
-      {/* Module Access */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* =====================================================
+          MODULE ACCESS
+          ===================================================== */}
+      <section
+        id="modules"
+        className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm"
+      >
         <SectionHeader
-          icon={<Shield className="h-5 w-5" />}
+          icon={
+            <Shield className="h-5 w-5" />
+          }
           title="Module Access"
           description="Plan-based access and company-level entitlement overrides."
           action={
-            <AdminButton label="Manage Modules" />
+            <Link
+              href="#module-controls"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Manage Modules
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
           }
         />
 
@@ -1030,32 +1299,45 @@ export default async function CompanyControlCenter({
                         : "Not included"}
                   </div>
 
-                  {isOverride && (
+                  {isOverride ? (
                     <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
                       Override
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
-                {entitlement?.reason && (
+                {entitlement?.reason ? (
                   <div className="mt-2 text-[11px] leading-4 text-slate-400">
                     {entitlement.reason}
                   </div>
-                )}
+                ) : null}
               </div>
-            )
+            ),
           )}
         </div>
       </section>
 
-      {/* Resource Limits */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* =====================================================
+          RESOURCE LIMITS
+          ===================================================== */}
+      <section
+        id="limits"
+        className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm"
+      >
         <SectionHeader
-          icon={<Database className="h-5 w-5" />}
+          icon={
+            <Database className="h-5 w-5" />
+          }
           title="Resource Limits"
           description="Plan limits and company-specific overrides."
           action={
-            <AdminButton label="Override Limit" />
+            <Link
+              href="#limit-controls"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Override Limit
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
           }
         />
 
@@ -1077,7 +1359,7 @@ export default async function CompanyControlCenter({
                   </th>
 
                   <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Effective Limit
+                    Effective
                   </th>
 
                   <th className="px-6 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -1100,7 +1382,9 @@ export default async function CompanyControlCenter({
                     >
                       <td className="px-6 py-4">
                         <div className="text-sm font-semibold text-slate-800">
-                          {prettyLimitKey(key)}
+                          {prettyLimitKey(
+                            key,
+                          )}
                         </div>
 
                         <div className="mt-0.5 font-mono text-[10px] text-slate-400">
@@ -1116,18 +1400,10 @@ export default async function CompanyControlCenter({
 
                       <td className="px-6 py-4">
                         {override ? (
-                          <div>
-                            <LimitValue
-                              limit={override}
-                              highlighted
-                            />
-
-                            {override.reason && (
-                              <div className="mt-1 max-w-[220px] text-[10px] text-slate-400">
-                                {override.reason}
-                              </div>
-                            )}
-                          </div>
+                          <LimitValue
+                            limit={override}
+                            highlighted
+                          />
                         ) : (
                           <span className="text-sm text-slate-400">
                             None
@@ -1157,7 +1433,7 @@ export default async function CompanyControlCenter({
                         </span>
                       </td>
                     </tr>
-                  )
+                  ),
                 )}
               </tbody>
             </table>
@@ -1171,66 +1447,91 @@ export default async function CompanyControlCenter({
             </p>
 
             <p className="mt-1 text-xs text-slate-400">
-              Limits will appear here once a plan with
-              configured limits is assigned.
+              Limits will appear here once
+              the assigned plan has limits.
             </p>
           </div>
         )}
       </section>
 
-      {/* Admin Actions */}
+      {/* =====================================================
+          ADMIN ACTIONS
+          ===================================================== */}
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <SectionHeader
-          icon={<ShieldAlert className="h-5 w-5" />}
+          icon={
+            <ShieldAlert className="h-5 w-5" />
+          }
           title="Admin Actions"
           description="Platform-level controls for this company."
         />
 
         <div className="grid gap-3 p-6 sm:grid-cols-2 xl:grid-cols-4">
-          <ActionCard
+          <ActionLink
+            href="#top-controls"
             title="Change Plan"
             description="Move this company to another subscription plan."
           />
 
-          <ActionCard
+          <ActionLink
+            href="#top-controls"
             title="Extend Trial"
             description="Add additional trial time to the current subscription."
           />
 
-          <ActionCard
+          <ActionLink
+            href="#module-controls"
             title="Module Override"
             description="Grant or remove access to an individual module."
           />
 
-          <ActionCard
+          <ActionLink
+            href="#limit-controls"
             title="Limit Override"
             description="Customize a resource limit for this company."
           />
 
-          <ActionCard
+          <ActionLink
+            href={`/sbs-admin/users?company=${company.id}`}
             title="Manage Users"
             description="Review company members and account access."
           />
 
-          <ActionCard
+          <ActionLink
+            href="#subscription"
             title="Billing"
-            description="Review billing provider and subscription identifiers."
+            description="Review billing provider and subscription information."
           />
 
-          <ActionCard
+          <ActionLink
+            href="#company-information"
             title="Company Settings"
             description="Review business configuration and registration data."
           />
 
-          <ActionCard
-            title="Suspend Company"
-            description="Temporarily disable the company workspace."
-            danger
+          <ActionLink
+            href="#top-controls"
+            title={
+              company.status ===
+              "suspended"
+                ? "Reactivate Company"
+                : "Suspend Company"
+            }
+            description={
+              company.status ===
+              "suspended"
+                ? "Restore access to this company workspace."
+                : "Temporarily disable the company workspace."
+            }
+            danger={
+              company.status !==
+              "suspended"
+            }
           />
         </div>
       </section>
 
-      {/* Footer metadata */}
+      {/* Metadata */}
       <div className="mt-6 grid gap-4 pb-8 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -1248,22 +1549,27 @@ export default async function CompanyControlCenter({
           </div>
 
           <div className="mt-2 break-all font-mono text-xs text-slate-600">
-            {subscription?.id || "No subscription"}
+            {subscription?.id ||
+              "No subscription"}
           </div>
 
-          {subscription?.provider && (
+          {subscription?.provider ? (
             <div className="mt-2 text-xs text-slate-400">
               Provider:{" "}
               <span className="font-medium text-slate-600">
                 {subscription.provider}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
 
 function SectionHeader({
   icon,
@@ -1335,11 +1641,18 @@ function InfoItem({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string | null | undefined;
+  value:
+    | string
+    | null
+    | undefined;
   wide?: boolean;
 }) {
   return (
-    <div className={wide ? "sm:col-span-2" : ""}>
+    <div
+      className={
+        wide ? "sm:col-span-2" : ""
+      }
+    >
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
         {icon}
         {label}
@@ -1378,9 +1691,12 @@ function LimitValue({
 }: {
   limit:
     | {
-        limit_value: number | null;
+        limit_value:
+          | number
+          | null;
         is_unlimited: boolean;
       }
+    | null
     | undefined;
   highlighted?: boolean;
 }) {
@@ -1420,45 +1736,24 @@ function LimitValue({
   );
 }
 
-function AdminButton({
-  label,
-  danger = false,
-}: {
-  label: string;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled
-      className={`inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold transition ${
-        danger
-          ? "border-red-200 bg-white text-red-600 opacity-70"
-          : "border-slate-200 bg-white text-slate-700 opacity-70"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ActionCard({
+function ActionLink({
+  href,
   title,
   description,
   danger = false,
 }: {
+  href: string;
   title: string;
   description: string;
   danger?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      disabled
-      className={`group rounded-xl border p-4 text-left transition ${
+    <Link
+      href={href}
+      className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
         danger
-          ? "border-red-100 bg-red-50/30 opacity-70"
-          : "border-slate-200 bg-white opacity-70"
+          ? "border-red-100 bg-red-50/30 hover:border-red-200 hover:bg-red-50"
+          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -1478,9 +1773,15 @@ function ActionCard({
           </p>
         </div>
 
-        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+        <ChevronRight
+          className={`mt-0.5 h-4 w-4 shrink-0 ${
+            danger
+              ? "text-red-300"
+              : "text-slate-300"
+          } transition group-hover:translate-x-0.5`}
+        />
       </div>
-    </button>
+    </Link>
   );
 }
 
