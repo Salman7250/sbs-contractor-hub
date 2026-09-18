@@ -314,8 +314,19 @@ export default function ProductEditPage() {
   }, [productId, router, showToast, supabase]);
 
   useEffect(() => {
-    void loadProduct();
-  }, [loadProduct]);
+  let cancelled = false;
+
+  const load = async () => {
+    if (cancelled) return;
+    await loadProduct();
+  };
+
+  void load();
+
+  return () => {
+    cancelled = true;
+  };
+}, [loadProduct]);
 
   const totalVariants = variantForms.length;
 

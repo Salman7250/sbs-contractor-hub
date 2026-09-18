@@ -183,7 +183,7 @@ export default function ServiceProvidersPage() {
 
   useEffect(() => {
     // Load service provider data after the component mounts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadData();
   }, [loadData]);
 

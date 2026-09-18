@@ -1,58 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-type PermissionRule = {
-  prefix: string;
-  module: string;
-  action: string;
-};
-
-const PROTECTED_ROUTES: PermissionRule[] = [
-  { prefix: "/", module: "dashboard", action: "view" },
-
-  { prefix: "/customers", module: "customers", action: "view" },
-  { prefix: "/leads", module: "leads", action: "view" },
-  { prefix: "/jobs", module: "jobs", action: "view" },
-  { prefix: "/estimates", module: "quotes", action: "view" },
-  { prefix: "/sales", module: "sales_orders", action: "view" },
-  { prefix: "/invoices", module: "invoices", action: "view" },
-  { prefix: "/payments", module: "payments", action: "view" },
-
-  { prefix: "/products", module: "products", action: "view" },
-  { prefix: "/serial-numbers", module: "serial_numbers", action: "view" },
-  { prefix: "/inventory", module: "inventory", action: "view" },
-  { prefix: "/warehouses", module: "warehouses", action: "view" },
-  { prefix: "/pricing", module: "pricing", action: "view" },
-
-  { prefix: "/suppliers", module: "suppliers", action: "view" },
-  { prefix: "/purchase-orders", module: "purchase_orders", action: "view" },
-  { prefix: "/expenses", module: "expenses", action: "view" },
-
-  { prefix: "/warranty", module: "warranty", action: "view" },
-  { prefix: "/repairs", module: "repairs", action: "view" },
-  { prefix: "/rma", module: "rma", action: "view" },
-  { prefix: "/service-providers", module: "service_jobs", action: "view" },
-  { prefix: "/service-jobs", module: "service_jobs", action: "view" },
-
-  { prefix: "/b2b-portal", module: "b2b_portal", action: "view" },
-  { prefix: "/reports", module: "reports", action: "view" },
-  { prefix: "/employees", module: "employees", action: "view" },
-  { prefix: "/documents", module: "documents", action: "view" },
-  { prefix: "/settings", module: "settings", action: "view" },
-];
-
-function getPermissionRule(pathname: string): PermissionRule | null {
-  return (
-    PROTECTED_ROUTES
-      .slice()
-      .sort((a, b) => b.prefix.length - a.prefix.length)
-      .find(
-        (rule) =>
-          pathname === rule.prefix ||
-          pathname.startsWith(`${rule.prefix}/`),
-      ) ?? null
-  );
-}
+import { hasCompanyModuleAccess } from "@/lib/auth/module-access";
+import { getModuleRouteRule } from "@/lib/navigation/module-routes";
 
 function isPublicPath(pathname: string) {
   return (
@@ -117,7 +66,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const rule = getPermissionRule(pathname);
+  const rule = getModuleRouteRule(pathname);
 
   /*
    * Routes that are not part of the employee workspace are left
@@ -155,6 +104,28 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  if (rule.entitlementModule) {
+    try {
+      const hasEntitlement = await hasCompanyModuleAccess(
+        supabase,
+        membership.company_id,
+        rule.entitlementModule,
+      );
+
+      if (!hasEntitlement) {
+        return NextResponse.redirect(
+          new URL("/?error=module-not-in-plan", request.url),
+        );
+      }
+    } catch (error) {
+      console.error("Middleware module access check failed:", error);
+
+      return NextResponse.redirect(
+        new URL("/?error=module-access-check-failed", request.url),
+      );
+    }
+  }
+
   /*
    * The database function is the source of truth. It recognizes
    * platform admins, company admins, and employee role permissions.
@@ -163,8 +134,8 @@ export async function middleware(request: NextRequest) {
     "employee_can_access",
     {
       p_company_id: membership.company_id,
-      p_module: rule.module,
-      p_action: rule.action,
+      p_module: rule.permissionModule,
+      p_action: "view",
     },
   );
 

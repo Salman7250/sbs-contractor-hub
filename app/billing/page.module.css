@@ -1,0 +1,954 @@
+.billingPage {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #f7f8f6;
+  color: #17201b;
+  isolation: isolate;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.paper {
+  position: absolute;
+  border: 1px solid rgba(29, 72, 48, 0.05);
+  background: rgba(255, 255, 255, 0.42);
+  border-radius: 40px;
+  transform: rotate(-7deg);
+}
+
+.paperOne {
+  width: 520px;
+  height: 700px;
+  top: -250px;
+  right: -180px;
+}
+
+.paperTwo {
+  width: 420px;
+  height: 580px;
+  bottom: -260px;
+  left: -170px;
+  transform: rotate(12deg);
+}
+
+.paperThree {
+  width: 300px;
+  height: 420px;
+  top: 35%;
+  left: 42%;
+  opacity: 0.45;
+  transform: rotate(-18deg);
+}
+
+.circle {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(46, 119, 76, 0.045);
+}
+
+.circleOne {
+  width: 460px;
+  height: 460px;
+  top: 100px;
+  left: -250px;
+}
+
+.circleTwo {
+  width: 380px;
+  height: 380px;
+  right: -180px;
+  bottom: 100px;
+}
+
+.dotField {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  opacity: 0.3;
+  background-image: radial-gradient(
+    rgba(38, 104, 67, 0.22) 1px,
+    transparent 1px
+  );
+  background-size: 14px 14px;
+}
+
+.dotFieldOne {
+  top: 190px;
+  right: 55px;
+}
+
+.dotFieldTwo {
+  bottom: 120px;
+  left: 55px;
+}
+
+.header {
+  position: relative;
+  z-index: 2;
+  width: min(1360px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 28px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 15px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brandLogo {
+  width: 190px;
+  height: auto;
+  object-fit: contain;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 15px;
+  border-left: 1px solid rgba(23, 32, 27, 0.12);
+}
+
+.brandName {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.brandTagline {
+  font-size: 11px;
+  color: #6c776f;
+  font-weight: 500;
+}
+
+.headerStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border: 1px solid rgba(40, 107, 68, 0.13);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #466052;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #31915b;
+  box-shadow: 0 0 0 4px rgba(49, 145, 91, 0.1);
+}
+
+.progressArea {
+  position: relative;
+  z-index: 1;
+  width: min(720px, calc(100% - 40px));
+  margin: 8px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.progressStep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #69746d;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.progressComplete,
+.progressActive {
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.progressComplete {
+  background: #e3f0e8;
+  color: #26714a;
+}
+
+.progressActive {
+  background: #286d46;
+  color: white;
+  box-shadow: 0 0 0 5px rgba(40, 109, 70, 0.09);
+}
+
+.progressLine {
+  flex: 1;
+  height: 1px;
+  max-width: 120px;
+  background: rgba(35, 73, 51, 0.12);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 48px));
+  margin: 42px auto 70px;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.78fr) minmax(500px, 1.22fr);
+  gap: 58px;
+  align-items: start;
+}
+
+.intro {
+  padding-top: 36px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(228, 240, 232, 0.8);
+  border: 1px solid rgba(43, 105, 68, 0.1);
+  color: #35684a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eyebrowDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #368459;
+}
+
+.intro h1 {
+  margin: 0;
+  font-size: clamp(39px, 4vw, 58px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  font-weight: 750;
+}
+
+.intro h1 span {
+  color: #2c7950;
+}
+
+.intro > p {
+  max-width: 480px;
+  margin: 22px 0 0;
+  color: #657169;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.trustList {
+  margin-top: 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.trustItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #4f5e55;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.trustIcon {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e1efe7;
+  color: #2b7650;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.billingCard {
+  position: relative;
+  border: 1px solid rgba(31, 66, 45, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 24px 70px rgba(26, 55, 38, 0.08),
+    0 4px 16px rgba(26, 55, 38, 0.035);
+  overflow: hidden;
+}
+
+.cardAccent {
+  height: 4px;
+  background: #2c7950;
+}
+
+.cardContent {
+  padding: 34px;
+}
+
+.cardHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.cardEyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: #849087;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cardHeading h2 {
+  margin: 0;
+  font-size: 29px;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.cardHeading p {
+  margin: 8px 0 0;
+  color: #707b73;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.popularBadge {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #e6f1ea;
+  color: #286c48;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.billingSection {
+  margin-top: 30px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.sectionHeading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionHeading strong {
+  font-size: 13px;
+}
+
+.sectionHeading span {
+  color: #7b857e;
+  font-size: 11px;
+}
+
+.savingsBadge {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #eff7f2;
+  color: #2c7950 !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.billingToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.billingOption,
+.billingOptionActive {
+  min-height: 74px;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  border-radius: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.billingOption {
+  border: 1px solid rgba(30, 64, 44, 0.11);
+  background: #fafbf9;
+}
+
+.billingOptionActive {
+  border: 1px solid rgba(44, 121, 80, 0.35);
+  background: #f2f8f4;
+  box-shadow: 0 0 0 3px rgba(44, 121, 80, 0.06);
+}
+
+.billingOption > span:first-child,
+.billingOptionActive > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.billingOption strong,
+.billingOptionActive strong {
+  color: #26342c;
+  font-size: 13px;
+}
+
+.billingOption small,
+.billingOptionActive small {
+  color: #7a847d;
+  font-size: 11px;
+}
+
+.billingOption em,
+.billingOptionActive em {
+  margin-left: 6px;
+  color: #2c7950;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.radioCircle {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid rgba(32, 70, 47, 0.22);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.billingOptionActive .radioCircle {
+  border-color: #2c7950;
+}
+
+.radioDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2c7950;
+}
+
+.priceSummary {
+  margin-top: 26px;
+  padding: 18px 19px;
+  border-radius: 14px;
+  background: #f5f7f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.summaryLabel {
+  display: block;
+  color: #4e5c53;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summarySubtext {
+  display: block;
+  margin-top: 5px;
+  color: #89928c;
+  font-size: 10px;
+}
+
+.summaryPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.summaryPrice strong {
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+
+.summaryPrice span {
+  color: #77817a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.divider {
+  height: 1px;
+  margin: 27px 0;
+  background: rgba(30, 66, 44, 0.09);
+}
+
+.featuresHeading {
+  margin-bottom: 14px;
+  color: #435148;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: #59665e;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.featureCheck {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e5f1e9;
+  color: #2c7950;
+}
+
+.featureCheck svg {
+  width: 11px;
+  height: 11px;
+}
+
+.errorBox {
+  margin-top: 20px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(172, 69, 69, 0.16);
+  border-radius: 11px;
+  background: #fff7f7;
+  color: #a44747;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.errorBox svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 1px;
+}
+
+.checkoutArea {
+  margin-top: 28px;
+}
+
+.paypalButton {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 11px;
+  background: #1d4f38;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 9px 22px rgba(29, 79, 56, 0.14);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.paypalButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(29, 79, 56, 0.18);
+}
+
+.paypalButton:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.paypalLogo {
+  width: 23px;
+  height: 23px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: #1d4f38;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.paypalButton svg {
+  width: 17px;
+  height: 17px;
+  margin-left: auto;
+}
+
+.buttonSpinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.checkoutNote {
+  margin: 10px 0 0;
+  color: #87918a;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.changePlan {
+  margin-top: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.changePlan a {
+  color: #2c7950;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.changePlan a:hover {
+  text-decoration: underline;
+}
+
+.changePlan span {
+  color: #929b95;
+  font-size: 9px;
+  text-align: right;
+}
+
+.providerNote {
+  margin-top: 22px;
+  padding: 12px 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(31, 65, 45, 0.08);
+  border-radius: 11px;
+  background: #fafbf9;
+}
+
+.providerIcon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #edf4ef;
+}
+
+.providerIcon span {
+  color: #286c48;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.providerNote > div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.providerNote strong {
+  color: #48564d;
+  font-size: 10px;
+}
+
+.providerNote span {
+  color: #8a948d;
+  font-size: 9px;
+}
+
+.providerStatus {
+  margin-left: auto;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: #e8f2ec;
+  color: #347451 !important;
+  font-size: 8px !important;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.enterpriseArea {
+  margin-top: 28px;
+}
+
+.enterpriseArea .paypalButton {
+  background: #1d4f38;
+}
+
+.loadingScreen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #536158;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.loadingSpinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(44, 121, 80, 0.14);
+  border-top-color: #2c7950;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.errorPage {
+  width: min(520px, calc(100% - 40px));
+  min-height: 70vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.errorIcon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff0f0;
+  color: #ad4c4c;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.errorPage h1 {
+  margin: 18px 0 8px;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+.errorPage p {
+  margin: 0 0 24px;
+  color: #718078;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.primaryButton {
+  min-height: 45px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #1d4f38;
+  color: white;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: #8a948d;
+  font-size: 10px;
+}
+
+.footerLinks {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.footerLinks a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.footerLinks a:hover {
+  color: #2c7950;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .content {
+    grid-template-columns: 1fr;
+    max-width: 720px;
+  }
+
+  .intro {
+    padding-top: 0;
+  }
+
+  .intro > p {
+    max-width: 650px;
+  }
+
+  .trustList {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .header {
+    width: min(100% - 32px, 1180px);
+    padding: 20px 0;
+  }
+
+  .brandText {
+    display: none;
+  }
+
+  .brandLogo {
+    width: 160px;
+  }
+
+  .headerStatus {
+    font-size: 10px;
+  }
+
+  .progressArea {
+    width: calc(100% - 32px);
+  }
+
+  .progressStep span:last-child {
+    display: none;
+  }
+
+  .content {
+    width: calc(100% - 28px);
+    margin-top: 32px;
+    gap: 32px;
+  }
+
+  .intro h1 {
+    font-size: 40px;
+  }
+
+  .trustList {
+    grid-template-columns: 1fr;
+  }
+
+  .cardContent {
+    padding: 23px 18px;
+  }
+
+  .cardHeading {
+    flex-direction: column;
+  }
+
+  .billingToggle {
+    grid-template-columns: 1fr;
+  }
+
+  .featuresGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .changePlan {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .changePlan span {
+    text-align: left;
+  }
+
+  .footer {
+    width: calc(100% - 28px);
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

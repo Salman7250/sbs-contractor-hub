@@ -279,7 +279,11 @@ export default function NotificationsPage() {
   );
 
   useEffect(() => {
-    void loadNotifications();
+    const loadTimeout = setTimeout(() => {
+      void loadNotifications();
+    }, 0);
+
+    return () => clearTimeout(loadTimeout);
   }, [loadNotifications]);
 
   useEffect(() => {

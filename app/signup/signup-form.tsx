@@ -1,983 +1,737 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import styles from "./page.module.css";
 
-type BusinessType = "product" | "service";
+const CONFIRMATION_PATH = "/auth/confirm";
+
+type SelectedPlan = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+};
 
 export default function SignupForm() {
-  const [form, setForm] = useState({
-    fullName: "",
-    companyName: "",
-    email: "",
-    phone: "",
-    businessType: "service" as BusinessType,
-    password: "",
-    confirmPassword: "",
-    country: "",
-    agreeToTerms: false,
-  });
+  const supabase = useMemo(() => createClient(), []);
 
-  const [showPassword, setShowPassword] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [businessType, setBusinessType] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
+
+  const [showPassword, setShowPassword] =
+    useState(false);
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  function updateField(
-    field: keyof typeof form,
-    value: string | boolean
-  ) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function generateSlug(name: string) {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  }
-
-  function validate() {
-    if (!form.fullName.trim()) {
-      return "Please enter your full name.";
-    }
-
-    if (!form.companyName.trim()) {
-      return "Please enter your company name.";
-    }
-
-    if (!form.email.trim()) {
-      return "Please enter your email address.";
-    }
-
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        form.email.trim()
-      )
-    ) {
-      return "Please enter a valid email address.";
-    }
-
-    if (!form.country.trim()) {
-      return "Please select your country.";
-    }
-
-    if (form.password.length < 8) {
-      return "Your password must be at least 8 characters long.";
-    }
-
-    if (form.password !== form.confirmPassword) {
-      return "Your passwords do not match.";
-    }
-
-    if (!form.agreeToTerms) {
-      return "Please agree to the SBS Terms and Privacy Policy.";
-    }
-
-    return "";
-  }
-
-  async function handleSubmit(
+  async function handleSignup(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
-    event.stopPropagation();
 
-    if (loading) return;
+    if (loading) {
+      return;
+    }
 
     setError("");
-    setSuccess("");
 
-    const validationError = validate();
+    const trimmedFullName = fullName.trim();
+    const trimmedCompanyName = companyName.trim();
+    const trimmedEmail = email.trim().toLowerCase();
 
-    if (validationError) {
-      setError(validationError);
+    /*
+     * ---------------------------------------------------------
+     * Get selected plan from the signup URL.
+     *
+     * Example:
+     * /signup?plan=professional
+     * ---------------------------------------------------------
+     */
+    const searchParams =
+      new URLSearchParams(window.location.search);
+
+    const selectedPlanSlug =
+      searchParams.get("plan")?.trim().toLowerCase() ?? "";
+
+    if (!selectedPlanSlug) {
+      setError(
+        "Please select a plan before creating your account."
+      );
+      return;
+    }
+
+    if (!trimmedFullName) {
+      setError("Please enter your full name.");
+      return;
+    }
+
+    if (!trimmedCompanyName) {
+      setError("Please enter your company name.");
+      return;
+    }
+
+    if (!businessType) {
+      setError("Please select your business type.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setError(
+        "Your password must contain at least 8 characters."
+      );
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("The passwords do not match.");
       return;
     }
 
     setLoading(true);
 
-    try {
-      const response = await fetch(
-        "/api/auth/signup",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fullName: form.fullName.trim(),
-            companyName: form.companyName.trim(),
-            email: form.email.trim().toLowerCase(),
-            phone: form.phone.trim(),
-            country: form.country.trim(),
-            businessType: form.businessType,
-            password: form.password,
-            confirmPassword: form.confirmPassword,
-            slug: generateSlug(form.companyName),
-          }),
-        }
-      );
+    /*
+     * ---------------------------------------------------------
+     * Verify the selected plan before creating the account.
+     *
+     * The signup URL contains the plan slug.
+     * We resolve the active plan from the database.
+     * ---------------------------------------------------------
+     */
+    const {
+      data: plan,
+      error: planError,
+    } = await supabase
+      .from("plans")
+      .select(
+        `
+          id,
+          name,
+          slug,
+          is_active
+        `
+      )
+      .eq("slug", selectedPlanSlug)
+      .eq("is_active", true)
+      .maybeSingle();
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        setError(
-          result.error ||
-            "Unable to create your SBS account. Please try again."
-        );
-        return;
-      }
-
-      setSuccess(
-        result.message ||
-          "Your SBS account has been created. Please check your email to continue."
-      );
-
-      setForm((current) => ({
-        ...current,
-        password: "",
-        confirmPassword: "",
-      }));
-    } catch (requestError) {
-      console.error(
-        "Signup request error:",
-        requestError
-      );
-
+    if (planError) {
       setError(
-        "Something went wrong while creating your account. Please try again."
+        "We could not verify the selected plan. Please try again."
       );
-    } finally {
       setLoading(false);
+      return;
     }
+
+    if (!plan) {
+      setError(
+        "The selected plan is no longer available. Please return to pricing and choose another plan."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const selectedPlan =
+      plan as SelectedPlan;
+
+    /*
+     * ---------------------------------------------------------
+     * Confirmation URL
+     *
+     * Keep the selected plan slug in the confirmation URL so
+     * the confirmation route can preserve it.
+     * ---------------------------------------------------------
+     */
+    const redirectUrl =
+      `${window.location.origin}${CONFIRMATION_PATH}?plan=${encodeURIComponent(
+        selectedPlan.slug
+      )}`;
+
+    /*
+     * ---------------------------------------------------------
+     * Create Supabase Auth account
+     * ---------------------------------------------------------
+     */
+    const {
+      data,
+      error: authError,
+    } =
+      await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+
+          data: {
+            full_name: trimmedFullName,
+            company_name: trimmedCompanyName,
+            business_type: businessType,
+
+            /*
+             * Preserve selected plan information in the
+             * Supabase Auth user metadata.
+             */
+            selected_plan_slug:
+              selectedPlan.slug,
+
+            selected_plan_id:
+              selectedPlan.id,
+
+            selected_plan_name:
+              selectedPlan.name,
+          },
+        },
+      });
+
+    if (authError) {
+      setError(
+        authError.message ===
+          "User already registered"
+          ? "An account with this email already exists. Please sign in instead."
+          : authError.message
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    if (!data.user) {
+      setError(
+        "Unable to create your account. Please try again."
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * Supabase normally returns a user with no active session
+     * when email confirmation is required.
+     *
+     * The selected plan has already been stored in user metadata,
+     * while the confirmation URL also carries the plan slug.
+     */
+    setEmailSent(true);
+    setLoading(false);
   }
 
-  const passwordLengthValid =
-    form.password.length >= 8;
+  if (emailSent) {
+    return (
+      <div className={styles.signupSuccess}>
+        <div className={styles.successIcon}>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M4 5h16v14H4z" />
+            <path d="m4 7 8 6 8-6" />
+          </svg>
+        </div>
 
-  const passwordsMatch =
-    form.password.length > 0 &&
-    form.password === form.confirmPassword;
+        <h3>Check your email</h3>
+
+        <p>
+          We sent a confirmation link to{" "}
+          <strong>{email.trim()}</strong>.
+        </p>
+
+        <p className={styles.successSecondary}>
+          Open the email and click the confirmation
+          link to activate your SBS account.
+        </p>
+
+        <div className={styles.successActions}>
+          <Link
+            href="/login"
+            className={styles.secondaryAction}
+          >
+            Back to sign in
+          </Link>
+        </div>
+
+        <p className={styles.successHelp}>
+          Didn&apos;t receive it? Check your spam or
+          junk folder.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form
-      className={styles.form}
-      onSubmit={handleSubmit}
+      className={styles.signupForm}
+      onSubmit={handleSignup}
     >
+      {/* Full Name */}
+      <div className={styles.formField}>
+        <label htmlFor="fullName">
+          Full name
+        </label>
+
+        <div className={styles.inputWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21a8 8 0 0 1 16 0" />
+          </svg>
+
+          <input
+            id="fullName"
+            name="fullName"
+            type="text"
+            value={fullName}
+            onChange={(event) =>
+              setFullName(event.target.value)
+            }
+            placeholder="Your full name"
+            autoComplete="name"
+            required
+            disabled={loading}
+          />
+        </div>
+      </div>
+
+      {/* Company */}
+      <div className={styles.formField}>
+        <label htmlFor="companyName">
+          Company name
+        </label>
+
+        <div className={styles.inputWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />
+            <path d="M16 9h4a1 1 0 0 1 1 1v11" />
+            <path d="M8 7h4" />
+            <path d="M8 11h4" />
+            <path d="M8 15h4" />
+            <path d="M8 19h4" />
+            <path d="M2 21h20" />
+          </svg>
+
+          <input
+            id="companyName"
+            name="companyName"
+            type="text"
+            value={companyName}
+            onChange={(event) =>
+              setCompanyName(event.target.value)
+            }
+            placeholder="Your company name"
+            autoComplete="organization"
+            required
+            disabled={loading}
+          />
+        </div>
+      </div>
+
+      {/* Business Type */}
+      <div className={styles.formField}>
+        <label htmlFor="businessType">
+          Business type
+        </label>
+
+        <div className={styles.selectWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="M3 21h18" />
+            <path d="M5 21V7l7-4 7 4v14" />
+            <path d="M9 21v-5h6v5" />
+            <path d="M8 10h1" />
+            <path d="M15 10h1" />
+            <path d="M8 13h1" />
+            <path d="M15 13h1" />
+          </svg>
+
+          <select
+            id="businessType"
+            name="businessType"
+            value={businessType}
+            onChange={(event) =>
+              setBusinessType(event.target.value)
+            }
+            required
+            disabled={loading}
+          >
+            <option value="">
+              Select your business type
+            </option>
+
+            <option value="retail">
+              Retail & E-commerce
+            </option>
+
+            <option value="wholesale">
+              Wholesale & Distribution
+            </option>
+
+            <option value="it_technology">
+              IT & Technology
+            </option>
+
+            <option value="repair">
+              Repair & Refurbishment
+            </option>
+
+            <option value="professional_services">
+              Professional Services
+            </option>
+
+            <option
+              value="service_business"
+              disabled
+            >
+              Service Business — Coming Soon
+            </option>
+          </select>
+
+          <svg
+            className={styles.selectArrow}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Email */}
+      <div className={styles.formField}>
+        <label htmlFor="email">
+          Email address
+        </label>
+
+        <div className={styles.inputWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <rect
+              x="3"
+              y="5"
+              width="18"
+              height="14"
+              rx="2"
+            />
+            <path d="m3 7 9 6 9-6" />
+          </svg>
+
+          <input
+            id="email"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(event) =>
+              setEmail(event.target.value)
+            }
+            placeholder="you@company.com"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            disabled={loading}
+          />
+        </div>
+      </div>
+
+      {/* Password */}
+      <div className={styles.formField}>
+        <label htmlFor="password">
+          Password
+        </label>
+
+        <div className={styles.inputWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <rect
+              x="5"
+              y="10"
+              width="14"
+              height="11"
+              rx="2"
+            />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+
+          <input
+            id="password"
+            name="password"
+            type={
+              showPassword
+                ? "text"
+                : "password"
+            }
+            value={password}
+            onChange={(event) =>
+              setPassword(event.target.value)
+            }
+            placeholder="Create a password"
+            autoComplete="new-password"
+            minLength={8}
+            required
+            disabled={loading}
+          />
+
+          <button
+            type="button"
+            className={styles.passwordToggle}
+            onClick={() =>
+              setShowPassword(
+                (current) => !current
+              )
+            }
+            aria-label={
+              showPassword
+                ? "Hide password"
+                : "Show password"
+            }
+            disabled={loading}
+          >
+            {showPassword ? (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <path d="M3 3l18 18" />
+                <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83" />
+                <path d="M9.88 4.24A10.4 10.4 0 0 1 12 4c5 0 8.73 4.11 10 8a14.5 14.5 0 0 1-3.04 5.06" />
+                <path d="M6.61 6.61C4.62 7.95 3.26 10.04 2 12c1.27 3.89 5 8 10 8a10.3 10.3 0 0 0 3.58-.63" />
+              </svg>
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="3"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        <p className={styles.fieldHint}>
+          Use at least 8 characters.
+        </p>
+      </div>
+
+      {/* Confirm Password */}
+      <div className={styles.formField}>
+        <label htmlFor="confirmPassword">
+          Confirm password
+        </label>
+
+        <div className={styles.inputWrapper}>
+          <svg
+            className={styles.inputIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <path d="m5 12 4 4L19 6" />
+            <rect
+              x="3"
+              y="3"
+              width="18"
+              height="18"
+              rx="3"
+            />
+          </svg>
+
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type={
+              showConfirmPassword
+                ? "text"
+                : "password"
+            }
+            value={confirmPassword}
+            onChange={(event) =>
+              setConfirmPassword(
+                event.target.value
+              )
+            }
+            placeholder="Enter your password again"
+            autoComplete="new-password"
+            required
+            disabled={loading}
+          />
+
+          <button
+            type="button"
+            className={styles.passwordToggle}
+            onClick={() =>
+              setShowConfirmPassword(
+                (current) => !current
+              )
+            }
+            aria-label={
+              showConfirmPassword
+                ? "Hide password"
+                : "Show password"
+            }
+            disabled={loading}
+          >
+            {showConfirmPassword ? (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <path d="M3 3l18 18" />
+                <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83" />
+                <path d="M9.88 4.24A10.4 10.4 0 0 1 12 4c5 0 8.73 4.11 10 8a14.5 14.5 0 0 1-3.04 5.06" />
+                <path d="M6.61 6.61C4.62 6.61 2 10.04 2 12c1.27 3.89 5 8 10 8a10.3 10.3 0 0 0 3.58-.63" />
+              </svg>
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="3"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
       {error && (
         <div
-          className={styles.error}
+          className={styles.loginError}
           role="alert"
         >
-          <span className={styles.errorIcon}>
-            !
-          </span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+            />
+            <path d="M12 8v5" />
+            <path d="M12 16.5h.01" />
+          </svg>
 
           <span>{error}</span>
         </div>
       )}
 
-      {success && (
-        <div
-          className={styles.success}
-          role="status"
-        >
-          <span className={styles.successIcon}>
-            ✓
-          </span>
-
-          <span>{success}</span>
-        </div>
-      )}
-
-      {/* Personal information */}
-
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionNumber}>
-            01
-          </span>
-
-          <div>
-            <div className={styles.sectionTitle}>
-              Your details
-            </div>
-
-            <div className={styles.sectionDescription}>
-              Tell us who will manage the SBS workspace.
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.fields}>
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="fullName"
-              className={styles.label}
-            >
-              Full name
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <circle
-                    cx="12"
-                    cy="8"
-                    r="3.5"
-                  />
-                  <path d="M5 20c.8-3.4 3.1-5 7-5s6.2 1.6 7 5" />
-                </svg>
-              </span>
-
-              <input
-                id="fullName"
-                name="fullName"
-                type="text"
-                value={form.fullName}
-                onChange={(event) =>
-                  updateField(
-                    "fullName",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="John Smith"
-                autoComplete="name"
-                disabled={loading}
-                required
-              />
-            </div>
-          </div>
-
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="email"
-              className={styles.label}
-            >
-              Work email
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect
-                    x="3"
-                    y="5"
-                    width="18"
-                    height="14"
-                    rx="2"
-                  />
-                  <path d="m4 7 8 6 8-6" />
-                </svg>
-              </span>
-
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={(event) =>
-                  updateField(
-                    "email",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="you@company.com"
-                autoComplete="email"
-                disabled={loading}
-                required
-              />
-            </div>
-          </div>
-
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="phone"
-              className={styles.label}
-            >
-              Phone
-              <span className={styles.optional}>
-                Optional
-              </span>
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M7 4h3l1.5 4-2 1.5c1 2.1 2.4 3.5 4.5 4.5l1.5-2 4 1.5v3c0 1.1-.9 2-2 2C10.9 18.5 5.5 13.1 5.5 6 5.5 4.9 6.4 4 7.5 4Z" />
-                </svg>
-              </span>
-
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                value={form.phone}
-                onChange={(event) =>
-                  updateField(
-                    "phone",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="+971 50 123 4567"
-                autoComplete="tel"
-                disabled={loading}
-              />
-            </div>
-          </div>
-
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="country"
-              className={styles.label}
-            >
-              Country
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="9"
-                  />
-                  <path d="M3 12h18" />
-                  <path d="M12 3c2.2 2.4 3.4 5.4 3.4 9s-1.2 6.6-3.4 9c-2.2-2.4-3.4-5.4-3.4-9S9.8 5.4 12 3Z" />
-                </svg>
-              </span>
-
-              <select
-                id="country"
-                name="country"
-                value={form.country}
-                onChange={(event) =>
-                  updateField(
-                    "country",
-                    event.target.value
-                  )
-                }
-                className={styles.select}
-                disabled={loading}
-                required
-              >
-                <option value="">
-                  Select country
-                </option>
-
-                <option value="United Arab Emirates">
-                  United Arab Emirates
-                </option>
-
-                <option value="United States">
-                  United States
-                </option>
-
-                <option value="Canada">
-                  Canada
-                </option>
-
-                <option value="United Kingdom">
-                  United Kingdom
-                </option>
-
-                <option value="Australia">
-                  Australia
-                </option>
-
-                <option value="Pakistan">
-                  Pakistan
-                </option>
-
-                <option value="Saudi Arabia">
-                  Saudi Arabia
-                </option>
-
-                <option value="Qatar">
-                  Qatar
-                </option>
-
-                <option value="Kuwait">
-                  Kuwait
-                </option>
-
-                <option value="Bahrain">
-                  Bahrain
-                </option>
-
-                <option value="Oman">
-                  Oman
-                </option>
-
-                <option value="India">
-                  India
-                </option>
-
-                <option value="Germany">
-                  Germany
-                </option>
-
-                <option value="Netherlands">
-                  Netherlands
-                </option>
-
-                <option value="Other">
-                  Other
-                </option>
-              </select>
-
-              <span className={styles.selectArrow}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="m7 10 5 5 5-5" />
-                </svg>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Company */}
-
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionNumber}>
-            02
-          </span>
-
-          <div>
-            <div className={styles.sectionTitle}>
-              Your business
-            </div>
-
-            <div className={styles.sectionDescription}>
-              This becomes your SBS workspace.
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.fields}>
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="companyName"
-              className={styles.label}
-            >
-              Company name
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M4 20V6l8-3 8 3v14" />
-                  <path d="M2 20h20" />
-                  <path d="M8 8h1" />
-                  <path d="M15 8h1" />
-                  <path d="M8 12h1" />
-                  <path d="M15 12h1" />
-                  <path d="M10 20v-4h4v4" />
-                </svg>
-              </span>
-
-              <input
-                id="companyName"
-                name="companyName"
-                type="text"
-                value={form.companyName}
-                onChange={(event) =>
-                  updateField(
-                    "companyName",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="Your Company LLC"
-                autoComplete="organization"
-                disabled={loading}
-                required
-              />
-            </div>
-          </div>
-
-          <div className={styles.businessTypeField}>
-            <div className={styles.label}>
-              What does your business do?
-            </div>
-
-            <div className={styles.businessTypes}>
-              <button
-                type="button"
-                className={`${styles.businessType} ${
-                  form.businessType === "product"
-                    ? styles.businessTypeActive
-                    : ""
-                }`}
-                onClick={() =>
-                  updateField(
-                    "businessType",
-                    "product"
-                  )
-                }
-                disabled={loading}
-              >
-                <span
-                  className={
-                    styles.businessTypeIcon
-                  }
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                  >
-                    <path d="m4 7 8-4 8 4-8 4-8-4Z" />
-                    <path d="m4 7 8 4 8-4v10l-8 4-8-4V7Z" />
-                    <path d="m12 11v10" />
-                  </svg>
-                </span>
-
-                <span>
-                  <strong>
-                    Product business
-                  </strong>
-
-                  <small>
-                    Products, retail, wholesale,
-                    e-commerce & inventory
-                  </small>
-                </span>
-
-                <span
-                  className={
-                    styles.radioIndicator
-                  }
-                >
-                  {form.businessType ===
-                    "product" && (
-                    <span />
-                  )}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={`${styles.businessType} ${
-                  form.businessType === "service"
-                    ? styles.businessTypeActive
-                    : ""
-                }`}
-                onClick={() =>
-                  updateField(
-                    "businessType",
-                    "service"
-                  )
-                }
-                disabled={loading}
-              >
-                <span
-                  className={
-                    styles.businessTypeIcon
-                  }
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                  >
-                    <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2.8-2.8 1.9-2.3Z" />
-                  </svg>
-                </span>
-
-                <span>
-                  <strong>
-                    Service business
-                  </strong>
-
-                  <small>
-                    Contractors, field service,
-                    repair & professional services
-                  </small>
-                </span>
-
-                <span
-                  className={
-                    styles.radioIndicator
-                  }
-                >
-                  {form.businessType ===
-                    "service" && (
-                    <span />
-                  )}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Password */}
-
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionNumber}>
-            03
-          </span>
-
-          <div>
-            <div className={styles.sectionTitle}>
-              Secure your account
-            </div>
-
-            <div className={styles.sectionDescription}>
-              Create the password you'll use to sign in.
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.fields}>
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="password"
-              className={styles.label}
-            >
-              Password
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect
-                    x="4"
-                    y="10"
-                    width="16"
-                    height="10"
-                    rx="2"
-                  />
-                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                </svg>
-              </span>
-
-              <input
-                id="password"
-                name="password"
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-                value={form.password}
-                onChange={(event) =>
-                  updateField(
-                    "password",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="Create a secure password"
-                autoComplete="new-password"
-                disabled={loading}
-                required
-              />
-
-              <button
-                type="button"
-                className={styles.passwordToggle}
-                onClick={() =>
-                  setShowPassword(
-                    (current) => !current
-                  )
-                }
-                aria-label={
-                  showPassword
-                    ? "Hide password"
-                    : "Show password"
-                }
-                disabled={loading}
-              >
-                {showPassword ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M3 3l18 18" />
-                    <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
-                    <path d="M9.9 5.1A10.7 10.7 0 0 1 12 5c5 0 8.5 4.3 9.5 7-.4 1.1-1.3 2.7-2.7 4" />
-                    <path d="M6.2 6.2C4.2 7.6 2.9 9.8 2.5 12c.9 2.7 4.5 7 9.5 7 1.2 0 2.3-.2 3.3-.6" />
-                  </svg>
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="2.5"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            <div className={styles.requirements}>
-              <div
-                className={`${styles.requirement} ${
-                  passwordLengthValid
-                    ? styles.requirementValid
-                    : ""
-                }`}
-              >
-                <span
-                  className={
-                    styles.requirementIcon
-                  }
-                >
-                  {passwordLengthValid
-                    ? "✓"
-                    : "•"}
-                </span>
-
-                At least 8 characters
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.fieldGroup}>
-            <label
-              htmlFor="confirmPassword"
-              className={styles.label}
-            >
-              Confirm password
-            </label>
-
-            <div className={styles.inputWrapper}>
-              <span className={styles.inputIcon}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect
-                    x="4"
-                    y="10"
-                    width="16"
-                    height="10"
-                    rx="2"
-                  />
-                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                </svg>
-              </span>
-
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type={
-                  showConfirmPassword
-                    ? "text"
-                    : "password"
-                }
-                value={form.confirmPassword}
-                onChange={(event) =>
-                  updateField(
-                    "confirmPassword",
-                    event.target.value
-                  )
-                }
-                className={styles.input}
-                placeholder="Re-enter your password"
-                autoComplete="new-password"
-                disabled={loading}
-                required
-              />
-
-              <button
-                type="button"
-                className={styles.passwordToggle}
-                onClick={() =>
-                  setShowConfirmPassword(
-                    (current) => !current
-                  )
-                }
-                aria-label={
-                  showConfirmPassword
-                    ? "Hide password"
-                    : "Show password"
-                }
-                disabled={loading}
-              >
-                {showConfirmPassword ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M3 3l18 18" />
-                    <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
-                    <path d="M9.9 5.1A10.7 10.7 0 0 1 12 5c5 0 8.5 4.3 9.5 7-.4 1.1-1.3 2.7-2.7 4" />
-                    <path d="M6.2 6.2C4.2 6.2 2.9 9.8 2.5 12c.9 2.7 4.5 7 9.5 7 1.2 0 2.3-.2 3.3-.6" />
-                  </svg>
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="2.5"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            <div className={styles.requirements}>
-              <div
-                className={`${styles.requirement} ${
-                  passwordsMatch
-                    ? styles.requirementValid
-                    : ""
-                }`}
-              >
-                <span
-                  className={
-                    styles.requirementIcon
-                  }
-                >
-                  {passwordsMatch
-                    ? "✓"
-                    : "•"}
-                </span>
-
-                Passwords match
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Terms */}
+      <p className={styles.termsText}>
+        By creating an account, you agree to our{" "}
+        <Link href="/terms">
+          Terms
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy">
+          Privacy Policy
+        </Link>
+        .
+      </p>
 
-      <label className={styles.terms}>
-        <input
-          type="checkbox"
-          checked={form.agreeToTerms}
-          onChange={(event) =>
-            updateField(
-              "agreeToTerms",
-              event.target.checked
-            )
-          }
-          disabled={loading}
-          required
-        />
-
-        <span className={styles.checkbox}>
-          {form.agreeToTerms && "✓"}
-        </span>
-
-        <span className={styles.termsText}>
-          I agree to the{" "}
-          <Link
-            href="/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Terms of Service
-          </Link>{" "}
-          and{" "}
-          <Link
-            href="/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Privacy Policy
-          </Link>
-          .
-        </span>
-      </label>
-
+      {/* Submit */}
       <button
         type="submit"
-        className={styles.submitButton}
+        className={styles.loginSubmit}
         disabled={loading}
       >
         {loading ? (
           <>
             <span
-              className={styles.spinner}
+              className={styles.buttonSpinner}
               aria-hidden="true"
             />
 
-            Creating your workspace...
+            <span>
+              Creating your account...
+            </span>
           </>
         ) : (
           <>
-            Create my SBS workspace
+            <span>
+              Create your SBS account
+            </span>
 
             <svg
-              className={styles.buttonArrow}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              aria-hidden="true"
             >
               <path d="M5 12h14" />
               <path d="m13 6 6 6-6 6" />
@@ -986,13 +740,13 @@ export default function SignupForm() {
         )}
       </button>
 
-      <div className={styles.loginPrompt}>
-        Already have an SBS account?
-
+      {/* Existing account */}
+      <p className={styles.accountPrompt}>
+        Already have an account?{" "}
         <Link href="/login">
           Sign in
         </Link>
-      </div>
+      </p>
     </form>
   );
 }

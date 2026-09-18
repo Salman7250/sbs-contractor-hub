@@ -573,7 +573,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // This effect intentionally starts the asynchronous settings synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadSettings();
   }, [loadSettings]);
 

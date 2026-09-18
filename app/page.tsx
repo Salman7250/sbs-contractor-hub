@@ -602,8 +602,10 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
+  void Promise.resolve().then(() => {
     loadDashboard();
-  }, [loadDashboard]);
+  });
+}, [loadDashboard]);
 
   const currency = company?.currency || "AED";
 

@@ -11,9 +11,11 @@ import {
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getModuleRouteRule } from "@/lib/navigation/module-routes";
 import NotificationCenter from "@/app/components/notification-center";
 import styles from "./app-shell.module.css";
 import UserAvatar from "@/app/components/user-avatar";
+import { useWorkspaceAccess } from "./workspace-access-provider";
 
 type AppShellProps = {
   children: ReactNode;
@@ -67,63 +69,6 @@ function permissionKey(
 ): PermissionKey {
   return `${module}:${action}`;
 }
-
-const NAV_MODULE_MAP: Record<string, string> = {
-  "/": "dashboard",
-  "/customers": "customers",
-  "/estimates": "quotes",
-  "/sales": "sales_orders",
-  "/invoices": "invoices",
-  "/payments": "payments",
-  "/products": "products",
-  "/serial-numbers": "serial_numbers",
-  "/inventory": "inventory",
-  "/warehouses": "warehouses",
-  "/pricing/products": "pricing",
-  "/suppliers": "suppliers",
-  "/purchase-orders": "purchase_orders",
-  "/expenses": "expenses",
-  "/expenses/categories": "expenses",
-  "/expenses/closings": "expenses",
-  "/expenses/reports": "expenses",
-  "/warranty": "warranty",
-  "/repairs": "repairs",
-  "/rma": "rma",
-  "/service-providers": "service_jobs",
-  "/service-jobs": "service_jobs",
-  "/b2b-portal": "b2b_portal",
-  "/analytics": "analytics",
-  "/employees": "employees",
-  "/documents": "documents",
-  "/settings": "settings",
-};
-
-function getNavModule(href: string): string | null {
-  if (NAV_MODULE_MAP[href]) {
-    return NAV_MODULE_MAP[href];
-  }
-
-  const matchingRoute = Object.keys(NAV_MODULE_MAP)
-    .filter((route) => route !== "/")
-    .sort((a, b) => b.length - a.length)
-    .find(
-      (route) =>
-        href === route ||
-        href.startsWith(`${route}/`),
-    );
-
-  return matchingRoute
-    ? NAV_MODULE_MAP[matchingRoute]
-    : null;
-}
-
-function permissionCacheKey(
-  userId: string,
-  companyId: string,
-) {
-  return `sbs_permissions:${userId}:${companyId}`;
-}
-
 
 type NavSection = {
   label: string;
@@ -1109,6 +1054,8 @@ export default function AppShell({
 }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { allowedModuleSlugs, permissionKeys: accessPermissionKeys } =
+    useWorkspaceAccess();
 
   const supabase = useMemo(
     () => createClient(),
@@ -1139,12 +1086,6 @@ export default function AppShell({
   const [profileMenuOpen, setProfileMenuOpen] =
     useState(false);
 
-  const [permissionKeys, setPermissionKeys] =
-    useState<Set<PermissionKey>>(new Set());
-
-  const [permissionsLoaded, setPermissionsLoaded] =
-    useState(false);
-
   const searchRef =
     useRef<HTMLDivElement | null>(null);
 
@@ -1156,29 +1097,43 @@ export default function AppShell({
     []
   );
 
-  const sections = useMemo<NavSection[]>(() => {
-    // Keep the existing navigation visible while the permission
-    // request is resolving. This prevents the AppShell from looking
-    // empty/slow after every page navigation. The middleware and RLS
-    // remain the real security boundary.
-    if (!permissionsLoaded) {
-      return rawSections;
-    }
+  const allowedModuleSlugSet = useMemo(
+    () => new Set(allowedModuleSlugs),
+    [allowedModuleSlugs],
+  );
 
+  const permissionKeys = useMemo(
+    () =>
+      new Set<PermissionKey>(
+        accessPermissionKeys as PermissionKey[],
+      ),
+    [accessPermissionKeys],
+  );
+
+  const sections = useMemo<NavSection[]>(() => {
     function filterItem(
       item: NavItem,
     ): NavItem | null {
-      const module = getNavModule(item.href);
+      const routeRule = getModuleRouteRule(item.href);
 
-      if (!module) {
+      if (!routeRule) {
         return null;
       }
 
-      const allowed = permissionKeys.has(
-        permissionKey(module, "view"),
+      const isModuleEntitled =
+        routeRule.entitlementModule === null ||
+        allowedModuleSlugSet.has(
+          routeRule.entitlementModule,
+        );
+
+      const hasPermission = permissionKeys.has(
+        permissionKey(
+          routeRule.permissionModule,
+          "view",
+        ),
       );
 
-      if (!allowed) {
+      if (!isModuleEntitled || !hasPermission) {
         return null;
       }
 
@@ -1215,8 +1170,8 @@ export default function AppShell({
       );
   }, [
     rawSections,
+    allowedModuleSlugSet,
     permissionKeys,
-    permissionsLoaded,
   ]);
 
   const allNavItems = useMemo(() => {
@@ -1309,40 +1264,10 @@ export default function AppShell({
 
     if (membershipData?.company_id) {
       const companyId = membershipData.company_id;
-      const cacheKey = permissionCacheKey(
-        user.id,
-        companyId,
-      );
-
-      // Restore the last known permission set immediately so the
-      // sidebar does not wait for the network on every page load.
-      try {
-        const cached = window.sessionStorage.getItem(
-          cacheKey,
-        );
-
-        if (cached) {
-          const cachedKeys = JSON.parse(cached);
-
-          if (Array.isArray(cachedKeys)) {
-            setPermissionKeys(
-              new Set<PermissionKey>(cachedKeys),
-            );
-          }
-        }
-      } catch {
-        // Ignore unavailable/corrupt browser cache.
-      }
-
-      // Fetch permissions and company details in parallel.
-      const [permissionResult, companyResult, profileResult] =
+      // Navigation access is supplied by the server on the initial render.
+      // This client request only fills workspace/profile display details.
+      const [companyResult, profileResult] =
         await Promise.all([
-          supabase.rpc(
-            "employee_get_my_permissions",
-            {
-              p_company_id: companyId,
-            },
-          ),
           supabase
             .from("companies")
             .select(
@@ -1356,51 +1281,6 @@ export default function AppShell({
             .eq("id", user.id)
             .maybeSingle(),
         ]);
-
-      const {
-        data: permissionData,
-        error: permissionError,
-      } = permissionResult;
-
-      if (permissionError) {
-        console.error(
-          "Failed to load employee permissions:",
-          permissionError,
-        );
-
-        // If there was no cached permission set, fail closed.
-        try {
-          if (!window.sessionStorage.getItem(cacheKey)) {
-            setPermissionKeys(new Set());
-          }
-        } catch {
-          setPermissionKeys(new Set());
-        }
-      } else {
-        const keys = new Set<PermissionKey>(
-          (permissionData || []).map(
-            (permission: {
-              module: string;
-              action: string;
-            }) =>
-              permissionKey(
-                permission.module,
-                permission.action,
-              ),
-          ),
-        );
-
-        setPermissionKeys(keys);
-
-        try {
-          window.sessionStorage.setItem(
-            cacheKey,
-            JSON.stringify(Array.from(keys)),
-          );
-        } catch {
-          // Ignore unavailable browser storage.
-        }
-      }
 
       const {
         data: companyData,
@@ -1443,12 +1323,6 @@ export default function AppShell({
         avatar_url: profileData?.avatar_url ?? null,
       });
 
-      setPermissionsLoaded(true);
-    }
-
-    if (!membershipData?.company_id) {
-      setPermissionKeys(new Set());
-      setPermissionsLoaded(true);
     }
   } catch (error) {
     console.error(
@@ -1456,63 +1330,33 @@ export default function AppShell({
       error
     );
 
-    setPermissionKeys(new Set());
-    setPermissionsLoaded(true);
   }
 }, [supabase]);
 
   useEffect(() => {
-  void loadWorkspace();
-
-  const handleProfileUpdated = (
-    event: Event,
-  ) => {
-    const customEvent =
-      event as CustomEvent<{
-        full_name?: string | null;
-        avatar_url?: string | null;
-      }>;
-
-    setProfile((current) => ({
-      full_name:
-        customEvent.detail?.full_name ??
-        current?.full_name ??
-        null,
-      avatar_url:
-        customEvent.detail?.avatar_url ??
-        null,
-    }));
-  };
-
-  window.addEventListener(
-    "sbs-profile-updated",
-    handleProfileUpdated,
-  );
-
-  return () => {
-    window.removeEventListener(
-      "sbs-profile-updated",
-      handleProfileUpdated,
-    );
-  };
-}, [loadWorkspace]);
+    void loadWorkspace();
+  }, [loadWorkspace]);
 
   useEffect(() => {
-    if (!permissionsLoaded) {
-      return;
-    }
+    const currentRouteRule =
+      getModuleRouteRule(pathname);
 
-    const currentModule =
-      getNavModule(pathname);
+    const lacksViewPermission = currentRouteRule
+      ? !permissionKeys.has(
+          permissionKey(
+            currentRouteRule.permissionModule,
+            "view",
+          ),
+        )
+      : false;
 
     if (
-      currentModule &&
-      !permissionKeys.has(
-        permissionKey(
-          currentModule,
-          "view",
-        ),
-      )
+      currentRouteRule &&
+      ((currentRouteRule.entitlementModule !== null &&
+        !allowedModuleSlugSet.has(
+          currentRouteRule.entitlementModule,
+        )) ||
+        lacksViewPermission)
     ) {
       const firstAllowedItem =
         allNavItems.find(
@@ -1527,8 +1371,8 @@ export default function AppShell({
     }
   }, [
     pathname,
+    allowedModuleSlugSet,
     permissionKeys,
-    permissionsLoaded,
     allNavItems,
     router,
   ]);
@@ -2396,26 +2240,7 @@ export default function AppShell({
                     My Profile
                   </span>
                 </button>
-<button
-  type="button"
-  className="sbs-profile-menu-item"
-  role="menuitem"
-  onClick={() => {
-    setProfileMenuOpen(false);
-    router.push("/settings");
-  }}
->
-  <span className="sbs-profile-menu-icon">
-    <Icon
-      name="settings"
-      size={17}
-    />
-  </span>
 
-  <span>
-    Settings
-  </span>
-</button>
                 <button
                   type="button"
                   className="sbs-profile-menu-item"

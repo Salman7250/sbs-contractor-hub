@@ -199,7 +199,7 @@ export default function InvoicesPage() {
   useEffect(() => {
     // This effect intentionally starts the asynchronous Supabase
     // synchronization for the invoice list.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadData();
   }, [loadData]);
 

@@ -1,72 +1,53 @@
-import { NextResponse } from "next/server";
+import { type EmailOtpType } from "@supabase/supabase-js";
+import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
 
-  const tokenHash = requestUrl.searchParams.get("token_hash");
-  const type = requestUrl.searchParams.get("type");
-  const next = requestUrl.searchParams.get("next") || "/";
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type") as EmailOtpType | null;
+  const plan = searchParams.get("plan");
 
-  /*
-   * The confirmation endpoint must receive both
-   * token_hash and type from the Supabase invitation link.
-   */
+  const redirectTo = request.nextUrl.clone();
+
   if (!tokenHash || !type) {
-    return NextResponse.redirect(
-      new URL(
-        "/login?error=invalid_invitation",
-        requestUrl.origin,
-      ),
-    );
+    redirectTo.pathname = "/signup/verify";
+    redirectTo.search = "?error=invalid_confirmation";
+
+    return NextResponse.redirect(redirectTo);
   }
 
   const supabase = await createClient();
 
-  /*
-   * Verify the invitation token.
-   *
-   * verifyOtp() also allows the Supabase server client
-   * to persist the authenticated session through cookies.
-   */
   const { error } = await supabase.auth.verifyOtp({
+    type,
     token_hash: tokenHash,
-    type: type as
-      | "signup"
-      | "invite"
-      | "magiclink"
-      | "recovery"
-      | "email_change"
-      | "email",
   });
 
   if (error) {
-    console.error("Auth confirmation error:", error);
+    console.error("Email confirmation error:", {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+    });
 
-    return NextResponse.redirect(
-      new URL(
-        "/login?error=invitation_expired",
-        requestUrl.origin,
-      ),
-    );
+    redirectTo.pathname = "/signup/verify";
+    redirectTo.search = "?error=confirmation_failed";
+
+    return NextResponse.redirect(redirectTo);
   }
 
   /*
-   * Only allow internal relative redirects.
+   * Email is now confirmed and Supabase has established
+   * the authenticated session.
    *
-   * This prevents the invitation URL from being used
-   * as an open redirect to another website.
+   * Continue directly to business onboarding.
    */
-  const safeNext =
-    next.startsWith("/") && !next.startsWith("//")
-      ? next
-      : "/";
+  redirectTo.pathname = "/onboarding";
+  redirectTo.search = plan
+    ? `?plan=${encodeURIComponent(plan)}`
+    : "";
 
-  /*
-   * Employee invitations should finish at the
-   * password setup page.
-   */
-  return NextResponse.redirect(
-    new URL(safeNext, requestUrl.origin),
-  );
+  return NextResponse.redirect(redirectTo);
 }

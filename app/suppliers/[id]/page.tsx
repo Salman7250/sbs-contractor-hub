@@ -193,7 +193,7 @@ export default function SupplierDetailsPage() {
 
   useEffect(() => {
     // Load the supplier asynchronously.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadSupplier();
   }, [loadSupplier]);
 

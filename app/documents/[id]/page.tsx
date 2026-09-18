@@ -990,7 +990,7 @@ export default function DocumentInformationPage() {
       setLinkTargetsLoading(false);
     }
   },
-  [document?.company_id, supabase]
+  [document, supabase]
 );
 
   useEffect(() => {

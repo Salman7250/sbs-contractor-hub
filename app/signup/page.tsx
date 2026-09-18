@@ -6,205 +6,89 @@ import styles from "./page.module.css";
 export default function SignupPage() {
   return (
     <main className={styles.signupPage}>
-      <div className={styles.backgroundPaper}>
-        <div className={styles.backgroundCircle} />
-        <div className={styles.backgroundDots} />
-        <div className={styles.backgroundCurve} />
+      {/* Decorative background */}
+      <div className={styles.signupBackground} aria-hidden="true">
+        <div
+          className={`${styles.paper} ${styles.paperOne}`}
+        />
+        <div
+          className={`${styles.paper} ${styles.paperTwo}`}
+        />
+        <div
+          className={`${styles.paper} ${styles.paperThree}`}
+        />
+
+        <div
+          className={`${styles.circle} ${styles.circleOne}`}
+        />
+        <div
+          className={`${styles.circle} ${styles.circleTwo}`}
+        />
+
+        <div
+          className={`${styles.dotField} ${styles.dotFieldOne}`}
+        />
+        <div
+          className={`${styles.dotField} ${styles.dotFieldTwo}`}
+        />
+
+        <div
+          className={`${styles.curve} ${styles.curveOne}`}
+        />
+        <div
+          className={`${styles.curve} ${styles.curveTwo}`}
+        />
       </div>
 
-      <div className={styles.container}>
-        <header className={styles.header}>
-          <Link
-            href="/"
-            className={styles.logo}
-            aria-label="SBS home"
-          >
-            <Image
-              src="/sbs-logo.png"
-              alt="SBS"
-              width={148}
-              height={45}
-              priority
-              className={styles.logoImage}
-            />
-          </Link>
+      {/* Header */}
+      <header className={styles.signupHeader}>
+        <Link href="/" className={styles.brand}>
+          <Image
+            src="/sbs-logo-black.png"
+            alt="Sharif Business Solutions"
+            width={190}
+            height={43}
+            priority
+            className={styles.brandLogo}
+          />
 
-          <div className={styles.headerRight}>
-            <span className={styles.headerText}>
-              Already have an account?
+          <div className={styles.brandText}>
+            <span className={styles.brandName}>
+              SHARIF BUSINESS SOLUTIONS
             </span>
 
-            <Link
-              href="/login"
-              className={styles.loginLink}
-            >
-              Sign in
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14" />
-                <path d="m13 6 6 6-6 6" />
-              </svg>
-            </Link>
+            <span className={styles.brandTagline}>
+              Business Management Platform
+            </span>
           </div>
-        </header>
+        </Link>
+      </header>
 
-        <div className={styles.main}>
-          <section className={styles.intro}>
-            <div className={styles.introEyebrow}>
-              <span className={styles.introEyebrowLine} />
-              GET STARTED WITH SBS
-            </div>
+      {/* Main content */}
+      <section className={styles.signupContent}>
+        {/* Left side */}
+        <div className={styles.signupIntro}>
+          <div className={styles.welcomePill}>
+            <span className={styles.welcomeDot} />
+            Start your business workspace
+          </div>
 
-            <h1 className={styles.introTitle}>
-              Build your business.
-              <br />
-              <span className={styles.introTitleAccent}>
-                Run it smarter.
-              </span>
-            </h1>
+          <h1>
+            Build your business.
+            <br />
+            <span>All in one place.</span>
+          </h1>
 
-            <p className={styles.introDescription}>
-              Create your SBS workspace and bring your
-              products, customers, sales, inventory and
-              business operations into one connected system.
-            </p>
+          <p className={styles.introDescription}>
+            Create your SBS workspace and bring your products,
+            inventory, sales, purchasing, customers, invoices,
+            payments, expenses and operations together.
+          </p>
 
-            <div className={styles.benefits}>
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    aria-hidden="true"
-                  >
-                    <path d="M4 7h16" />
-                    <path d="M7 4v3" />
-                    <path d="M17 4v3" />
-                    <rect
-                      x="4"
-                      y="5"
-                      width="16"
-                      height="15"
-                      rx="2"
-                    />
-                    <path d="m8 13 2.5 2.5L16 10" />
-                  </svg>
-                </div>
-
-                <div>
-                  <div className={styles.benefitTitle}>
-                    One connected workspace
-                  </div>
-
-                  <div className={styles.benefitText}>
-                    Keep your day-to-day business operations
-                    organized in one place.
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 3 5 6v5c0 4.5 3 7.8 7 10 4-2.2 7-5.5 7-10V6l-7-3Z" />
-                    <path d="m9 12 2 2 4-4" />
-                  </svg>
-                </div>
-
-                <div>
-                  <div className={styles.benefitTitle}>
-                    Built for growing businesses
-                  </div>
-
-                  <div className={styles.benefitText}>
-                    Start with the tools you need and expand
-                    as your operation grows.
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.benefit}>
-                <div className={styles.benefitIcon}>
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="8"
-                    />
-                    <path d="M12 8v4l2.5 2.5" />
-                  </svg>
-                </div>
-
-                <div>
-                  <div className={styles.benefitTitle}>
-                    Set up in minutes
-                  </div>
-
-                  <div className={styles.benefitText}>
-                    Tell us about your business and we'll
-                    prepare your workspace.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.quote}>
-              <span className={styles.quoteMark}>“</span>
-
-              <span>
-                Everything your business needs to stay
-                organized, visible and in control.
-              </span>
-            </div>
-          </section>
-
-          <section className={styles.card}>
-            <div className={styles.cardHeader}>
-              <Image
-                src="/sbs-logo.png"
-                alt="SBS"
-                width={122}
-                height={38}
-                className={styles.cardLogo}
-              />
-
-              <div className={styles.cardEyebrow}>
-                CREATE YOUR WORKSPACE
-              </div>
-
-              <h2 className={styles.cardTitle}>
-                Create your SBS account
-              </h2>
-
-              <p className={styles.cardDescription}>
-                Set up your business workspace and start
-                managing your operation from one place.
-              </p>
-            </div>
-
-            <SignupForm />
-
-            <div className={styles.trust}>
-              <div className={styles.trustIcon}>
+          <div className={styles.businessAreas}>
+            {/* Customers */}
+            <div className={styles.businessArea}>
+              <div className={styles.areaIcon}>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -212,29 +96,209 @@ export default function SignupPage() {
                   strokeWidth="1.8"
                   aria-hidden="true"
                 >
-                  <path d="M12 3 5 6v5c0 4.5 3 7.8 7 10 4-2.2 7-5.5 7-10V6l-7-3Z" />
-                  <path d="M9.5 12.5 11 14l3.5-4" />
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
 
-              <span>
-                Your account information is securely
-                handled through Supabase authentication.
-              </span>
+              <div className={styles.businessAreaText}>
+                <strong>Customers</strong>
+                <span>Keep every relationship organized</span>
+              </div>
             </div>
-          </section>
+
+            {/* Inventory */}
+            <div className={styles.businessArea}>
+              <div className={styles.areaIcon}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="m21 16-9 5-9-5" />
+                  <path d="m21 12-9 5-9-5" />
+                  <path d="m21 8-9 5-9-5 9-5 9 5Z" />
+                </svg>
+              </div>
+
+              <div className={styles.businessAreaText}>
+                <strong>Inventory</strong>
+                <span>Know what you have and where it is</span>
+              </div>
+            </div>
+
+            {/* Sales */}
+            <div className={styles.businessArea}>
+              <div className={styles.areaIcon}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M8 9h8" />
+                  <path d="M8 13h5" />
+                  <path d="M8 17h3" />
+                </svg>
+              </div>
+
+              <div className={styles.businessAreaText}>
+                <strong>Sales & Finance</strong>
+                <span>Invoices, payments and business control</span>
+              </div>
+            </div>
+
+            {/* Operations */}
+            <div className={styles.businessArea}>
+              <div className={styles.areaIcon}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M14.7 6.3a4 4 0 0 0-5.66 5.66L3 18v3h3l6.04-6.04a4 4 0 0 0 5.66-5.66l-2.12 2.12-2.83-2.83L14.7 6.3Z" />
+                  <path d="m15 15 6 6" />
+                </svg>
+              </div>
+
+              <div className={styles.businessAreaText}>
+                <strong>Operations</strong>
+                <span>Purchase orders and daily workflows</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quote */}
+          <div className={styles.signupQuote}>
+            <div className={styles.quoteMark}>“</div>
+
+            <div>
+              <p>
+                Everything your business needs to stay organized,
+                connected, and in control.
+              </p>
+
+              <span>Sharif Business Solutions</span>
+            </div>
+          </div>
         </div>
 
-        <footer className={styles.footer}>
-          <span className={styles.footerBrand}>
-            SBS · Sharif Business Solutions
-          </span>
+        {/* Signup card */}
+        <div className={styles.signupCard}>
+          <div className={styles.cardAccent} />
 
-          <span className={styles.footerText}>
-            Business management, connected.
-          </span>
-        </footer>
-      </div>
+          <div className={styles.signupCardContent}>
+            <div className={styles.cardBrand}>
+              <Image
+                src="/sbs-logo-black.png"
+                alt="SBS"
+                width={190}
+                height={48}
+                priority
+                className={styles.cardLogo}
+              />
+            </div>
+
+            <div className={styles.signupHeading}>
+              <h2>Create your SBS account</h2>
+
+              <p>
+                Set up your business workspace and start your
+                14-day trial.
+              </p>
+            </div>
+
+            <SignupForm />
+
+            {/* Existing account */}
+            {/* <div className={styles.existingAccount}>
+              <span>Already have an account?</span>
+
+              <Link href="/login">
+                Sign in
+              </Link>
+            </div> */}
+
+            {/* Trust area */}
+            <div className={styles.trustArea}>
+              <div className={styles.trustItem}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <rect x="5" y="11" width="14" height="10" rx="2" />
+                  <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                </svg>
+
+                <span>Secure account</span>
+              </div>
+
+              <div className={styles.trustDivider} />
+
+              <div className={styles.trustItem}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3v18" />
+                  <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5H15a2.5 2.5 0 0 1 0 5H6" />
+                </svg>
+
+                <span>14-day trial</span>
+              </div>
+
+              <div className={styles.trustDivider} />
+
+              <div className={styles.trustItem}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+                  <path d="M4 4v5h5" />
+                  <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+                  <path d="M20 20v-5h-5" />
+                </svg>
+
+                <span>Cancel anytime</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className={styles.signupFooter}>
+        <span>
+          © {new Date().getFullYear()} Sharif Business Solutions.
+          All rights reserved.
+        </span>
+
+        <div className={styles.footerLinks}>
+          <Link href="/">Website</Link>
+          <span>•</span>
+          <Link href="/privacy">Privacy</Link>
+          <span>•</span>
+          <Link href="/terms">Terms</Link>
+        </div>
+      </footer>
     </main>
   );
 }

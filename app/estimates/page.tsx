@@ -521,7 +521,7 @@ export default function EstimatesPage() {
   useEffect(() => {
     // This effect synchronizes the page with asynchronously loaded
     // Supabase data. The state updates occur inside the async operation.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadPage();
   }, [loadPage]);
 

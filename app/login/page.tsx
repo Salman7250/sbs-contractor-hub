@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import LoginForm from "./login-form";
 import styles from "./page.module.css";
 
@@ -41,7 +42,7 @@ export default function LoginPage() {
 
       {/* Header */}
       <header className={styles.loginHeader}>
-        <a href="/" className={styles.brand}>
+        <Link href="/" className={styles.brand}>
           <Image
             src="/sbs-logo-black.png"
             alt="Sharif Business Solutions"
@@ -60,7 +61,7 @@ export default function LoginPage() {
               Business Management Platform
             </span>
           </div>
-        </a>
+        </Link>
       </header>
 
       {/* Main content */}
@@ -290,7 +291,7 @@ export default function LoginPage() {
         </span>
 
         <div className={styles.footerLinks}>
-          <a href="/">Website</a>
+          <Link href="/">Website</Link>
           <span>•</span>
           <a href="/privacy">Privacy</a>
           <span>•</span>

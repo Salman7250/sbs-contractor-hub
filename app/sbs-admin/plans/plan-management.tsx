@@ -16,7 +16,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+
+import {
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 
 import {
   createPlan,
@@ -24,16 +29,24 @@ import {
   type PlanActionInput,
 } from "./plan-actions";
 
+/* ============================================================
+   TYPES
+============================================================ */
+
 type Plan = {
   id: string;
   name: string;
   slug: string;
   description: string | null;
+
   monthly_price: number | null;
   yearly_price: number | null;
+
   currency: string | null;
+
   is_active: boolean;
   is_popular: boolean;
+
   paypal_product_id: string | null;
   paypal_monthly_plan_id: string | null;
   paypal_yearly_plan_id: string | null;
@@ -72,70 +85,115 @@ type Props = {
   planLimits: PlanLimit[];
 };
 
+/* ============================================================
+   SBS BUILT COMMERCIAL MODULES
+============================================================ */
+
+/*
+ * IMPORTANT
+ *
+ * These are the modules that currently exist in the SBS
+ * customer-facing application.
+ *
+ * Dashboard and Settings are intentionally excluded because
+ * they are platform/application infrastructure rather than
+ * commercial modules.
+ *
+ * "Quotes" in the UI maps to the existing "estimates" module
+ * slug.
+ *
+ * "Analytics" uses the actual "analytics" module slug.
+ */
+
 const BUILT_MODULE_SLUGS = [
-  "products",
-  "inventory",
-  "warehouses",
-  "serial-assets",
   "customers",
-  "purchase-orders",
-  "sales-orders",
   "estimates",
+  "sales-orders",
   "invoices",
   "payments",
-  "employees",
+
+  "products",
+  "serial-assets",
+  "inventory",
+  "warehouses",
+  "pricing",
+
+  "suppliers",
+  "purchase-orders",
   "expenses",
-  "reports",
-  "documents",
-  "settings",
-  "notifications",
-  "automation",
-  "repairs",
+
   "warranty",
+  "repairs",
   "rma",
+  "service-providers",
+  "service-jobs",
+
   "b2b-client-portal",
-  "advanced-analytics",
+  "analytics",
+  "employees",
+  "documents",
 ] as const;
 
+/*
+ * The visual grouping follows the actual SBS navigation.
+ */
 const MODULE_GROUPS = [
   {
-    title: "Core Business",
+    title: "Sales",
     slugs: [
-      "products",
-      "inventory",
-      "warehouses",
-      "serial-assets",
       "customers",
-      "purchase-orders",
-      "sales-orders",
       "estimates",
+      "sales-orders",
       "invoices",
       "payments",
     ],
   },
+
   {
-    title: "Operations",
+    title: "Products & Inventory",
     slugs: [
-      "employees",
+      "products",
+      "serial-assets",
+      "inventory",
+      "warehouses",
+      "pricing",
+    ],
+  },
+
+  {
+    title: "Procurement",
+    slugs: [
+      "suppliers",
+      "purchase-orders",
       "expenses",
-      "reports",
-      "documents",
-      "settings",
-      "notifications",
-      "automation",
     ],
   },
+
   {
-    title: "Advanced Business",
+    title: "Service",
     slugs: [
-      "repairs",
       "warranty",
+      "repairs",
       "rma",
-      "b2b-client-portal",
-      "advanced-analytics",
+      "service-providers",
+      "service-jobs",
     ],
   },
-];
+
+  {
+    title: "Business",
+    slugs: [
+      "b2b-client-portal",
+      "analytics",
+      "employees",
+      "documents",
+    ],
+  },
+] as const;
+
+/* ============================================================
+   RESOURCE LIMITS
+============================================================ */
 
 const LIMIT_LABELS: Record<string, string> = {
   warehouses: "Warehouses",
@@ -143,35 +201,76 @@ const LIMIT_LABELS: Record<string, string> = {
   users: "Users",
   products: "Products",
   customers: "Customers",
-  invoices_per_month: "Invoices per month",
-  purchase_orders_per_month: "Purchase orders per month",
-  sales_orders_per_month: "Sales orders per month",
-  storage_gb: "Storage",
+
+  suppliers: "Suppliers",
+
+  invoices_per_month:
+    "Invoices per month",
+
+  purchase_orders_per_month:
+    "Purchase orders per month",
+
+  sales_orders_per_month:
+    "Sales orders per month",
+
+  quotes_per_month:
+    "Quotes per month",
+
+  service_jobs_per_month:
+    "Service jobs per month",
+
+  storage_gb:
+    "Storage",
 };
 
 const LIMIT_DESCRIPTIONS: Record<string, string> = {
   warehouses:
     "Maximum number of warehouses a company can create.",
+
   employees:
     "Maximum number of employees available to the company.",
+
   users:
     "Maximum number of platform users for the company.",
+
   products:
     "Maximum number of products in the catalog.",
+
   customers:
     "Maximum number of customers.",
+
+  suppliers:
+    "Maximum number of suppliers.",
+
   invoices_per_month:
     "Maximum number of invoices created per month.",
+
   purchase_orders_per_month:
-    "Maximum purchase orders created per month.",
+    "Maximum number of purchase orders created per month.",
+
   sales_orders_per_month:
-    "Maximum sales orders created per month.",
+    "Maximum number of sales orders created per month.",
+
+  quotes_per_month:
+    "Maximum number of quotes created per month.",
+
+  service_jobs_per_month:
+    "Maximum number of service jobs created per month.",
+
   storage_gb:
     "Maximum document and file storage in gigabytes.",
 };
 
+/* ============================================================
+   SHARED INPUT
+============================================================ */
+
 const inputClass =
   "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100";
+
+/* ============================================================
+   MAIN
+============================================================ */
 
 export default function PlanManagement({
   plans,
@@ -179,8 +278,10 @@ export default function PlanManagement({
   planModules,
   planLimits,
 }: Props) {
-  const [selectedPlanId, setSelectedPlanId] =
-    useState<string | null>(null);
+  const [
+    selectedPlanId,
+    setSelectedPlanId,
+  ] = useState<string | null>(null);
 
   const [creating, setCreating] =
     useState(false);
@@ -188,11 +289,16 @@ export default function PlanManagement({
   const selectedPlan = useMemo(
     () =>
       plans.find(
-        (plan) => plan.id === selectedPlanId
+        (plan) =>
+          plan.id === selectedPlanId
       ) ?? null,
     [plans, selectedPlanId]
   );
 
+  /*
+   * Only modules from the actual built SBS commercial
+   * module catalog are shown.
+   */
   const builtModules = useMemo(() => {
     const order = new Map<string, number>(
       BUILT_MODULE_SLUGS.map(
@@ -214,7 +320,9 @@ export default function PlanManagement({
       );
   }, [modules]);
 
-  function openPlan(planId: string) {
+  function openPlan(
+    planId: string
+  ) {
     setSelectedPlanId(planId);
     setCreating(false);
   }
@@ -224,10 +332,18 @@ export default function PlanManagement({
     setCreating(false);
   }
 
+  function openCreate() {
+    setSelectedPlanId(null);
+    setCreating(true);
+  }
+
   return (
     <>
       <div className="space-y-8">
-        {/* HEADER */}
+        {/* ==================================================
+            HEADER
+        ================================================== */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -250,10 +366,7 @@ export default function PlanManagement({
 
           <button
             type="button"
-            onClick={() => {
-              setSelectedPlanId(null);
-              setCreating(true);
-            }}
+            onClick={openCreate}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
@@ -261,7 +374,10 @@ export default function PlanManagement({
           </button>
         </div>
 
-        {/* PLAN ROWS */}
+        {/* ==================================================
+            PLAN LIST
+        ================================================== */}
+
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           {plans.length === 0 ? (
             <div className="px-6 py-12 text-center">
@@ -277,7 +393,7 @@ export default function PlanManagement({
 
               <button
                 type="button"
-                onClick={() => setCreating(true)}
+                onClick={openCreate}
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
               >
                 <Plus className="h-4 w-4" />
@@ -293,13 +409,13 @@ export default function PlanManagement({
                   isOpen={
                     selectedPlanId === plan.id
                   }
-                  onToggle={() => {
+                  onToggle={() =>
                     setSelectedPlanId(
                       selectedPlanId === plan.id
                         ? null
                         : plan.id
-                    );
-                  }}
+                    )
+                  }
                   onManage={() =>
                     openPlan(plan.id)
                   }
@@ -310,7 +426,10 @@ export default function PlanManagement({
         </div>
       </div>
 
-      {/* EDITOR */}
+      {/* ==================================================
+          EDIT
+      ================================================== */}
+
       {selectedPlan && (
         <PlanEditor
           mode="edit"
@@ -322,7 +441,10 @@ export default function PlanManagement({
         />
       )}
 
-      {/* CREATE */}
+      {/* ==================================================
+          CREATE
+      ================================================== */}
+
       {creating && (
         <PlanEditor
           mode="create"
@@ -355,14 +477,17 @@ function PlanRow({
   return (
     <div>
       <div className="flex w-full items-center gap-4 px-6 py-5 transition hover:bg-slate-50">
-        {/* Expand / plan information */}
+        {/* PLAN INFO */}
+
         <button
           type="button"
           onClick={onToggle}
           className="flex min-w-0 flex-1 items-center gap-4 text-left"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">
-            {plan.name.charAt(0).toUpperCase()}
+            {plan.name
+              .charAt(0)
+              .toUpperCase()}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -378,7 +503,9 @@ function PlanRow({
                 </span>
               )}
 
-              <StatusPill active={plan.is_active} />
+              <StatusPill
+                active={plan.is_active}
+              />
             </div>
 
             <div className="mt-1 font-mono text-[10px] text-slate-400">
@@ -414,6 +541,7 @@ function PlanRow({
         </button>
 
         {/* REAL MANAGE BUTTON */}
+
         <button
           type="button"
           onClick={(event) => {
@@ -431,6 +559,7 @@ function PlanRow({
       </div>
 
       {/* EXPANDED DETAILS */}
+
       {isOpen && (
         <div className="border-t border-slate-100 bg-slate-50/60 px-6 py-5">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -486,6 +615,7 @@ function PlanRow({
     </div>
   );
 }
+
 /* ============================================================
    PLAN EDITOR
 ============================================================ */
@@ -505,96 +635,126 @@ function PlanEditor({
   planLimits: PlanLimit[];
   onClose: () => void;
 }) {
-  const initialModuleIds = useMemo(() => {
-    if (!plan) return [];
+  const initialModuleIds =
+    useMemo(() => {
+      if (!plan) {
+        return [];
+      }
 
-    return planModules
-      .filter(
-        (row) =>
-          row.plan_id === plan.id
-      )
-      .map(
-        (row) =>
-          row.module_id
-      );
-  }, [plan, planModules]);
+      return planModules
+        .filter(
+          (row) =>
+            row.plan_id === plan.id
+        )
+        .map(
+          (row) =>
+            row.module_id
+        );
+    }, [plan, planModules]);
 
-  const initialLimits = useMemo(() => {
-    if (!plan) return [];
+  const initialLimits =
+    useMemo(() => {
+      if (!plan) {
+        return [];
+      }
 
-    return planLimits
-      .filter(
-        (limit) =>
-          limit.plan_id === plan.id
-      )
-      .map(
-        (limit): LimitDraft => ({
-          limitKey:
-            limit.limit_key,
-          limitValue:
-            limit.limit_value !== null
-              ? String(
-                  limit.limit_value
-                )
-              : "",
-          isUnlimited:
-            limit.is_unlimited,
-        })
-      );
-  }, [plan, planLimits]);
+      return planLimits
+        .filter(
+          (limit) =>
+            limit.plan_id === plan.id
+        )
+        .map(
+          (limit): LimitDraft => ({
+            limitKey:
+              limit.limit_key,
 
-  const [name, setName] = useState(
-    plan?.name ?? ""
-  );
+            limitValue:
+              limit.limit_value !== null
+                ? String(
+                    limit.limit_value
+                  )
+                : "",
 
-  const [slug, setSlug] = useState(
-    plan?.slug ?? ""
-  );
+            isUnlimited:
+              limit.is_unlimited,
+          })
+        );
+    }, [plan, planLimits]);
+
+  /* BASIC */
+
+  const [name, setName] =
+    useState(
+      plan?.name ?? ""
+    );
+
+  const [slug, setSlug] =
+    useState(
+      plan?.slug ?? ""
+    );
 
   const [description, setDescription] =
     useState(
       plan?.description ?? ""
     );
 
-  const [monthlyPrice, setMonthlyPrice] =
-    useState(
-      plan?.monthly_price !== null &&
-        plan?.monthly_price !== undefined
-        ? String(
-            plan.monthly_price
-          )
-        : ""
-    );
+  /* PRICING */
 
-  const [yearlyPrice, setYearlyPrice] =
-    useState(
-      plan?.yearly_price !== null &&
-        plan?.yearly_price !== undefined
-        ? String(
-            plan.yearly_price
-          )
-        : ""
-    );
+  const [
+    monthlyPrice,
+    setMonthlyPrice,
+  ] = useState(
+    plan?.monthly_price !== null &&
+      plan?.monthly_price !== undefined
+      ? String(
+          plan.monthly_price
+        )
+      : ""
+  );
 
-  const [currency, setCurrency] =
-    useState(
-      plan?.currency ?? "USD"
-    );
+  const [
+    yearlyPrice,
+    setYearlyPrice,
+  ] = useState(
+    plan?.yearly_price !== null &&
+      plan?.yearly_price !== undefined
+      ? String(
+          plan.yearly_price
+        )
+      : ""
+  );
 
-  const [isActive, setIsActive] =
-    useState(
-      plan?.is_active ?? true
-    );
+  const [
+    currency,
+    setCurrency,
+  ] = useState(
+    plan?.currency ?? "USD"
+  );
 
-  const [isPopular, setIsPopular] =
-    useState(
-      plan?.is_popular ?? false
-    );
+  /* STATUS */
 
-  const [paypalProductId, setPaypalProductId] =
-    useState(
-      plan?.paypal_product_id ?? ""
-    );
+  const [
+    isActive,
+    setIsActive,
+  ] = useState(
+    plan?.is_active ?? true
+  );
+
+  const [
+    isPopular,
+    setIsPopular,
+  ] = useState(
+    plan?.is_popular ?? false
+  );
+
+  /* PAYPAL */
+
+  const [
+    paypalProductId,
+    setPaypalProductId,
+  ] = useState(
+    plan?.paypal_product_id ?? ""
+  );
 
   const [
     paypalMonthlyPlanId,
@@ -610,6 +770,8 @@ function PlanEditor({
     plan?.paypal_yearly_plan_id ?? ""
   );
 
+  /* MODULES */
+
   const [
     selectedModuleIds,
     setSelectedModuleIds,
@@ -617,16 +779,24 @@ function PlanEditor({
     initialModuleIds
   );
 
+  /* LIMITS */
+
   const [limits, setLimits] =
     useState<LimitDraft[]>(
       initialLimits
     );
 
+  /* EDITOR */
+
   const [
     activeSection,
     setActiveSection,
   ] = useState<
-    "basic" | "pricing" | "modules" | "limits" | "paypal"
+    | "basic"
+    | "pricing"
+    | "modules"
+    | "limits"
+    | "paypal"
   >("basic");
 
   const [
@@ -635,13 +805,21 @@ function PlanEditor({
   ] = useTransition();
 
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
   const [success, setSuccess] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
   const isCreate =
     mode === "create";
+
+  /* ==========================================================
+     MODULE TOGGLE
+  ========================================================== */
 
   function toggleModule(
     moduleId: string
@@ -660,41 +838,56 @@ function PlanEditor({
     );
   }
 
+  /* ==========================================================
+     LIMIT UPDATE
+  ========================================================== */
+
   function updateLimit(
     index: number,
     patch: Partial<LimitDraft>
   ) {
-    setLimits((current) =>
-      current.map(
-        (limit, i) =>
-          i === index
-            ? {
-                ...limit,
-                ...patch,
-              }
-            : limit
-      )
+    setLimits(
+      (current) =>
+        current.map(
+          (limit, i) =>
+            i === index
+              ? {
+                  ...limit,
+                  ...patch,
+                }
+              : limit
+        )
     );
   }
 
   function addLimit() {
-    setLimits((current) => [
-      ...current,
-      {
-        limitKey: "",
-        limitValue: "",
-        isUnlimited: false,
-      },
-    ]);
-  }
-
-  function removeLimit(index: number) {
-    setLimits((current) =>
-      current.filter(
-        (_, i) => i !== index
-      )
+    setLimits(
+      (current) => [
+        ...current,
+        {
+          limitKey: "",
+          limitValue: "",
+          isUnlimited: false,
+        },
+      ]
     );
   }
+
+  function removeLimit(
+    index: number
+  ) {
+    setLimits(
+      (current) =>
+        current.filter(
+          (_, i) =>
+            i !== index
+        )
+    );
+  }
+
+  /* ==========================================================
+     SAVE
+  ========================================================== */
 
   function handleSave() {
     setError(null);
@@ -704,13 +897,19 @@ function PlanEditor({
       name.trim();
 
     const normalizedSlug =
-      slug.trim().toLowerCase();
+      slug
+        .trim()
+        .toLowerCase();
 
     if (!normalizedName) {
       setError(
         "Plan name is required."
       );
-      setActiveSection("basic");
+
+      setActiveSection(
+        "basic"
+      );
+
       return;
     }
 
@@ -718,7 +917,11 @@ function PlanEditor({
       setError(
         "Plan slug is required."
       );
-      setActiveSection("basic");
+
+      setActiveSection(
+        "basic"
+      );
+
       return;
     }
 
@@ -730,43 +933,67 @@ function PlanEditor({
       setError(
         "Slug may only contain lowercase letters, numbers, and hyphens."
       );
-      setActiveSection("basic");
+
+      setActiveSection(
+        "basic"
+      );
+
       return;
     }
 
     const monthly =
       monthlyPrice.trim() === ""
         ? null
-        : Number(monthlyPrice);
+        : Number(
+            monthlyPrice
+          );
 
     const yearly =
       yearlyPrice.trim() === ""
         ? null
-        : Number(yearlyPrice);
+        : Number(
+            yearlyPrice
+          );
 
     if (
       monthly !== null &&
-      (!Number.isFinite(monthly) ||
+      (!Number.isFinite(
+        monthly
+      ) ||
         monthly < 0)
     ) {
       setError(
         "Enter a valid monthly price."
       );
-      setActiveSection("pricing");
+
+      setActiveSection(
+        "pricing"
+      );
+
       return;
     }
 
     if (
       yearly !== null &&
-      (!Number.isFinite(yearly) ||
+      (!Number.isFinite(
+        yearly
+      ) ||
         yearly < 0)
     ) {
       setError(
         "Enter a valid yearly price."
       );
-      setActiveSection("pricing");
+
+      setActiveSection(
+        "pricing"
+      );
+
       return;
     }
+
+    /* ========================================================
+       LIMIT VALIDATION
+    ======================================================== */
 
     const normalizedLimits =
       limits
@@ -774,26 +1001,33 @@ function PlanEditor({
           (limit) =>
             limit.limitKey.trim()
         )
-        .map((limit) => ({
-          limitKey:
-            limit.limitKey
-              .trim()
-              .toLowerCase(),
-          limitValue:
-            limit.isUnlimited ||
-            limit.limitValue.trim() === ""
-              ? null
-              : Number(
-                  limit.limitValue
-                ),
-          isUnlimited:
-            limit.isUnlimited,
-        }));
+        .map(
+          (limit) => ({
+            limitKey:
+              limit.limitKey
+                .trim()
+                .toLowerCase(),
+
+            limitValue:
+              limit.isUnlimited ||
+              limit.limitValue.trim() === ""
+                ? null
+                : Number(
+                    limit.limitValue
+                  ),
+
+            isUnlimited:
+              limit.isUnlimited,
+          })
+        );
 
     const seenLimits =
       new Set<string>();
 
-    for (const limit of normalizedLimits) {
+    for (
+      const limit of
+        normalizedLimits
+    ) {
       if (
         seenLimits.has(
           limit.limitKey
@@ -802,7 +1036,11 @@ function PlanEditor({
         setError(
           `Duplicate resource limit: ${limit.limitKey}`
         );
-        setActiveSection("limits");
+
+        setActiveSection(
+          "limits"
+        );
+
         return;
       }
 
@@ -812,108 +1050,164 @@ function PlanEditor({
 
       if (
         !limit.isUnlimited &&
-        (limit.limitValue === null ||
+        (
+          limit.limitValue ===
+            null ||
           !Number.isFinite(
             limit.limitValue
           ) ||
-          limit.limitValue < 0)
+          limit.limitValue < 0
+        )
       ) {
         setError(
           `Enter a valid value for ${limit.limitKey}.`
         );
-        setActiveSection("limits");
+
+        setActiveSection(
+          "limits"
+        );
+
         return;
       }
     }
 
-    startTransition(async () => {
-      try {
-        if (isCreate) {
-          await createPlan({
-            name: normalizedName,
-            slug: normalizedSlug,
-            description:
-              description.trim(),
-            monthlyPrice: monthly,
-            yearlyPrice: yearly,
-            currency:
-              currency
-                .trim()
-                .toUpperCase(),
-            isActive,
-            isPopular,
-            paypalProductId:
-              paypalProductId.trim(),
-            paypalMonthlyPlanId:
-              paypalMonthlyPlanId.trim(),
-            paypalYearlyPlanId:
-              paypalYearlyPlanId.trim(),
-            moduleIds:
-              selectedModuleIds,
-            limits:
-              normalizedLimits,
-          });
+    /* ========================================================
+       SAVE
+    ======================================================== */
 
-          setSuccess(
-            "Plan created successfully."
-          );
-        } else {
-          if (!plan) {
-            throw new Error(
-              "Plan not found."
+    startTransition(
+      async () => {
+        try {
+          if (isCreate) {
+            await createPlan({
+              name:
+                normalizedName,
+
+              slug:
+                normalizedSlug,
+
+              description:
+                description.trim(),
+
+              monthlyPrice:
+                monthly,
+
+              yearlyPrice:
+                yearly,
+
+              currency:
+                currency
+                  .trim()
+                  .toUpperCase(),
+
+              isActive,
+
+              isPopular,
+
+              paypalProductId:
+                paypalProductId.trim(),
+
+              paypalMonthlyPlanId:
+                paypalMonthlyPlanId.trim(),
+
+              paypalYearlyPlanId:
+                paypalYearlyPlanId.trim(),
+
+              moduleIds:
+                selectedModuleIds,
+
+              limits:
+                normalizedLimits,
+            });
+
+            setSuccess(
+              "Plan created successfully."
+            );
+          } else {
+            if (!plan) {
+              throw new Error(
+                "Plan not found."
+              );
+            }
+
+            const payload: PlanActionInput =
+              {
+                planId:
+                  plan.id,
+
+                name:
+                  normalizedName,
+
+                slug:
+                  normalizedSlug,
+
+                description:
+                  description.trim(),
+
+                monthlyPrice:
+                  monthly,
+
+                yearlyPrice:
+                  yearly,
+
+                currency:
+                  currency
+                    .trim()
+                    .toUpperCase(),
+
+                isActive,
+
+                isPopular,
+
+                paypalProductId:
+                  paypalProductId.trim(),
+
+                paypalMonthlyPlanId:
+                  paypalMonthlyPlanId.trim(),
+
+                paypalYearlyPlanId:
+                  paypalYearlyPlanId.trim(),
+
+                moduleIds:
+                  selectedModuleIds,
+
+                limits:
+                  normalizedLimits,
+              };
+
+            await updatePlan(
+              payload
+            );
+
+            setSuccess(
+              "Plan configuration saved successfully."
             );
           }
 
-          const payload: PlanActionInput = {
-            planId: plan.id,
-            name: normalizedName,
-            slug: normalizedSlug,
-            description:
-              description.trim(),
-            monthlyPrice: monthly,
-            yearlyPrice: yearly,
-            currency:
-              currency
-                .trim()
-                .toUpperCase(),
-            isActive,
-            isPopular,
-            paypalProductId:
-              paypalProductId.trim(),
-            paypalMonthlyPlanId:
-              paypalMonthlyPlanId.trim(),
-            paypalYearlyPlanId:
-              paypalYearlyPlanId.trim(),
-            moduleIds:
-              selectedModuleIds,
-            limits:
-              normalizedLimits,
-          };
-
-          await updatePlan(
-            payload
+          setTimeout(
+            () => {
+              window.location.reload();
+            },
+            700
           );
-
-          setSuccess(
-            "Plan configuration saved successfully."
+        } catch (
+          saveError
+        ) {
+          setError(
+            saveError instanceof
+              Error
+              ? saveError.message
+              : "Unable to save plan."
           );
         }
-
-        setTimeout(() => {
-          window.location.reload();
-        }, 700);
-      } catch (saveError) {
-        setError(
-          saveError instanceof Error
-            ? saveError.message
-            : "Unable to save plan."
-        );
       }
-    });
+    );
   }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
+      {/* BACKDROP */}
+
       <div
         className="fixed inset-0 bg-slate-950/40 backdrop-blur-[2px]"
         onClick={() => {
@@ -923,9 +1217,14 @@ function PlanEditor({
         }}
       />
 
+      {/* MODAL */}
+
       <div className="relative flex min-h-full items-start justify-center p-4 sm:p-6 lg:p-10">
         <div className="relative z-10 w-full max-w-6xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-          {/* HEADER */}
+          {/* ==================================================
+              HEADER
+          ================================================== */}
+
           <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
@@ -970,14 +1269,23 @@ function PlanEditor({
             </button>
           </div>
 
-          {/* BODY */}
+          {/* ==================================================
+              BODY
+          ================================================== */}
+
           <div className="grid lg:grid-cols-[220px_minmax(0,1fr)]">
+            {/* NAV */}
+
             <div className="border-b border-slate-200 bg-slate-50 p-3 lg:border-b-0 lg:border-r">
               <EditorNav
                 active={activeSection}
-                onChange={setActiveSection}
+                onChange={
+                  setActiveSection
+                }
               />
             </div>
+
+            {/* CONTENT */}
 
             <div className="min-h-[600px]">
               <div className="max-h-[calc(100vh-230px)] overflow-y-auto p-6">
@@ -1051,11 +1359,15 @@ function PlanEditor({
                 {activeSection ===
                   "limits" && (
                   <LimitsSection
-                    limits={limits}
+                    limits={
+                      limits
+                    }
                     onUpdate={
                       updateLimit
                     }
-                    onAdd={addLimit}
+                    onAdd={
+                      addLimit
+                    }
                     onRemove={
                       removeLimit
                     }
@@ -1089,7 +1401,10 @@ function PlanEditor({
             </div>
           </div>
 
-          {/* FOOTER */}
+          {/* ==================================================
+              FOOTER
+          ================================================== */}
+
           <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
             {error && (
               <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1121,13 +1436,18 @@ function PlanEditor({
 
                 <button
                   type="button"
-                  onClick={handleSave}
-                  disabled={isPending}
+                  onClick={
+                    handleSave
+                  }
+                  disabled={
+                    isPending
+                  }
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
+
                       {isCreate
                         ? "Creating..."
                         : "Saving..."}
@@ -1135,6 +1455,7 @@ function PlanEditor({
                   ) : (
                     <>
                       <Save className="h-4 w-4" />
+
                       {isCreate
                         ? "Create Plan"
                         : "Save Changes"}
@@ -1164,6 +1485,7 @@ function EditorNav({
     | "modules"
     | "limits"
     | "paypal";
+
   onChange: (
     value:
       | "basic"
@@ -1180,24 +1502,28 @@ function EditorNav({
       description:
         "Name, description and status",
     },
+
     {
       id: "pricing" as const,
       label: "Pricing",
       description:
         "Monthly and yearly pricing",
     },
+
     {
       id: "modules" as const,
       label: "Module Access",
       description:
         "Features included in plan",
     },
+
     {
       id: "limits" as const,
       label: "Resource Limits",
       description:
         "Usage limits and quotas",
     },
+
     {
       id: "paypal" as const,
       label: "PayPal",
@@ -1208,39 +1534,43 @@ function EditorNav({
 
   return (
     <nav className="space-y-1">
-      {items.map((item) => {
-        const selected =
-          active === item.id;
+      {items.map(
+        (item) => {
+          const selected =
+            active === item.id;
 
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() =>
-              onChange(item.id)
-            }
-            className={`w-full rounded-xl px-3.5 py-3 text-left transition ${
-              selected
-                ? "bg-white shadow-sm ring-1 ring-slate-200"
-                : "hover:bg-white/70"
-            }`}
-          >
-            <div
-              className={`text-xs font-semibold ${
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() =>
+                onChange(
+                  item.id
+                )
+              }
+              className={`w-full rounded-xl px-3.5 py-3 text-left transition ${
                 selected
-                  ? "text-slate-900"
-                  : "text-slate-600"
+                  ? "bg-white shadow-sm ring-1 ring-slate-200"
+                  : "hover:bg-white/70"
               }`}
             >
-              {item.label}
-            </div>
+              <div
+                className={`text-xs font-semibold ${
+                  selected
+                    ? "text-slate-900"
+                    : "text-slate-600"
+                }`}
+              >
+                {item.label}
+              </div>
 
-            <div className="mt-1 text-[10px] leading-4 text-slate-400">
-              {item.description}
-            </div>
-          </button>
-        );
-      })}
+              <div className="mt-1 text-[10px] leading-4 text-slate-400">
+                {item.description}
+              </div>
+            </button>
+          );
+        }
+      )}
     </nav>
   );
 }
@@ -1262,17 +1592,25 @@ function BasicSection({
   setIsPopular,
 }: {
   name: string;
-  setName: (value: string) => void;
+  setName: (
+    value: string
+  ) => void;
+
   slug: string;
-  setSlug: (value: string) => void;
+  setSlug: (
+    value: string
+  ) => void;
+
   description: string;
   setDescription: (
     value: string
   ) => void;
+
   isActive: boolean;
   setIsActive: (
     value: boolean
   ) => void;
+
   isPopular: boolean;
   setIsPopular: (
     value: boolean
@@ -1292,10 +1630,13 @@ function BasicSection({
             value={name}
             onChange={(event) =>
               setName(
-                event.target.value
+                event.target
+                  .value
               )
             }
-            className={inputClass}
+            className={
+              inputClass
+            }
             placeholder="Professional"
           />
         </Field>
@@ -1308,7 +1649,8 @@ function BasicSection({
             value={slug}
             onChange={(event) =>
               setSlug(
-                event.target.value
+                event.target
+                  .value
                   .toLowerCase()
                   .replace(
                     /\s+/g,
@@ -1330,7 +1672,8 @@ function BasicSection({
           value={description}
           onChange={(event) =>
             setDescription(
-              event.target.value
+              event.target
+                .value
             )
           }
           rows={4}
@@ -1341,15 +1684,23 @@ function BasicSection({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <ToggleCard
-          checked={isActive}
-          onChange={setIsActive}
+          checked={
+            isActive
+          }
+          onChange={
+            setIsActive
+          }
           title="Plan active"
           description="Active plans can be offered to new customers."
         />
 
         <ToggleCard
-          checked={isPopular}
-          onChange={setIsPopular}
+          checked={
+            isPopular
+          }
+          onChange={
+            setIsPopular
+          }
           title="Mark as popular"
           description="Highlight this plan in customer-facing pricing."
         />
@@ -1380,30 +1731,41 @@ function PricingSection({
   setMonthlyPrice: (
     value: string
   ) => void;
+
   yearlyPrice: string;
   setYearlyPrice: (
     value: string
   ) => void;
+
   currency: string;
   setCurrency: (
     value: string
   ) => void;
 }) {
   const monthly =
-    Number(monthlyPrice);
+    Number(
+      monthlyPrice
+    );
 
   const yearly =
-    Number(yearlyPrice);
+    Number(
+      yearlyPrice
+    );
 
   const annualMonthlyEquivalent =
-    Number.isFinite(monthly) &&
+    Number.isFinite(
+      monthly
+    ) &&
     monthly > 0
       ? monthly * 12
       : null;
 
   const savings =
-    annualMonthlyEquivalent !== null &&
-    Number.isFinite(yearly) &&
+    annualMonthlyEquivalent !==
+      null &&
+    Number.isFinite(
+      yearly
+    ) &&
     yearly >= 0
       ? annualMonthlyEquivalent -
         yearly
@@ -1428,10 +1790,15 @@ function PricingSection({
               type="number"
               min="0"
               step="0.01"
-              value={monthlyPrice}
-              onChange={(event) =>
+              value={
+                monthlyPrice
+              }
+              onChange={(
+                event
+              ) =>
                 setMonthlyPrice(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               className={`${inputClass} pl-8`}
@@ -1453,10 +1820,15 @@ function PricingSection({
               type="number"
               min="0"
               step="0.01"
-              value={yearlyPrice}
-              onChange={(event) =>
+              value={
+                yearlyPrice
+              }
+              onChange={(
+                event
+              ) =>
                 setYearlyPrice(
-                  event.target.value
+                  event.target
+                    .value
                 )
               }
               className={`${inputClass} pl-8`}
@@ -1468,22 +1840,30 @@ function PricingSection({
         <Field label="Currency">
           <select
             value={currency}
-            onChange={(event) =>
+            onChange={(
+              event
+            ) =>
               setCurrency(
-                event.target.value
+                event.target
+                  .value
               )
             }
-            className={inputClass}
+            className={
+              inputClass
+            }
           >
             <option value="USD">
               USD — US Dollar
             </option>
+
             <option value="AED">
               AED — UAE Dirham
             </option>
+
             <option value="EUR">
               EUR — Euro
             </option>
+
             <option value="GBP">
               GBP — British Pound
             </option>
@@ -1517,8 +1897,8 @@ function PricingSection({
               </>
             ) : (
               <>
-                The yearly price is higher than twelve
-                monthly payments by{" "}
+                The yearly price is higher than twelve monthly
+                payments by{" "}
                 <strong>
                   {formatMoney(
                     Math.abs(
@@ -1535,9 +1915,9 @@ function PricingSection({
       )}
 
       <InfoBox>
-        Changing these fields changes the current plan
-        catalog price. It does not rewrite the billing amount
-        stored on existing customer subscriptions.
+        Changing these fields changes the current plan catalog
+        price. It does not rewrite the billing amount stored on
+        existing customer subscriptions.
       </InfoBox>
     </EditorSection>
   );
@@ -1558,11 +1938,22 @@ function ModulesSection({
     moduleId: string
   ) => void;
 }) {
+  const selectedCount =
+    selectedIds.filter(
+      (id) =>
+        modules.some(
+          (module) =>
+            module.id === id
+        )
+    ).length;
+
   return (
     <EditorSection
       title="Module Access"
       description="Choose which currently-built SBS modules belong to this plan."
     >
+      {/* SUMMARY */}
+
       <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
         <div>
           <div className="text-sm font-semibold text-slate-900">
@@ -1570,7 +1961,7 @@ function ModulesSection({
           </div>
 
           <div className="mt-0.5 text-xs text-slate-500">
-            {selectedIds.length} of{" "}
+            {selectedCount} of{" "}
             {modules.length} built modules
           </div>
         </div>
@@ -1580,7 +1971,9 @@ function ModulesSection({
         </div>
       </div>
 
-      <div className="space-y-6">
+      {/* GROUPS */}
+
+      <div className="space-y-7">
         {MODULE_GROUPS.map(
           (group) => {
             const groupModules =
@@ -1597,7 +1990,9 @@ function ModulesSection({
                   (
                     module
                   ): module is Module =>
-                    Boolean(module)
+                    Boolean(
+                      module
+                    )
                 );
 
             if (
@@ -1609,12 +2004,24 @@ function ModulesSection({
 
             return (
               <div
-                key={group.title}
+                key={
+                  group.title
+                }
               >
-                <div className="mb-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    {group.title}
-                  </h4>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {group.title}
+                    </h4>
+
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {groupModules.length}{" "}
+                      {groupModules.length ===
+                      1
+                        ? "module"
+                        : "modules"}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1651,15 +2058,11 @@ function ModulesSection({
                                     : "text-slate-800"
                                 }`}
                               >
-                                {
-                                  module.name
-                                }
+                                {module.name}
                               </div>
 
                               <div className="mt-1 truncate font-mono text-[9px] text-slate-400">
-                                {
-                                  module.slug
-                                }
+                                {module.slug}
                               </div>
                             </div>
 
@@ -1685,9 +2088,9 @@ function ModulesSection({
       </div>
 
       <InfoBox>
-        This list intentionally contains only modules that are
-        currently part of the built SBS product. Roadmap
-        or database-only modules are not exposed here.
+        This list contains only the modules currently built and
+        exposed by SBS. Dashboard and Settings are application
+        infrastructure and are not treated as paid modules.
       </InfoBox>
     </EditorSection>
   );
@@ -1704,11 +2107,14 @@ function LimitsSection({
   onRemove,
 }: {
   limits: LimitDraft[];
+
   onUpdate: (
     index: number,
     patch: Partial<LimitDraft>
   ) => void;
+
   onAdd: () => void;
+
   onRemove: (
     index: number
   ) => void;
@@ -1721,7 +2127,7 @@ function LimitsSection({
         <button
           type="button"
           onClick={onAdd}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           <Plus className="h-3.5 w-3.5" />
           Add Limit
@@ -1740,19 +2146,13 @@ function LimitsSection({
             <p className="mt-1 text-xs text-slate-500">
               Add a resource limit to control usage.
             </p>
-
-            <button
-              type="button"
-              onClick={onAdd}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Limit
-            </button>
           </div>
         ) : (
           limits.map(
-            (limit, index) => (
+            (
+              limit,
+              index
+            ) => (
               <div
                 key={`${limit.limitKey}-${index}`}
                 className="rounded-xl border border-slate-200 bg-white p-4"
@@ -1792,8 +2192,12 @@ function LimitsSection({
                           label,
                         ]) => (
                           <option
-                            key={key}
-                            value={key}
+                            key={
+                              key
+                            }
+                            value={
+                              key
+                            }
                           >
                             {label}
                           </option>
@@ -1907,14 +2311,19 @@ function PayPalSection({
   setPaypalYearlyPlanId,
 }: {
   paypalProductId: string;
+
   setPaypalProductId: (
     value: string
   ) => void;
+
   paypalMonthlyPlanId: string;
+
   setPaypalMonthlyPlanId: (
     value: string
   ) => void;
+
   paypalYearlyPlanId: string;
+
   setPaypalYearlyPlanId: (
     value: string
   ) => void;
@@ -1929,10 +2338,13 @@ function PayPalSection({
         hint="Example: PROD-XXXXXXXXXXXX"
       >
         <input
-          value={paypalProductId}
+          value={
+            paypalProductId
+          }
           onChange={(event) =>
             setPaypalProductId(
-              event.target.value
+              event.target
+                .value
             )
           }
           className={`${inputClass} font-mono`}
@@ -1945,10 +2357,13 @@ function PayPalSection({
         hint="Subscription plan identifier for monthly billing."
       >
         <input
-          value={paypalMonthlyPlanId}
+          value={
+            paypalMonthlyPlanId
+          }
           onChange={(event) =>
             setPaypalMonthlyPlanId(
-              event.target.value
+              event.target
+                .value
             )
           }
           className={`${inputClass} font-mono`}
@@ -1961,10 +2376,13 @@ function PayPalSection({
         hint="Subscription plan identifier for annual billing."
       >
         <input
-          value={paypalYearlyPlanId}
+          value={
+            paypalYearlyPlanId
+          }
           onChange={(event) =>
             setPaypalYearlyPlanId(
-              event.target.value
+              event.target
+                .value
             )
           }
           className={`${inputClass} font-mono`}
@@ -1980,15 +2398,16 @@ function PayPalSection({
 
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <ExternalLink className="h-3.5 w-3.5" />
-        PayPal billing operations remain separate from the
-        SBS plan catalog.
+
+        PayPal billing operations remain separate from the SBS
+        plan catalog.
       </div>
     </EditorSection>
   );
 }
 
 /* ============================================================
-   SHARED UI
+   SHARED EDITOR SECTION
 ============================================================ */
 
 function EditorSection({
@@ -2024,6 +2443,10 @@ function EditorSection({
     </div>
   );
 }
+
+/* ============================================================
+   FIELD
+============================================================ */
 
 function Field({
   label,
@@ -2061,6 +2484,10 @@ function Field({
   );
 }
 
+/* ============================================================
+   TOGGLE CARD
+============================================================ */
+
 function ToggleCard({
   checked,
   onChange,
@@ -2068,9 +2495,11 @@ function ToggleCard({
   description,
 }: {
   checked: boolean;
+
   onChange: (
     value: boolean
   ) => void;
+
   title: string;
   description: string;
 }) {
@@ -2078,9 +2507,11 @@ function ToggleCard({
     <button
       type="button"
       onClick={() =>
-        onChange(!checked)
+        onChange(
+          !checked
+        )
       }
-      className={`flex items-start gap-3 rounded-xl border p-4 text-left transition active:scale-[0.99] ${
+      className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${
         checked
           ? "border-emerald-200 bg-emerald-50/60"
           : "border-slate-200 bg-white hover:bg-slate-50"
@@ -2111,6 +2542,10 @@ function ToggleCard({
   );
 }
 
+/* ============================================================
+   INFO BOX
+============================================================ */
+
 function InfoBox({
   children,
 }: {
@@ -2122,6 +2557,10 @@ function InfoBox({
     </div>
   );
 }
+
+/* ============================================================
+   MINI VALUE
+============================================================ */
 
 function MiniValue({
   label,
@@ -2143,6 +2582,10 @@ function MiniValue({
   );
 }
 
+/* ============================================================
+   STATUS
+============================================================ */
+
 function StatusPill({
   active,
 }: {
@@ -2150,7 +2593,7 @@ function StatusPill({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-semibold ${
         active
           ? "bg-emerald-50 text-emerald-700"
           : "bg-slate-100 text-slate-500"
@@ -2163,6 +2606,7 @@ function StatusPill({
             : "bg-slate-400"
         }`}
       />
+
       {active
         ? "Active"
         : "Inactive"}
@@ -2170,22 +2614,12 @@ function StatusPill({
   );
 }
 
-function formatPlanPrice(
-  value: number | null,
-  currency: string | null
-) {
-  if (value === null) {
-    return "Custom";
-  }
-
-  return formatMoney(
-    value,
-    currency ?? "USD"
-  );
-}
+/* ============================================================
+   CURRENCY
+============================================================ */
 
 function formatMoney(
-  value: number,
+  amount: number,
   currency: string
 ) {
   try {
@@ -2193,14 +2627,32 @@ function formatMoney(
       "en-US",
       {
         style: "currency",
-        currency:
-          currency || "USD",
+        currency,
+        minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }
-    ).format(value);
+    ).format(amount);
   } catch {
-    return `${currency} ${value.toFixed(
+    return `${currency} ${amount.toFixed(
       2
     )}`;
   }
+}
+
+/* ============================================================
+   PLAN PRICE
+============================================================ */
+
+function formatPlanPrice(
+  amount: number | null,
+  currency: string | null
+) {
+  if (amount === null) {
+    return "Custom";
+  }
+
+  return formatMoney(
+    amount,
+    currency ?? "USD"
+  );
 }

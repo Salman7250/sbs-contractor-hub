@@ -254,7 +254,7 @@ export default function ExpenseSettingsPage() {
   useEffect(() => {
     // This effect intentionally starts the asynchronous
     // Supabase synchronization for the settings page.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadData();
   }, [loadData]);
 

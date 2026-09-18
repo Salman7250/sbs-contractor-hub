@@ -350,7 +350,7 @@ export default function ExpenseReportsPage() {
 
   useEffect(() => {
     // Intentionally starts the asynchronous Supabase synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadData();
   }, [loadData]);
 

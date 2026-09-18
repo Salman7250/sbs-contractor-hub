@@ -460,7 +460,7 @@ export default function InvoiceDetailsPage() {
 
     // This effect intentionally starts the asynchronous Supabase
     // synchronization for the invoice identified by the route.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadInvoice();
   }, [invoiceId, loadInvoice]);
 

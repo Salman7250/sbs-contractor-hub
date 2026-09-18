@@ -283,7 +283,7 @@ export default function EditSupplierPage() {
 
   useEffect(() => {
     // Load supplier data asynchronously.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadSupplier();
   }, [loadSupplier]);
 

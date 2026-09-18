@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import SetPasswordForm from "./set-password-form";
 import styles from "./page.module.css";
 
@@ -49,7 +50,7 @@ export default function SetPasswordPage() {
 
       {/* Header */}
       <header className={styles.passwordHeader}>
-        <a href="/" className={styles.brand}>
+        <Link href="/" className={styles.brand}>
           <Image
             src="/sbs-logo.png"
             alt="Sharif Business Solutions"
@@ -68,7 +69,7 @@ export default function SetPasswordPage() {
               Business Management Platform
             </span>
           </div>
-        </a>
+        </Link>
       </header>
 
       {/* Main */}
@@ -329,7 +330,7 @@ export default function SetPasswordPage() {
         </span>
 
         <div className={styles.footerLinks}>
-          <a href="/">Website</a>
+          <Link href="/">Website</Link>
           <span>•</span>
           <a href="/privacy">Privacy</a>
           <span>•</span>

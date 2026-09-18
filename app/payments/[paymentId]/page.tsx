@@ -308,7 +308,7 @@ export default function PaymentDetailsPage() {
   useEffect(() => {
     if (!paymentId) {
       // This effect intentionally synchronizes the invalid payment ID state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setError("Payment ID is missing.");
       setLoading(false);
       return;

@@ -271,7 +271,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     // This effect intentionally starts asynchronous Supabase synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadPayments();
   }, [loadPayments]);
 

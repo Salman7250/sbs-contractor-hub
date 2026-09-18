@@ -136,6 +136,16 @@ function formatDate(value: string | null) {
   );
 }
 
+function getTrialDaysRemaining(value: string) {
+  return Math.max(
+    0,
+    Math.ceil(
+      (new Date(value).getTime() - Date.now()) /
+        (1000 * 60 * 60 * 24),
+    ),
+  );
+}
+
 function formatMoney(
   amount: number | null,
   currency = "USD",
@@ -694,18 +704,8 @@ export default async function CompanyControlCenter({
 
   const trialDaysRemaining =
     subscription?.trial_ends_at
-      ? Math.max(
-          0,
-          Math.ceil(
-            (new Date(
-              subscription.trial_ends_at,
-            ).getTime() -
-              Date.now()) /
-              (1000 *
-                60 *
-                60 *
-                24),
-          ),
+      ? getTrialDaysRemaining(
+          subscription.trial_ends_at,
         )
       : null;
 

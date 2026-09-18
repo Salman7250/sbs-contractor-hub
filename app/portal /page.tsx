@@ -258,8 +258,32 @@ export default function PortalPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<PortalTab>("dashboard");
+const [activeTab, setActiveTab] = useState<PortalTab>(() => {
+  if (typeof window === "undefined") {
+    return "dashboard";
+  }
 
+  const tab = new URLSearchParams(window.location.search).get("tab");
+
+  const validTabs: PortalTab[] = [
+    "dashboard",
+    "ledger",
+    "quotes",
+    "orders",
+    "invoices",
+    "documents",
+    "services",
+    "warranty",
+    "repairs",
+    "requests",
+    "messages",
+    "profile",
+  ];
+
+  return validTabs.includes(tab as PortalTab)
+    ? (tab as PortalTab)
+    : "dashboard";
+});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -874,32 +898,16 @@ export default function PortalPage() {
   );
 
   useEffect(() => {
+  const timer = window.setTimeout(() => {
     void loadPortal();
-  }, [loadPortal]);
+  }, 0);
 
-  useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const tab = query.get("tab");
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [loadPortal]);
 
-    if (
-      [
-        "dashboard",
-        "ledger",
-        "quotes",
-        "orders",
-        "invoices",
-        "documents",
-        "services",
-        "warranty",
-        "repairs",
-        "requests",
-        "messages",
-        "profile",
-      ].includes(tab || "")
-    ) {
-      setActiveTab(tab as PortalTab);
-    }
-  }, []);
+  
 
   const updateTab = (tab: PortalTab) => {
     setActiveTab(tab);

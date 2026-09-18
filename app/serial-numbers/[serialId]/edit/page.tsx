@@ -328,7 +328,7 @@ export default function EditSerialNumberPage() {
 
   useEffect(() => {
     // This effect intentionally starts the asynchronous serial-number synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadData();
   }, [loadData]);
 
