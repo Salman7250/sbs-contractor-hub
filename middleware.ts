@@ -23,8 +23,8 @@ export async function middleware(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {
         getAll() {
@@ -59,6 +59,28 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  /*
+   * Onboarding is intentionally outside employee/company RBAC.
+   *
+   * A newly verified user does not have a company_members record
+   * yet. They must therefore be allowed to reach onboarding before
+   * company permissions can exist.
+   */
+  if (pathname === "/onboarding") {
+    if (!user) {
+      const loginUrl = new URL("/login", request.url);
+
+      loginUrl.searchParams.set(
+        "redirectTo",
+        "/onboarding",
+      );
+
+      return NextResponse.redirect(loginUrl);
+    }
+
+    return response;
+  }
+
   if (isPublicPath(pathname)) {
     if (user && pathname === "/login") {
       return NextResponse.redirect(new URL("/", request.url));
@@ -71,8 +93,7 @@ export async function middleware(request: NextRequest) {
 
   /*
    * Routes that are not part of the employee workspace are left
-   * alone. This keeps public/customer-specific routes from being
-   * accidentally intercepted by employee RBAC.
+   * alone.
    */
   if (!rule) {
     return response;
@@ -80,6 +101,7 @@ export async function middleware(request: NextRequest) {
 
   if (!user) {
     const loginUrl = new URL("/login", request.url);
+
     loginUrl.searchParams.set(
       "redirectTo",
       `${pathname}${request.nextUrl.search}`,
@@ -89,10 +111,12 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
-   * Resolve the caller's company. The application currently uses
-   * the first company_members record for the signed-in workspace.
+   * Resolve the caller's company.
    */
-  const { data: membership, error: membershipError } = await supabase
+  const {
+    data: membership,
+    error: membershipError,
+  } = await supabase
     .from("company_members")
     .select("company_id")
     .eq("user_id", user.id)
@@ -107,31 +131,43 @@ export async function middleware(request: NextRequest) {
 
   if (rule.entitlementModule) {
     try {
-      const hasEntitlement = await hasCompanyModuleAccess(
-        supabase,
-        membership.company_id,
-        rule.entitlementModule,
-      );
+      const hasEntitlement =
+        await hasCompanyModuleAccess(
+          supabase,
+          membership.company_id,
+          rule.entitlementModule,
+        );
 
       if (!hasEntitlement) {
         return NextResponse.redirect(
-          new URL("/?error=module-not-in-plan", request.url),
+          new URL(
+            "/?error=module-not-in-plan",
+            request.url,
+          ),
         );
       }
     } catch (error) {
-      console.error("Middleware module access check failed:", error);
+      console.error(
+        "Middleware module access check failed:",
+        error,
+      );
 
       return NextResponse.redirect(
-        new URL("/?error=module-access-check-failed", request.url),
+        new URL(
+          "/?error=module-access-check-failed",
+          request.url,
+        ),
       );
     }
   }
 
   /*
-   * The database function is the source of truth. It recognizes
-   * platform admins, company admins, and employee role permissions.
+   * Database permission check.
    */
-  const { data: allowed, error: permissionError } = await supabase.rpc(
+  const {
+    data: allowed,
+    error: permissionError,
+  } = await supabase.rpc(
     "employee_can_access",
     {
       p_company_id: membership.company_id,
@@ -147,13 +183,19 @@ export async function middleware(request: NextRequest) {
     );
 
     return NextResponse.redirect(
-      new URL("/?error=permission-check-failed", request.url),
+      new URL(
+        "/?error=permission-check-failed",
+        request.url,
+      ),
     );
   }
 
   if (!allowed) {
     return NextResponse.redirect(
-      new URL("/?error=access-denied", request.url),
+      new URL(
+        "/?error=access-denied",
+        request.url,
+      ),
     );
   }
 
@@ -162,10 +204,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Run middleware for application routes while excluding
-     * Next internals and static assets.
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|ttf)$).*)",
   ],
 };
