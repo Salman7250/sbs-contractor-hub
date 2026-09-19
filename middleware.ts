@@ -10,6 +10,7 @@ function isPublicPath(pathname: string) {
     pathname === "/forgot-password" ||
     pathname === "/reset-password" ||
     pathname === "/set-password" ||
+    pathname === "/onboarding" ||
     pathname.startsWith("/auth/")
   );
 }
