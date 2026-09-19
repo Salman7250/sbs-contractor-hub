@@ -146,11 +146,29 @@ export const MODULE_ROUTE_RULES: ModuleRouteRule[] = [
   },
 ];
 
-export function getModuleRouteRule(pathname: string) {
+export function getModuleRouteRule(
+  pathname: string,
+): ModuleRouteRule | null {
+  /*
+   * "/" is ONLY the dashboard route.
+   *
+   * It must never act as a wildcard for every other route.
+   * Otherwise /onboarding, /login, /pricing, etc. can
+   * accidentally inherit dashboard authorization.
+   */
+  if (pathname === "/") {
+    return MODULE_ROUTE_RULES.find(
+      (rule) => rule.prefix === "/",
+    ) ?? null;
+  }
+
   return (
     MODULE_ROUTE_RULES
-      .slice()
-      .sort((a, b) => b.prefix.length - a.prefix.length)
+      .filter((rule) => rule.prefix !== "/")
+      .sort(
+        (a, b) =>
+          b.prefix.length - a.prefix.length,
+      )
       .find(
         (rule) =>
           pathname === rule.prefix ||
