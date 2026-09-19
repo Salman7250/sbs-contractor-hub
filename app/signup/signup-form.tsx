@@ -65,14 +65,8 @@ export default function SignupForm() {
       new URLSearchParams(window.location.search);
 
     const selectedPlanSlug =
-      searchParams.get("plan")?.trim().toLowerCase() ?? "";
-
-    if (!selectedPlanSlug) {
-      setError(
-        "Please select a plan before creating your account."
-      );
-      return;
-    }
+  searchParams.get("plan")?.trim().toLowerCase() ||
+  "starter";
 
     if (!trimmedFullName) {
       setError("Please enter your full name.");
