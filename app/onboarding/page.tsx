@@ -31,12 +31,18 @@ export default function OnboardingPage() {
     useState("");
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    async function checkSession() {
+  async function checkSession() {
+    try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
 
       if (!mounted) {
         return;
@@ -47,15 +53,65 @@ export default function OnboardingPage() {
         return;
       }
 
+      /*
+       * If the user already has a company membership,
+       * onboarding has already been completed.
+       *
+       * This also prevents an already-onboarded user from
+       * manually visiting /onboarding again.
+       */
+      const {
+        data: membership,
+        error: membershipError,
+      } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (membershipError) {
+        throw membershipError;
+      }
+
+      if (membership?.company_id) {
+        router.replace("/");
+        return;
+      }
+
+      /*
+       * Authenticated account + no company membership =
+       * verified account with unfinished onboarding.
+       *
+       * Stay on onboarding.
+       */
+      setCheckingSession(false);
+    } catch (error) {
+      console.error(
+        "Onboarding session check error:",
+        error
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify your account."
+      );
+
       setCheckingSession(false);
     }
+  }
 
-    checkSession();
+  checkSession();
 
-    return () => {
-      mounted = false;
-    };
-  }, [router, supabase]);
+  return () => {
+    mounted = false;
+  };
+}, [router, supabase]);
 
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>

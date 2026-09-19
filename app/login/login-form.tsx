@@ -14,43 +14,100 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  event.preventDefault();
 
-    if (loading) {
-      return;
-    }
+  if (loading) {
+    return;
+  }
 
-    setError("");
-    setLoading(true);
+  setLoading(true);
+  setError("");
 
-    const { data, error: authError } =
+  try {
+    const supabase = createClient();
+
+    const { data, error: signInError } =
       await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-    if (authError) {
-      setError(
-        authError.message === "Invalid login credentials"
-          ? "The email or password you entered is incorrect."
-          : authError.message
-      );
-
+    if (signInError) {
+      setError(signInError.message);
       setLoading(false);
       return;
     }
 
     if (!data.session || !data.user) {
       setError(
-        "Unable to create a login session. Please try again."
+        "Login succeeded, but no active session was created. Please try again."
+      );
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * SBS onboarding routing
+     *
+     * A verified/authenticated account without a company
+     * membership has not completed onboarding yet.
+     *
+     * Send that user back to onboarding instead of the
+     * dashboard.
+     * ---------------------------------------------------------
+     */
+
+    const {
+      data: membership,
+      error: membershipError,
+    } = await supabase
+      .from("company_members")
+      .select("company_id")
+      .eq("user_id", data.user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (membershipError) {
+      console.error(
+        "Membership lookup error:",
+        membershipError
+      );
+
+      setError(
+        "We could not determine your workspace status. Please try again."
       );
 
       setLoading(false);
       return;
     }
 
+    await new Promise((resolve) =>
+      setTimeout(resolve, 150)
+    );
+
+    /*
+     * No company membership = onboarding is incomplete.
+     */
+    if (!membership?.company_id) {
+      window.location.replace("/onboarding");
+      return;
+    }
+
+    /*
+     * Company membership exists = onboarding is complete.
+     */
     window.location.replace("/");
+  } catch (err) {
+    console.error("Login error:", err);
+
+    setError(
+      "Something went wrong while signing in. Please try again."
+    );
+
+    setLoading(false);
   }
+}
 
   return (
     <form className={styles.loginForm} onSubmit={handleLogin}>
