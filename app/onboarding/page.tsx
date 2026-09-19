@@ -23,6 +23,9 @@ export default function OnboardingPage() {
   const [submitting, setSubmitting] =
     useState(false);
 
+  const [trialStarted, setTrialStarted] =
+    useState(false);
+
   const [error, setError] = useState("");
 
   const [companyName, setCompanyName] =
@@ -142,7 +145,7 @@ export default function OnboardingPage() {
   ) {
     event.preventDefault();
 
-    if (submitting) {
+    if (submitting || trialStarted) {
       return;
     }
 
@@ -230,13 +233,22 @@ export default function OnboardingPage() {
       }
 
       /*
-       * IMPORTANT:
+       * The database has successfully created the
+       * workspace and started the 14-day trial.
        *
-       * No billing page here.
-       * The database has already started the
-       * 14-day trial.
+       * Show a success message before entering
+       * the workspace.
        */
-      router.replace("/");
+      setSubmitting(false);
+      setTrialStarted(true);
+
+      /*
+       * Give the user enough time to see the
+       * successful trial confirmation.
+       */
+      window.setTimeout(() => {
+        router.replace("/");
+      }, 3500);
     } catch (submitError) {
       console.error(
         "Company onboarding error:",
@@ -586,483 +598,646 @@ export default function OnboardingPage() {
               />
             </div>
 
-            <div
-              className={
-                styles.cardHeading
-              }
-            >
-              <h2>
-                Create your workspace
-              </h2>
-
-              <p>
-                Start with the essential
-                information about your
-                business.
-              </p>
-            </div>
-
-            <form
-              className={
-                styles.onboardingForm
-              }
-              onSubmit={handleSubmit}
-            >
-              {/* Company */}
+            {trialStarted ? (
+              /*
+               * SUCCESS STATE
+               *
+               * This appears immediately after
+               * the database successfully creates
+               * the workspace and starts the trial.
+               */
               <div
-                className={
-                  styles.formField
-                }
+                style={{
+                  textAlign: "center",
+                  padding:
+                    "36px 10px 28px",
+                }}
               >
-                <label htmlFor="companyName">
-                  Company name
-                </label>
-
                 <div
-                  className={
-                    styles.inputWrapper
-                  }
+                  style={{
+                    width: 72,
+                    height: 72,
+                    margin:
+                      "0 auto 22px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
+                    background:
+                      "#ecfdf3",
+                    color:
+                      "#16a34a",
+                    fontSize: 36,
+                    fontWeight: 700,
+                    border:
+                      "1px solid #bbf7d0",
+                  }}
+                  aria-hidden="true"
                 >
-                  <input
-                    id="companyName"
-                    name="companyName"
-                    type="text"
-                    value={
-                      companyName
-                    }
-                    onChange={(event) =>
-                      setCompanyName(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Your company name"
-                    autoComplete="organization"
-                    required
-                    disabled={submitting}
-                  />
+                  ✓
                 </div>
-              </div>
 
-              {/* Business type */}
-              <div
-                className={
-                  styles.formField
-                }
-              >
-                <label>
-                  Business type
-                </label>
+                <h2
+                  style={{
+                    margin:
+                      "0 0 10px",
+                    fontSize: 28,
+                    lineHeight: 1.2,
+                    fontWeight: 700,
+                    color:
+                      "#111827",
+                  }}
+                >
+                  Your free trial has
+                  started!
+                </h2>
+
+                <p
+                  style={{
+                    margin:
+                      "0 auto 24px",
+                    maxWidth: 440,
+                    fontSize: 16,
+                    lineHeight: 1.6,
+                    color:
+                      "#6b7280",
+                  }}
+                >
+                  Your SBS workspace has
+                  been created successfully.
+                  You now have{" "}
+                  <strong
+                    style={{
+                      color:
+                        "#111827",
+                    }}
+                  >
+                    14 days free
+                  </strong>{" "}
+                  to explore the platform.
+                </p>
 
                 <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems:
+                      "center",
+                    gap: 8,
+                    padding:
+                      "10px 16px",
+                    borderRadius: 999,
+                    background:
+                      "#f0fdf4",
+                    border:
+                      "1px solid #bbf7d0",
+                    color:
+                      "#15803d",
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                  >
+                    🎉
+                  </span>
+
+                  No payment required
+                </div>
+
+                <p
+                  style={{
+                    margin:
+                      "24px 0 0",
+                    fontSize: 13,
+                    color:
+                      "#9ca3af",
+                  }}
+                >
+                  Taking you to your
+                  workspace...
+                </p>
+              </div>
+            ) : (
+              <>
+                <div
                   className={
-                    styles.businessTypeGrid
+                    styles.cardHeading
                   }
                 >
+                  <h2>
+                    Create your workspace
+                  </h2>
+
+                  <p>
+                    Start with the essential
+                    information about your
+                    business.
+                  </p>
+                </div>
+
+                <form
+                  className={
+                    styles.onboardingForm
+                  }
+                  onSubmit={handleSubmit}
+                >
+                  {/* Company */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label htmlFor="companyName">
+                      Company name
+                    </label>
+
+                    <div
+                      className={
+                        styles.inputWrapper
+                      }
+                    >
+                      <input
+                        id="companyName"
+                        name="companyName"
+                        type="text"
+                        value={
+                          companyName
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setCompanyName(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="Your company name"
+                        autoComplete="organization"
+                        required
+                        disabled={
+                          submitting
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Business type */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label>
+                      Business type
+                    </label>
+
+                    <div
+                      className={
+                        styles.businessTypeGrid
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={`${styles.businessTypeOption} ${
+                          businessType ===
+                          "product"
+                            ? styles.businessTypeActive
+                            : ""
+                        }`}
+                        onClick={() =>
+                          setBusinessType(
+                            "product",
+                          )
+                        }
+                        disabled={
+                          submitting
+                        }
+                      >
+                        <span
+                          className={
+                            styles.businessTypeIcon
+                          }
+                        >
+                          📦
+                        </span>
+
+                        <span>
+                          <strong>
+                            Products
+                          </strong>
+
+                          <small>
+                            Inventory &amp;
+                            product-based
+                            business
+                          </small>
+                        </span>
+
+                        <span
+                          className={
+                            styles.businessTypeCheck
+                          }
+                        >
+                          {businessType ===
+                          "product"
+                            ? "✓"
+                            : ""}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`${styles.businessTypeOption} ${
+                          businessType ===
+                          "service"
+                            ? styles.businessTypeActive
+                            : ""
+                        }`}
+                        onClick={() =>
+                          setBusinessType(
+                            "service",
+                          )
+                        }
+                        disabled={
+                          submitting
+                        }
+                      >
+                        <span
+                          className={
+                            styles.businessTypeIcon
+                          }
+                        >
+                          🔧
+                        </span>
+
+                        <span>
+                          <strong>
+                            Services
+                          </strong>
+
+                          <small>
+                            Service &amp;
+                            operations-based
+                            business
+                          </small>
+                        </span>
+
+                        <span
+                          className={
+                            styles.businessTypeCheck
+                          }
+                        >
+                          {businessType ===
+                          "service"
+                            ? "✓"
+                            : ""}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Phone */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label htmlFor="phone">
+                      Business phone
+                      <span
+                        className={
+                          styles.optional
+                        }
+                      >
+                        Optional
+                      </span>
+                    </label>
+
+                    <div
+                      className={
+                        styles.inputWrapper
+                      }
+                    >
+                      <input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        value={phone}
+                        onChange={(
+                          event,
+                        ) =>
+                          setPhone(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="+971 50 000 0000"
+                        autoComplete="tel"
+                        disabled={
+                          submitting
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Country + City */}
+                  <div
+                    className={
+                      styles.formRow
+                    }
+                  >
+                    <div
+                      className={
+                        styles.formField
+                      }
+                    >
+                      <label htmlFor="country">
+                        Country
+                      </label>
+
+                      <div
+                        className={
+                          styles.inputWrapper
+                        }
+                      >
+                        <input
+                          id="country"
+                          name="country"
+                          type="text"
+                          value={
+                            country
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setCountry(
+                              event.target
+                                .value,
+                            )
+                          }
+                          autoComplete="country-name"
+                          disabled={
+                            submitting
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      className={
+                        styles.formField
+                      }
+                    >
+                      <label htmlFor="city">
+                        City
+                        <span
+                          className={
+                            styles.optional
+                          }
+                        >
+                          Optional
+                        </span>
+                      </label>
+
+                      <div
+                        className={
+                          styles.inputWrapper
+                        }
+                      >
+                        <input
+                          id="city"
+                          name="city"
+                          type="text"
+                          value={city}
+                          onChange={(
+                            event,
+                          ) =>
+                            setCity(
+                              event.target
+                                .value,
+                            )
+                          }
+                          placeholder="Dubai"
+                          autoComplete="address-level2"
+                          disabled={
+                            submitting
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label htmlFor="address">
+                      Business address
+                      <span
+                        className={
+                          styles.optional
+                        }
+                      >
+                        Optional
+                      </span>
+                    </label>
+
+                    <div
+                      className={
+                        styles.inputWrapper
+                      }
+                    >
+                      <input
+                        id="address"
+                        name="address"
+                        type="text"
+                        value={address}
+                        onChange={(
+                          event,
+                        ) =>
+                          setAddress(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="Street, building, area"
+                        autoComplete="street-address"
+                        disabled={
+                          submitting
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* TRN */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label htmlFor="trnNumber">
+                      TRN number
+                      <span
+                        className={
+                          styles.optional
+                        }
+                      >
+                        Optional
+                      </span>
+                    </label>
+
+                    <div
+                      className={
+                        styles.inputWrapper
+                      }
+                    >
+                      <input
+                        id="trnNumber"
+                        name="trnNumber"
+                        type="text"
+                        value={
+                          trnNumber
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setTrnNumber(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="Tax registration number"
+                        disabled={
+                          submitting
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Trade license */}
+                  <div
+                    className={
+                      styles.formField
+                    }
+                  >
+                    <label htmlFor="tradeLicenseNumber">
+                      Trade license number
+                      <span
+                        className={
+                          styles.optional
+                        }
+                      >
+                        Optional
+                      </span>
+                    </label>
+
+                    <div
+                      className={
+                        styles.inputWrapper
+                      }
+                    >
+                      <input
+                        id="tradeLicenseNumber"
+                        name="tradeLicenseNumber"
+                        type="text"
+                        value={
+                          tradeLicenseNumber
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setTradeLicenseNumber(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="Trade license number"
+                        disabled={
+                          submitting
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Error */}
+                  {error && (
+                    <div
+                      className={
+                        styles.errorBox
+                      }
+                      role="alert"
+                    >
+                      <span
+                        className={
+                          styles.errorIcon
+                        }
+                      >
+                        !
+                      </span>
+
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  {/* Submit */}
                   <button
-                    type="button"
-                    className={`${styles.businessTypeOption} ${
-                      businessType ===
-                      "product"
-                        ? styles.businessTypeActive
-                        : ""
-                    }`}
-                    onClick={() =>
-                      setBusinessType(
-                        "product",
-                      )
+                    type="submit"
+                    className={
+                      styles.submitButton
                     }
                     disabled={
                       submitting
                     }
                   >
-                    <span
-                      className={
-                        styles.businessTypeIcon
-                      }
-                    >
-                      📦
-                    </span>
+                    {submitting ? (
+                      <>
+                        <span
+                          className={
+                            styles.buttonSpinner
+                          }
+                          aria-hidden="true"
+                        />
 
-                    <span>
-                      <strong>
-                        Products
-                      </strong>
+                        Creating your
+                        workspace...
+                      </>
+                    ) : (
+                      <>
+                        Start my 14-day free
+                        trial
 
-                      <small>
-                        Inventory &amp;
-                        product-based
-                        business
-                      </small>
-                    </span>
-
-                    <span
-                      className={
-                        styles.businessTypeCheck
-                      }
-                    >
-                      {businessType ===
-                      "product"
-                        ? "✓"
-                        : ""}
-                    </span>
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden="true"
+                        >
+                          <path d="M5 12h14" />
+                          <path d="m13 6 6 6-6 6" />
+                        </svg>
+                      </>
+                    )}
                   </button>
 
-                  <button
-                    type="button"
-                    className={`${styles.businessTypeOption} ${
-                      businessType ===
-                      "service"
-                        ? styles.businessTypeActive
-                        : ""
-                    }`}
-                    onClick={() =>
-                      setBusinessType(
-                        "service",
-                      )
-                    }
-                    disabled={
-                      submitting
-                    }
-                  >
-                    <span
-                      className={
-                        styles.businessTypeIcon
-                      }
-                    >
-                      🔧
-                    </span>
-
-                    <span>
-                      <strong>
-                        Services
-                      </strong>
-
-                      <small>
-                        Service &amp;
-                        operations-based
-                        business
-                      </small>
-                    </span>
-
-                    <span
-                      className={
-                        styles.businessTypeCheck
-                      }
-                    >
-                      {businessType ===
-                      "service"
-                        ? "✓"
-                        : ""}
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Phone */}
-              <div
-                className={
-                  styles.formField
-                }
-              >
-                <label htmlFor="phone">
-                  Business phone
-                  <span
+                  <p
                     className={
-                      styles.optional
+                      styles.formNote
                     }
                   >
-                    Optional
-                  </span>
-                </label>
-
-                <div
-                  className={
-                    styles.inputWrapper
-                  }
-                >
-                  <input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(event) =>
-                      setPhone(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="+971 50 000 0000"
-                    autoComplete="tel"
-                    disabled={submitting}
-                  />
-                </div>
-              </div>
-
-              {/* Country + City */}
-              <div
-                className={
-                  styles.formRow
-                }
-              >
-                <div
-                  className={
-                    styles.formField
-                  }
-                >
-                  <label htmlFor="country">
-                    Country
-                  </label>
-
-                  <div
-                    className={
-                      styles.inputWrapper
-                    }
-                  >
-                    <input
-                      id="country"
-                      name="country"
-                      type="text"
-                      value={country}
-                      onChange={(event) =>
-                        setCountry(
-                          event.target.value,
-                        )
-                      }
-                      autoComplete="country-name"
-                      disabled={
-                        submitting
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div
-                  className={
-                    styles.formField
-                  }
-                >
-                  <label htmlFor="city">
-                    City
-                    <span
-                      className={
-                        styles.optional
-                      }
-                    >
-                      Optional
-                    </span>
-                  </label>
-
-                  <div
-                    className={
-                      styles.inputWrapper
-                    }
-                  >
-                    <input
-                      id="city"
-                      name="city"
-                      type="text"
-                      value={city}
-                      onChange={(event) =>
-                        setCity(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="Dubai"
-                      autoComplete="address-level2"
-                      disabled={
-                        submitting
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Address */}
-              <div
-                className={
-                  styles.formField
-                }
-              >
-                <label htmlFor="address">
-                  Business address
-                  <span
-                    className={
-                      styles.optional
-                    }
-                  >
-                    Optional
-                  </span>
-                </label>
-
-                <div
-                  className={
-                    styles.inputWrapper
-                  }
-                >
-                  <input
-                    id="address"
-                    name="address"
-                    type="text"
-                    value={address}
-                    onChange={(event) =>
-                      setAddress(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Street, building, area"
-                    autoComplete="street-address"
-                    disabled={submitting}
-                  />
-                </div>
-              </div>
-
-              {/* TRN */}
-              <div
-                className={
-                  styles.formField
-                }
-              >
-                <label htmlFor="trnNumber">
-                  TRN number
-                  <span
-                    className={
-                      styles.optional
-                    }
-                  >
-                    Optional
-                  </span>
-                </label>
-
-                <div
-                  className={
-                    styles.inputWrapper
-                  }
-                >
-                  <input
-                    id="trnNumber"
-                    name="trnNumber"
-                    type="text"
-                    value={trnNumber}
-                    onChange={(event) =>
-                      setTrnNumber(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Tax registration number"
-                    disabled={submitting}
-                  />
-                </div>
-              </div>
-
-              {/* Trade license */}
-              <div
-                className={
-                  styles.formField
-                }
-              >
-                <label htmlFor="tradeLicenseNumber">
-                  Trade license number
-                  <span
-                    className={
-                      styles.optional
-                    }
-                  >
-                    Optional
-                  </span>
-                </label>
-
-                <div
-                  className={
-                    styles.inputWrapper
-                  }
-                >
-                  <input
-                    id="tradeLicenseNumber"
-                    name="tradeLicenseNumber"
-                    type="text"
-                    value={
-                      tradeLicenseNumber
-                    }
-                    onChange={(event) =>
-                      setTradeLicenseNumber(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Trade license number"
-                    disabled={submitting}
-                  />
-                </div>
-              </div>
-
-              {/* Error */}
-              {error && (
-                <div
-                  className={
-                    styles.errorBox
-                  }
-                  role="alert"
-                >
-                  <span
-                    className={
-                      styles.errorIcon
-                    }
-                  >
-                    !
-                  </span>
-
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                className={
-                  styles.submitButton
-                }
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <>
-                    <span
-                      className={
-                        styles.buttonSpinner
-                      }
-                      aria-hidden="true"
-                    />
-
-                    Creating your
-                    workspace...
-                  </>
-                ) : (
-                  <>
-                    Start my 14-day free
-                    trial
-
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                    >
-                      <path d="M5 12h14" />
-                      <path d="m13 6 6 6-6 6" />
-                    </svg>
-                  </>
-                )}
-              </button>
-
-              <p
-                className={
-                  styles.formNote
-                }
-              >
-                No credit card required.
-                Your 14-day trial starts
-                when your workspace is
-                created.
-              </p>
-            </form>
+                    No credit card required.
+                    Your 14-day trial starts
+                    when your workspace is
+                    created.
+                  </p>
+                </form>
+              </>
+            )}
           </div>
         </div>
       </section>
