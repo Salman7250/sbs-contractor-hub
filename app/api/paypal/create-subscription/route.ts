@@ -35,12 +35,12 @@ async function getPayPalAccessToken() {
 
   if (!clientId || !clientSecret) {
     throw new Error(
-      "PayPal credentials are not configured."
+      "PayPal credentials are not configured.",
     );
   }
 
   const credentials = Buffer.from(
-    `${clientId}:${clientSecret}`
+    `${clientId}:${clientSecret}`,
   ).toString("base64");
 
   const response = await fetch(
@@ -54,14 +54,14 @@ async function getPayPalAccessToken() {
       },
       body: "grant_type=client_credentials",
       cache: "no-store",
-    }
+    },
   );
 
   if (!response.ok) {
     const text = await response.text();
 
     throw new Error(
-      `Unable to authenticate with PayPal: ${text}`
+      `Unable to authenticate with PayPal: ${text}`,
     );
   }
 
@@ -70,7 +70,7 @@ async function getPayPalAccessToken() {
 
   if (!data.access_token) {
     throw new Error(
-      "PayPal did not return an access token."
+      "PayPal did not return an access token.",
     );
   }
 
@@ -78,7 +78,7 @@ async function getPayPalAccessToken() {
 }
 
 export async function POST(
-  request: NextRequest
+  request: NextRequest,
 ) {
   try {
     const supabase = await createClient();
@@ -94,7 +94,7 @@ export async function POST(
           error:
             "You must be signed in to continue.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -108,24 +108,25 @@ export async function POST(
       body.billingCycle === "yearly"
         ? "yearly"
         : body.billingCycle === "monthly"
-        ? "monthly"
-        : null;
+          ? "monthly"
+          : null;
 
     if (!planSlug) {
       return NextResponse.json(
         {
           error: "A plan is required.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!billingCycle) {
       return NextResponse.json(
         {
-          error: "A valid billing cycle is required.",
+          error:
+            "A valid billing cycle is required.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -144,7 +145,7 @@ export async function POST(
         `
           company_id,
           role
-        `
+        `,
       )
       .eq("user_id", user.id)
       .order("created_at", {
@@ -159,7 +160,7 @@ export async function POST(
           error:
             "Unable to determine your business workspace.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -169,12 +170,12 @@ export async function POST(
           error:
             "Your business workspace has not been created yet.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     /*
-     * Only the owner should start the subscription.
+     * Only the workspace owner can start billing.
      */
 
     if (membership.role !== "owner") {
@@ -183,20 +184,17 @@ export async function POST(
           error:
             "Only the workspace owner can activate billing.",
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
+
+    const admin = createAdminClient();
 
     /*
      * ---------------------------------------------------------
      * Resolve plan SERVER-SIDE.
-     *
-     * Never trust price or PayPal plan IDs supplied by the
-     * browser.
      * ---------------------------------------------------------
      */
-
-    const admin = createAdminClient();
 
     const {
       data: plan,
@@ -214,7 +212,7 @@ export async function POST(
           is_active,
           paypal_monthly_plan_id,
           paypal_yearly_plan_id
-        `
+        `,
       )
       .eq("slug", planSlug)
       .eq("is_active", true)
@@ -223,7 +221,7 @@ export async function POST(
     if (planError) {
       console.error(
         "Plan lookup error:",
-        planError
+        planError,
       );
 
       return NextResponse.json(
@@ -231,7 +229,7 @@ export async function POST(
           error:
             "Unable to verify the selected plan.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -241,12 +239,12 @@ export async function POST(
           error:
             "The selected plan is not available.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     /*
-     * Enterprise does not use the normal PayPal checkout.
+     * Enterprise uses a separate sales flow.
      */
 
     if (plan.slug === "enterprise") {
@@ -255,7 +253,7 @@ export async function POST(
           error:
             "Enterprise subscriptions require contacting our team.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -275,28 +273,38 @@ export async function POST(
           error:
             `PayPal is not configured for the ${plan.name} ${billingCycle} plan.`,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    if (amount === null || amount === undefined) {
+    if (
+      amount === null ||
+      amount === undefined
+    ) {
       return NextResponse.json(
         {
           error:
             "The selected plan does not have a valid price.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     /*
      * ---------------------------------------------------------
-     * Prevent duplicate pending/active subscriptions.
+     * Find the company's existing subscription.
+     *
+     * IMPORTANT:
+     * A trialing subscription does NOT block checkout.
+     *
+     * The customer is allowed to subscribe before the trial
+     * ends. The trial remains in the database until PayPal
+     * activates the new paid subscription.
      * ---------------------------------------------------------
      */
 
     const {
-      data: existingSubscription,
+      data: existingSubscriptions,
       error: existingError,
     } = await admin
       .from("subscriptions")
@@ -304,28 +312,29 @@ export async function POST(
         `
           id,
           status,
-          provider_subscription_id
-        `
+          provider_subscription_id,
+          plan_id,
+          billing_cycle
+        `,
       )
       .eq(
         "company_id",
-        membership.company_id
+        membership.company_id,
       )
       .in("status", [
+        "trialing",
         "pending",
         "active",
         "approved",
       ])
       .order("created_at", {
         ascending: false,
-      })
-      .limit(1)
-      .maybeSingle();
+      });
 
     if (existingError) {
       console.error(
         "Existing subscription lookup error:",
-        existingError
+        existingError,
       );
 
       return NextResponse.json(
@@ -333,23 +342,77 @@ export async function POST(
           error:
             "Unable to check your current subscription.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    if (
-      existingSubscription?.status ===
-        "active" ||
-      existingSubscription?.status ===
-        "approved"
-    ) {
+    const activeSubscription =
+      existingSubscriptions?.find(
+        (subscription) =>
+          subscription.status ===
+            "active" ||
+          subscription.status ===
+            "approved",
+      );
+
+    if (activeSubscription) {
       return NextResponse.json(
         {
           error:
             "Your workspace already has an active subscription.",
         },
-        { status: 409 }
+        { status: 409 },
       );
+    }
+
+    /*
+     * If a pending PayPal subscription already exists,
+     * don't create another one.
+     *
+     * This protects against double-clicks and users
+     * returning to the billing page while checkout is
+     * already waiting for approval.
+     */
+
+    const existingPending =
+      existingSubscriptions?.find(
+        (subscription) =>
+          subscription.status ===
+          "pending",
+      );
+
+    if (
+      existingPending?.provider_subscription_id
+    ) {
+      /*
+       * We intentionally do not create another local
+       * subscription here.
+       *
+       * However, because the browser needs an approval
+       * URL and that URL is not stored reliably in the
+       * subscriptions table, we cancel the stale pending
+       * record and create a fresh checkout below.
+       *
+       * The old pending record remains in the database.
+       */
+
+      await admin
+        .from("subscriptions")
+        .update({
+          status: "canceled",
+          canceled_at:
+            new Date().toISOString(),
+          updated_at:
+            new Date().toISOString(),
+          provider_metadata: {
+            reason:
+              "Replaced by a new checkout attempt",
+          },
+        })
+        .eq(
+          "id",
+          existingPending.id,
+        );
     }
 
     /*
@@ -358,39 +421,48 @@ export async function POST(
      * ---------------------------------------------------------
      */
 
-    const { data: localSubscription, error: insertError } =
-      await admin
-        .from("subscriptions")
-        .insert({
-          company_id:
-            membership.company_id,
-          plan_id: plan.id,
-          status: "pending",
+    const {
+      data: localSubscription,
+      error: insertError,
+    } = await admin
+      .from("subscriptions")
+      .insert({
+        company_id:
+          membership.company_id,
+        plan_id: plan.id,
+        status: "pending",
+        billing_cycle: billingCycle,
+        amount,
+        base_amount: amount,
+        discount_value: 0,
+        price_override: false,
+        currency: plan.currency,
+        provider: "paypal",
+        provider_metadata: {
+          created_by_user_id: user.id,
+          plan_slug: plan.slug,
           billing_cycle: billingCycle,
-          amount: amount,
-          base_amount: amount,
-          discount_value: 0,
-          price_override: false,
-          currency: plan.currency,
-          provider: "paypal",
-          provider_metadata: {
-            created_by_user_id: user.id,
-            plan_slug: plan.slug,
-            billing_cycle: billingCycle,
-          },
-          cancel_at_period_end: false,
-        })
-        .select(
-          `
-            id
-          `
-        )
-        .single();
+          replacing_trial:
+            Boolean(
+              existingSubscriptions?.some(
+                (subscription) =>
+                  subscription.status ===
+                  "trialing",
+              ),
+            ),
+        },
+        cancel_at_period_end: false,
+      })
+      .select("id")
+      .single();
 
-    if (insertError || !localSubscription) {
+    if (
+      insertError ||
+      !localSubscription
+    ) {
       console.error(
         "Subscription insert error:",
-        insertError
+        insertError,
       );
 
       return NextResponse.json(
@@ -398,13 +470,13 @@ export async function POST(
           error:
             "Unable to create the subscription.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     /*
      * ---------------------------------------------------------
-     * PayPal subscription.
+     * Create PayPal subscription.
      * ---------------------------------------------------------
      */
 
@@ -417,14 +489,10 @@ export async function POST(
       "http://localhost:3000";
 
     const returnUrl =
-      `${origin}/billing/success?subscription_id=${encodeURIComponent(
-        localSubscription.id
-      )}`;
+  `${origin}/billing/paypal/success`;
 
-    const cancelUrl =
-      `${origin}/billing/cancel?subscription_id=${encodeURIComponent(
-        localSubscription.id
-      )}`;
+const cancelUrl =
+  `${origin}/billing/paypal/cancel`;
 
     const paypalResponse =
       await fetch(
@@ -433,9 +501,11 @@ export async function POST(
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
             Accept: "application/json",
-            Prefer: "return=representation",
+            Prefer:
+              "return=representation",
           },
           body: JSON.stringify({
             plan_id: paypalPlanId,
@@ -461,7 +531,7 @@ export async function POST(
             },
           }),
           cache: "no-store",
-        }
+        },
       );
 
     if (!paypalResponse.ok) {
@@ -470,13 +540,15 @@ export async function POST(
 
       console.error(
         "PayPal subscription creation failed:",
-        text
+        text,
       );
 
       await admin
         .from("subscriptions")
         .update({
           status: "failed",
+          updated_at:
+            new Date().toISOString(),
           provider_metadata: {
             created_by_user_id:
               user.id,
@@ -488,7 +560,7 @@ export async function POST(
         })
         .eq(
           "id",
-          localSubscription.id
+          localSubscription.id,
         );
 
       return NextResponse.json(
@@ -496,7 +568,7 @@ export async function POST(
           error:
             "PayPal could not start the subscription. Please try again.",
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 
@@ -504,20 +576,62 @@ export async function POST(
       (await paypalResponse.json()) as PayPalSubscriptionResponse;
 
     if (!paypalSubscription.id) {
+      await admin
+        .from("subscriptions")
+        .update({
+          status: "failed",
+          updated_at:
+            new Date().toISOString(),
+          provider_metadata: {
+            created_by_user_id:
+              user.id,
+            plan_slug: plan.slug,
+            billing_cycle:
+              billingCycle,
+            paypal_error:
+              "PayPal did not return a subscription ID.",
+          },
+        })
+        .eq(
+          "id",
+          localSubscription.id,
+        );
+
       throw new Error(
-        "PayPal did not return a subscription ID."
+        "PayPal did not return a subscription ID.",
       );
     }
 
     const approvalUrl =
       paypalSubscription.links?.find(
         (link) =>
-          link.rel === "approve"
+          link.rel === "approve",
       )?.href;
 
     if (!approvalUrl) {
+      await admin
+        .from("subscriptions")
+        .update({
+          status: "failed",
+          updated_at:
+            new Date().toISOString(),
+          provider_metadata: {
+            created_by_user_id:
+              user.id,
+            plan_slug: plan.slug,
+            billing_cycle:
+              billingCycle,
+            paypal_error:
+              "PayPal did not return an approval URL.",
+          },
+        })
+        .eq(
+          "id",
+          localSubscription.id,
+        );
+
       throw new Error(
-        "PayPal did not return an approval URL."
+        "PayPal did not return an approval URL.",
       );
     }
 
@@ -527,35 +641,44 @@ export async function POST(
      * ---------------------------------------------------------
      */
 
-    const { error: updateError } =
-      await admin
-        .from("subscriptions")
-        .update({
-          provider:
-            "paypal",
-          provider_subscription_id:
-            paypalSubscription.id,
-          provider_metadata: {
-            created_by_user_id:
-              user.id,
-            plan_slug:
-              plan.slug,
-            billing_cycle:
-              billingCycle,
-            paypal_status:
-              paypalSubscription.status ??
-              "APPROVAL_PENDING",
-          },
-        })
-        .eq(
-          "id",
-          localSubscription.id
-        );
+    const {
+      error: updateError,
+    } = await admin
+      .from("subscriptions")
+      .update({
+        provider: "paypal",
+        provider_subscription_id:
+          paypalSubscription.id,
+        updated_at:
+          new Date().toISOString(),
+        provider_metadata: {
+          created_by_user_id:
+            user.id,
+          plan_slug: plan.slug,
+          billing_cycle:
+            billingCycle,
+          paypal_status:
+            paypalSubscription.status ??
+            "APPROVAL_PENDING",
+          replacing_trial:
+            Boolean(
+              existingSubscriptions?.some(
+                (subscription) =>
+                  subscription.status ===
+                  "trialing",
+              ),
+            ),
+        },
+      })
+      .eq(
+        "id",
+        localSubscription.id,
+      );
 
     if (updateError) {
       console.error(
         "Subscription update error:",
-        updateError
+        updateError,
       );
     }
 
@@ -570,7 +693,7 @@ export async function POST(
   } catch (error) {
     console.error(
       "Create PayPal subscription error:",
-      error
+      error,
     );
 
     return NextResponse.json(
@@ -580,7 +703,7 @@ export async function POST(
             ? error.message
             : "Unable to start PayPal checkout.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

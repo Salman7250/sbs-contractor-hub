@@ -1,4 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type PayPalWebhook = {
@@ -24,13 +27,13 @@ async function getPayPalAccessToken() {
 
   if (!clientId || !clientSecret) {
     throw new Error(
-      "PayPal credentials are not configured."
+      "PayPal credentials are not configured.",
     );
   }
 
   const credentials =
     Buffer.from(
-      `${clientId}:${clientSecret}`
+      `${clientId}:${clientSecret}`,
     ).toString("base64");
 
   const response =
@@ -47,12 +50,12 @@ async function getPayPalAccessToken() {
         body:
           "grant_type=client_credentials",
         cache: "no-store",
-      }
+      },
     );
 
   if (!response.ok) {
     throw new Error(
-      "Unable to authenticate with PayPal."
+      "Unable to authenticate with PayPal.",
     );
   }
 
@@ -63,7 +66,7 @@ async function getPayPalAccessToken() {
 
   if (!data.access_token) {
     throw new Error(
-      "PayPal access token missing."
+      "PayPal access token missing.",
     );
   }
 
@@ -72,40 +75,40 @@ async function getPayPalAccessToken() {
 
 async function verifyWebhookSignature(
   request: NextRequest,
-  body: string
+  body: string,
 ) {
   const webhookId =
     process.env.PAYPAL_WEBHOOK_ID;
 
   if (!webhookId) {
     throw new Error(
-      "PAYPAL_WEBHOOK_ID is not configured."
+      "PAYPAL_WEBHOOK_ID is not configured.",
     );
   }
 
   const transmissionId =
     request.headers.get(
-      "paypal-transmission-id"
+      "paypal-transmission-id",
     );
 
   const transmissionTime =
     request.headers.get(
-      "paypal-transmission-time"
+      "paypal-transmission-time",
     );
 
   const certUrl =
     request.headers.get(
-      "paypal-cert-url"
+      "paypal-cert-url",
     );
 
   const authAlgo =
     request.headers.get(
-      "paypal-auth-algo"
+      "paypal-auth-algo",
     );
 
   const transmissionSig =
     request.headers.get(
-      "paypal-transmission-sig"
+      "paypal-transmission-sig",
     );
 
   if (
@@ -146,7 +149,7 @@ async function verifyWebhookSignature(
             JSON.parse(body),
         }),
         cache: "no-store",
-      }
+      },
     );
 
   if (!response.ok) {
@@ -165,7 +168,7 @@ async function verifyWebhookSignature(
 }
 
 function getString(
-  value: unknown
+  value: unknown,
 ) {
   return typeof value === "string"
     ? value
@@ -173,7 +176,7 @@ function getString(
 }
 
 function getNumber(
-  value: unknown
+  value: unknown,
 ) {
   if (
     typeof value === "number"
@@ -196,7 +199,7 @@ function getNumber(
 }
 
 export async function POST(
-  request: NextRequest
+  request: NextRequest,
 ) {
   const admin =
     createAdminClient();
@@ -209,14 +212,14 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Verify that the webhook really came from PayPal.
+     * Verify PayPal signature.
      * ---------------------------------------------------------
      */
 
     const verified =
       await verifyWebhookSignature(
         request,
-        rawBody
+        rawBody,
       );
 
     if (!verified) {
@@ -225,13 +228,13 @@ export async function POST(
           error:
             "Invalid PayPal webhook signature.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     const event =
       JSON.parse(
-        rawBody
+        rawBody,
       ) as PayPalWebhook;
 
     if (!event.id) {
@@ -240,7 +243,7 @@ export async function POST(
           error:
             "Webhook event ID is missing.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -253,33 +256,36 @@ export async function POST(
 
     const resourceId =
       getString(
-        resource.id
+        resource.id,
       );
 
     /*
      * ---------------------------------------------------------
      * Idempotency.
-     *
-     * PayPal can send the same event more than once.
      * ---------------------------------------------------------
      */
 
     const {
       data: existingEvent,
-      error: existingEventError,
+      error:
+        existingEventError,
     } = await admin
-      .from("paypal_webhook_events")
-      .select("id, status")
+      .from(
+        "paypal_webhook_events",
+      )
+      .select(
+        "id, status",
+      )
       .eq(
         "provider_event_id",
-        event.id
+        event.id,
       )
       .maybeSingle();
 
     if (existingEventError) {
       console.error(
         "Webhook event lookup error:",
-        existingEventError
+        existingEventError,
       );
     }
 
@@ -292,15 +298,18 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Store the event before processing.
+     * Store webhook event.
      * ---------------------------------------------------------
      */
 
     const {
       data: webhookEvent,
-      error: webhookInsertError,
+      error:
+        webhookInsertError,
     } = await admin
-      .from("paypal_webhook_events")
+      .from(
+        "paypal_webhook_events",
+      )
       .insert({
         provider_event_id:
           event.id,
@@ -318,10 +327,6 @@ export async function POST(
       .single();
 
     if (webhookInsertError) {
-      /*
-       * A concurrent webhook may have inserted the event.
-       * Return success so PayPal does not repeatedly retry it.
-       */
       if (
         webhookInsertError.code ===
         "23505"
@@ -337,55 +342,104 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Locate the SBS subscription.
+     * Find the SBS subscription.
      *
-     * Our create-subscription route stores the local SBS
-     * subscription ID inside PayPal custom_id.
+     * create-subscription stores our local subscription ID
+     * inside PayPal custom_id.
      * ---------------------------------------------------------
      */
 
     const customId =
       getString(
-        resource.custom_id
+        resource.custom_id,
       );
 
-    let subscription = null;
+    let subscription:
+      | {
+          id: string;
+          company_id: string;
+          plan_id: string;
+          status: string;
+          billing_cycle: string;
+          amount: number;
+          currency: string;
+        }
+      | null = null;
 
     if (customId) {
-      const result =
-        await admin
-          .from("subscriptions")
-          .select(
-            `
-              id,
-              company_id,
-              plan_id,
-              status,
-              billing_cycle,
-              amount,
-              currency
-            `
-          )
-          .eq(
-            "id",
-            customId
-          )
-          .maybeSingle();
+      const {
+        data: localSubscription,
+      } = await admin
+        .from("subscriptions")
+        .select(
+          `
+            id,
+            company_id,
+            plan_id,
+            status,
+            billing_cycle,
+            amount,
+            currency
+          `,
+        )
+        .eq(
+          "id",
+          customId,
+        )
+        .maybeSingle();
 
       subscription =
-        result.data;
+        localSubscription;
     }
 
     /*
-     * Fallback: locate by PayPal subscription ID.
+     * Fallback:
+     * Find using PayPal subscription ID.
      */
 
     if (
       !subscription &&
       resourceId
     ) {
-      const result =
-        await admin
+      const {
+        data: localSubscription,
+      } = await admin
+        .from("subscriptions")
+        .select(
+          `
+            id,
+            company_id,
+            plan_id,
+            status,
+            billing_cycle,
+            amount,
+            currency
+          `,
+        )
+        .eq(
+          "provider_subscription_id",
+          resourceId,
+        )
+        .maybeSingle();
+
+      subscription =
+        localSubscription;
+    }
+
+    /*
+     * Some payment events use billing_agreement_id.
+     */
+
+    if (!subscription) {
+      const billingAgreementId =
+        getString(
+          resource.billing_agreement_id,
+        );
+
+      if (billingAgreementId) {
+        const {
+          data: localSubscription,
+        } = await admin
           .from("subscriptions")
           .select(
             `
@@ -396,65 +450,28 @@ export async function POST(
               billing_cycle,
               amount,
               currency
-            `
+            `,
           )
           .eq(
             "provider_subscription_id",
-            resourceId
+            billingAgreementId,
           )
           .maybeSingle();
 
-      subscription =
-        result.data;
-    }
-
-    /*
-     * Some PayPal payment events contain a
-     * billing_agreement_id instead of resource.id.
-     */
-
-    if (!subscription) {
-      const billingAgreementId =
-        getString(
-          resource.billing_agreement_id
-        );
-
-      if (
-        billingAgreementId
-      ) {
-        const result =
-          await admin
-            .from("subscriptions")
-            .select(
-              `
-                id,
-                company_id,
-                plan_id,
-                status,
-                billing_cycle,
-                amount,
-                currency
-              `
-            )
-            .eq(
-              "provider_subscription_id",
-              billingAgreementId
-            )
-            .maybeSingle();
-
         subscription =
-          result.data;
+          localSubscription;
       }
     }
 
     /*
-     * If this event isn't related to one of our subscriptions,
-     * record it but don't fail the webhook.
+     * If unrelated to SBS, record and ignore.
      */
 
     if (!subscription) {
       await admin
-        .from("paypal_webhook_events")
+        .from(
+          "paypal_webhook_events",
+        )
         .update({
           status: "ignored",
           processed_at:
@@ -462,7 +479,7 @@ export async function POST(
         })
         .eq(
           "id",
-          webhookEvent.id
+          webhookEvent.id,
         );
 
       return NextResponse.json({
@@ -470,12 +487,6 @@ export async function POST(
         ignored: true,
       });
     }
-
-    /*
-     * ---------------------------------------------------------
-     * Subscription events
-     * ---------------------------------------------------------
-     */
 
     const subscriptionId =
       subscription.id;
@@ -485,6 +496,12 @@ export async function POST(
 
     const now =
       new Date().toISOString();
+
+    /*
+     * ---------------------------------------------------------
+     * PayPal subscription events.
+     * ---------------------------------------------------------
+     */
 
     const activeEvents =
       new Set([
@@ -513,82 +530,245 @@ export async function POST(
         "BILLING.SUBSCRIPTION.EXPIRED",
       ]);
 
+    /*
+     * ---------------------------------------------------------
+     * ACTIVATED
+     *
+     * THIS IS THE IMPORTANT PART FOR THE TRIAL FLOW.
+     *
+     * When the customer pays during their trial:
+     *
+     * OLD:
+     *   trialing
+     *
+     * NEW:
+     *   pending -> active
+     *
+     * The old trial is preserved in the database but is no
+     * longer considered the company's active subscription.
+     * ---------------------------------------------------------
+     */
+
     if (
       activeEvents.has(
-        eventType
+        eventType,
       )
     ) {
-      await admin
+      /*
+       * First close any other active/trialing subscription
+       * belonging to this company.
+       *
+       * We exclude the newly activated subscription.
+       */
+
+      const {
+        data:
+          previousSubscriptions,
+        error:
+          previousSubscriptionError,
+      } = await admin
+        .from("subscriptions")
+        .select(
+          `
+            id,
+            status
+          `,
+        )
+        .eq(
+          "company_id",
+          subscription.company_id,
+        )
+        .neq(
+          "id",
+          subscriptionId,
+        )
+        .in("status", [
+          "trialing",
+          "pending",
+          "active",
+          "approved",
+        ]);
+
+      if (
+        previousSubscriptionError
+      ) {
+        throw previousSubscriptionError;
+      }
+
+      /*
+       * Preserve history:
+       *
+       * trialing -> expired
+       *
+       * pending -> canceled
+       *
+       * active/approved -> canceled
+       */
+
+      if (
+        previousSubscriptions &&
+        previousSubscriptions.length >
+          0
+      ) {
+        for (
+          const previous of
+            previousSubscriptions
+        ) {
+          const previousStatus =
+            previous.status;
+
+          const nextStatus =
+            previousStatus ===
+            "trialing"
+              ? "expired"
+              : "canceled";
+
+          await admin
+            .from("subscriptions")
+            .update({
+              status:
+                nextStatus,
+              canceled_at:
+                previousStatus ===
+                "trialing"
+                  ? null
+                  : now,
+              updated_at:
+                now,
+              provider_metadata: {
+                replaced_by_subscription_id:
+                  subscriptionId,
+                replacement_reason:
+                  previousStatus ===
+                  "trialing"
+                    ? "Trial converted to paid subscription"
+                    : "Replaced by newly activated subscription",
+              },
+            })
+            .eq(
+              "id",
+              previous.id,
+            );
+        }
+      }
+
+      /*
+       * Activate the newly purchased subscription.
+       */
+
+      const billingInfo =
+        resource.billing_info;
+
+      let nextBillingTime:
+        | string
+        | null = null;
+
+      if (
+        billingInfo &&
+        typeof billingInfo ===
+          "object"
+      ) {
+        nextBillingTime =
+          getString(
+            (
+              billingInfo as Record<
+                string,
+                unknown
+              >
+            ).next_billing_time,
+          );
+      }
+
+      const startTime =
+        getString(
+          resource.start_time,
+        ) ?? now;
+
+      const {
+        error:
+          activateError,
+      } = await admin
         .from("subscriptions")
         .update({
           status: "active",
-          provider:
-            "paypal",
+          provider: "paypal",
           provider_subscription_id:
             paypalSubscriptionId,
-          started_at:
-            getString(
-              resource.start_time
-            ) ?? now,
+          started_at: startTime,
           current_period_start:
-            getString(
-              resource.start_time
-            ) ?? now,
+            startTime,
           current_period_end:
-            getString(
-              resource.billing_info &&
-                typeof resource.billing_info ===
-                  "object"
-                ? (
-                    resource.billing_info as Record<
-                      string,
-                      unknown
-                    >
-                  ).next_billing_time
-                : null
-            ),
+            nextBillingTime,
+          canceled_at: null,
+          cancel_at_period_end:
+            false,
+          updated_at: now,
           provider_metadata: {
             paypal_event:
               eventType,
             paypal_status:
               getString(
-                resource.status
+                resource.status,
+              ),
+            converted_from_trial:
+              Boolean(
+                previousSubscriptions?.some(
+                  (previous) =>
+                    previous.status ===
+                    "trialing",
+                ),
               ),
           },
         })
         .eq(
           "id",
-          subscriptionId
+          subscriptionId,
         );
 
+      if (activateError) {
+        throw activateError;
+      }
+
       /*
-       * Activate company entitlements from plan modules.
+       * -------------------------------------------------------
+       * Activate plan entitlements.
+       * -------------------------------------------------------
        */
 
       const {
         data: planModules,
+        error:
+          planModulesError,
       } = await admin
         .from("plan_modules")
         .select(
           `
             module_id
-          `
+          `,
         )
         .eq(
           "plan_id",
-          subscription.plan_id
+          subscription.plan_id,
         );
+
+      if (planModulesError) {
+        throw planModulesError;
+      }
 
       if (
         planModules &&
         planModules.length > 0
       ) {
         for (
-          const planModule of planModules
+          const planModule of
+            planModules
         ) {
-          await admin
+          const {
+            error:
+              entitlementError,
+          } = await admin
             .from(
-              "company_entitlements"
+              "company_entitlements",
             )
             .upsert(
               {
@@ -596,74 +776,86 @@ export async function POST(
                   subscription.company_id,
                 module_id:
                   planModule.module_id,
-                access: "granted",
+                access:
+                  "granted",
                 source:
                   "subscription",
                 subscription_id:
                   subscriptionId,
-                expires_at: null,
+                expires_at:
+                  null,
                 reason:
                   "Active PayPal subscription",
               },
               {
                 onConflict:
                   "company_id,module_id",
-              }
+              },
             );
+
+          if (entitlementError) {
+            throw entitlementError;
+          }
         }
       }
     } else if (
       pendingEvents.has(
-        eventType
+        eventType,
       )
     ) {
+      /*
+       * PayPal created the subscription but the customer has
+       * not completed approval yet.
+       */
+
       await admin
         .from("subscriptions")
         .update({
           status: "pending",
-          provider:
-            "paypal",
+          provider: "paypal",
           provider_subscription_id:
             paypalSubscriptionId,
+          updated_at: now,
           provider_metadata: {
             paypal_event:
               eventType,
             paypal_status:
               getString(
-                resource.status
+                resource.status,
               ),
           },
         })
         .eq(
           "id",
-          subscriptionId
+          subscriptionId,
         );
     } else if (
       suspendedEvents.has(
-        eventType
+        eventType,
       )
     ) {
       await admin
         .from("subscriptions")
         .update({
           status: "suspended",
+          updated_at: now,
           provider_metadata: {
             paypal_event:
               eventType,
             paypal_status:
               getString(
-                resource.status
+                resource.status,
               ),
           },
         })
         .eq(
           "id",
-          subscriptionId
+          subscriptionId,
         );
 
       await admin
         .from(
-          "company_entitlements"
+          "company_entitlements",
         )
         .update({
           access: "revoked",
@@ -672,11 +864,11 @@ export async function POST(
         })
         .eq(
           "subscription_id",
-          subscriptionId
+          subscriptionId,
         );
     } else if (
       cancelledEvents.has(
-        eventType
+        eventType,
       )
     ) {
       await admin
@@ -684,23 +876,24 @@ export async function POST(
         .update({
           status: "canceled",
           canceled_at: now,
+          updated_at: now,
           provider_metadata: {
             paypal_event:
               eventType,
             paypal_status:
               getString(
-                resource.status
+                resource.status,
               ),
           },
         })
         .eq(
           "id",
-          subscriptionId
+          subscriptionId,
         );
 
       await admin
         .from(
-          "company_entitlements"
+          "company_entitlements",
         )
         .update({
           access: "revoked",
@@ -709,34 +902,35 @@ export async function POST(
         })
         .eq(
           "subscription_id",
-          subscriptionId
+          subscriptionId,
         );
     } else if (
       expiredEvents.has(
-        eventType
+        eventType,
       )
     ) {
       await admin
         .from("subscriptions")
         .update({
           status: "expired",
+          updated_at: now,
           provider_metadata: {
             paypal_event:
               eventType,
             paypal_status:
               getString(
-                resource.status
+                resource.status,
               ),
           },
         })
         .eq(
           "id",
-          subscriptionId
+          subscriptionId,
         );
 
       await admin
         .from(
-          "company_entitlements"
+          "company_entitlements",
         )
         .update({
           access: "revoked",
@@ -745,13 +939,13 @@ export async function POST(
         })
         .eq(
           "subscription_id",
-          subscriptionId
+          subscriptionId,
         );
     }
 
     /*
      * ---------------------------------------------------------
-     * Payment events
+     * Payment events.
      * ---------------------------------------------------------
      */
 
@@ -766,100 +960,116 @@ export async function POST(
       new Set([
         "PAYMENT.SALE.DENIED",
         "PAYMENT.CAPTURE.DENIED",
+        "PAYMENT.CAPTURE.DECLINED",
         "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
       ]);
 
     if (
       paymentEvents.has(
-        eventType
+        eventType,
       )
     ) {
       const amount =
         getNumber(
-          resource.amount &&
-            typeof resource.amount ===
-              "object"
-            ? (
-                resource.amount as Record<
-                  string,
-                  unknown
-                >
-              ).value
-            : resource.amount
+          resource.amount ??
+            resource.gross_amount ??
+            resource.total,
         );
 
       const currency =
         getString(
-          resource.amount &&
-            typeof resource.amount ===
-              "object"
-            ? (
-                resource.amount as Record<
-                  string,
-                  unknown
-                >
-              ).currency_code
-            : null
+          resource.currency ??
+            (
+              resource.amount &&
+              typeof resource.amount ===
+                "object"
+                ? (
+                    resource.amount as Record<
+                      string,
+                      unknown
+                    >
+                  ).currency_code
+                : null
+            ),
         ) ??
         subscription.currency;
 
-      await admin
-        .from("payments")
-        .insert({
-          company_id:
-            subscription.company_id,
-          subscription_id:
-            subscriptionId,
-          provider:
-            "paypal",
-          provider_transaction_id:
-            resourceId,
-          provider_order_id:
-            getString(
-              resource.order_id
-            ),
-          amount:
-            amount ??
-            subscription.amount,
-          currency,
-          status: "completed",
-          payment_type:
-            "subscription",
-          payment_method:
-            "paypal",
-          paid_at:
-            getString(
-              resource.create_time
-            ) ?? now,
-          metadata: {
-            paypal_event:
-              eventType,
-            resource,
-          },
-        });
-
-      await admin
-        .from("subscriptions")
-        .update({
-          status: "active",
-        })
-        .eq(
-          "id",
-          subscriptionId
+      const transactionId =
+        getString(
+          resource.id,
         );
+
+      const paymentDate =
+        getString(
+          resource.create_time,
+        ) ?? now;
+
+      /*
+       * Prevent duplicate payment records.
+       */
+
+      let existingPayment = null;
+
+      if (transactionId) {
+        const {
+          data,
+        } = await admin
+          .from("payments")
+          .select("id")
+          .eq(
+            "provider",
+            "paypal",
+          )
+          .eq(
+            "provider_transaction_id",
+            transactionId,
+          )
+          .maybeSingle();
+
+        existingPayment =
+          data;
+      }
+
+      if (!existingPayment) {
+        await admin
+          .from("payments")
+          .insert({
+            company_id:
+              subscription.company_id,
+            subscription_id:
+              subscriptionId,
+            provider: "paypal",
+            provider_transaction_id:
+              transactionId,
+            provider_order_id:
+              getString(
+                resource.parent_payment,
+              ),
+            amount:
+              amount ?? 0,
+            currency,
+            status: "completed",
+            payment_type:
+              "subscription",
+            payment_method:
+              "paypal",
+            paid_at:
+              paymentDate,
+          });
+      }
     }
 
     if (
       failedPaymentEvents.has(
-        eventType
+        eventType,
       )
     ) {
       const failureReason =
         getString(
-          resource.reason_code
+          resource.reason_code,
         ) ??
         getString(
-          resource.status
+          resource.status,
         ) ??
         "PayPal payment failed.";
 
@@ -870,16 +1080,13 @@ export async function POST(
             subscription.company_id,
           subscription_id:
             subscriptionId,
-          provider:
-            "paypal",
+          provider: "paypal",
           provider_transaction_id:
             resourceId,
-          provider_order_id:
-            getString(
-              resource.order_id
-            ),
           amount:
-            subscription.amount,
+            getNumber(
+              resource.amount,
+            ) ?? 0,
           currency:
             subscription.currency,
           status: "failed",
@@ -889,12 +1096,28 @@ export async function POST(
             "paypal",
           failure_reason:
             failureReason,
-          metadata: {
+        });
+
+      await admin
+        .from("subscriptions")
+        .update({
+          status: "past_due",
+          updated_at: now,
+          provider_metadata: {
             paypal_event:
               eventType,
-            resource,
+            paypal_status:
+              getString(
+                resource.status,
+              ),
+            failure_reason:
+              failureReason,
           },
-        });
+        })
+        .eq(
+          "id",
+          subscriptionId,
+        );
     }
 
     /*
@@ -904,29 +1127,32 @@ export async function POST(
      */
 
     await admin
-      .from("paypal_webhook_events")
+      .from(
+        "paypal_webhook_events",
+      )
       .update({
         status: "processed",
-        processed_at: now,
-        error_message: null,
+        processed_at:
+          new Date().toISOString(),
       })
       .eq(
         "id",
-        webhookEvent.id
+        webhookEvent.id,
       );
 
     return NextResponse.json({
       success: true,
+      eventType,
     });
   } catch (error) {
     console.error(
-      "PayPal webhook error:",
-      error
+      "PayPal webhook processing error:",
+      error,
     );
 
     /*
-     * We intentionally return 500 so PayPal can retry the event
-     * when processing failed.
+     * We intentionally return 500 here so PayPal can retry
+     * an event that failed during processing.
      */
 
     return NextResponse.json(
@@ -936,7 +1162,7 @@ export async function POST(
             ? error.message
             : "Webhook processing failed.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
