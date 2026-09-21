@@ -6,9 +6,29 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Bell,
+  Building2,
+  CheckCircle2,
+  ChevronRight,
+  CreditCard,
+  FileText,
+  Globe2,
+  Lock,
+  Package,
+  Receipt,
+  Save,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Users,
+  WalletCards,
+  Wrench,
+} from "lucide-react";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+import styles from "./settings.module.css";
 
 type Company = {
   id: string;
@@ -17,6 +37,7 @@ type Company = {
   state: string | null;
   currency: string | null;
   timezone: string | null;
+  app_settings?: Partial<AppSettings> | null;
 };
 
 type Profile = {
@@ -33,247 +54,69 @@ type TeamMember = {
   } | null;
 };
 
-type UserPreferences = {
-  language: string;
-  dateFormat: string;
-  timeFormat: string;
-  firstDayOfWeek: string;
-  numberFormat: string;
-  taxDisplay: string;
+type AppSettings = {
+  invoicePrefix: string;
+  estimatePrefix: string;
+  salesOrderPrefix: string;
+  purchaseOrderPrefix: string;
+  defaultPaymentTerms: string;
+  defaultTaxRate: string;
+  lowStockThreshold: string;
+  inventoryNegativeStock: boolean;
+  inventoryAutoDeduct: boolean;
+  salesRequireCustomer: boolean;
+  salesAutoCreateInvoice: boolean;
+  invoiceShowCompanyAddress: boolean;
+  invoiceShowTax: boolean;
+  invoiceShowPaymentTerms: boolean;
+  notificationsEnabled: boolean;
+  lowStockNotifications: boolean;
+  overdueNotifications: boolean;
+  automationEnabled: boolean;
+  requireApprovalForDiscounts: boolean;
+  requireApprovalForStockAdjustments: boolean;
+  compactTables: boolean;
+  confirmBeforeDelete: boolean;
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+  invoicePrefix: "INV-",
+  estimatePrefix: "EST-",
+  salesOrderPrefix: "SO-",
+  purchaseOrderPrefix: "PO-",
+  defaultPaymentTerms: "Due on receipt",
+  defaultTaxRate: "0",
+  lowStockThreshold: "5",
+  inventoryNegativeStock: false,
+  inventoryAutoDeduct: true,
+  salesRequireCustomer: false,
+  salesAutoCreateInvoice: false,
+  invoiceShowCompanyAddress: true,
+  invoiceShowTax: true,
+  invoiceShowPaymentTerms: true,
+  notificationsEnabled: true,
+  lowStockNotifications: true,
+  overdueNotifications: true,
+  automationEnabled: true,
+  requireApprovalForDiscounts: false,
+  requireApprovalForStockAdjustments: true,
+  compactTables: false,
+  confirmBeforeDelete: true,
 };
 
 const ROLE_ORDER: Record<string, number> = {
   owner: 1,
   admin: 2,
-  member: 3,
-};
-
-const CURRENCIES = [
-  { code: "AED", name: "United Arab Emirates Dirham" },
-  { code: "AFN", name: "Afghan Afghani" },
-  { code: "ALL", name: "Albanian Lek" },
-  { code: "AMD", name: "Armenian Dram" },
-  { code: "ANG", name: "Netherlands Antillean Guilder" },
-  { code: "AOA", name: "Angolan Kwanza" },
-  { code: "ARS", name: "Argentine Peso" },
-  { code: "AUD", name: "Australian Dollar" },
-  { code: "AWG", name: "Aruban Florin" },
-  { code: "AZN", name: "Azerbaijani Manat" },
-  { code: "BAM", name: "Bosnia and Herzegovina Convertible Mark" },
-  { code: "BBD", name: "Barbadian Dollar" },
-  { code: "BDT", name: "Bangladeshi Taka" },
-  { code: "BGN", name: "Bulgarian Lev" },
-  { code: "BHD", name: "Bahraini Dinar" },
-  { code: "BIF", name: "Burundian Franc" },
-  { code: "BMD", name: "Bermudian Dollar" },
-  { code: "BND", name: "Brunei Dollar" },
-  { code: "BOB", name: "Bolivian Boliviano" },
-  { code: "BRL", name: "Brazilian Real" },
-  { code: "BSD", name: "Bahamian Dollar" },
-  { code: "BTN", name: "Bhutanese Ngultrum" },
-  { code: "BWP", name: "Botswana Pula" },
-  { code: "BYN", name: "Belarusian Ruble" },
-  { code: "BZD", name: "Belize Dollar" },
-  { code: "CAD", name: "Canadian Dollar" },
-  { code: "CDF", name: "Congolese Franc" },
-  { code: "CHF", name: "Swiss Franc" },
-  { code: "CLP", name: "Chilean Peso" },
-  { code: "CNY", name: "Chinese Yuan" },
-  { code: "COP", name: "Colombian Peso" },
-  { code: "CRC", name: "Costa Rican Colón" },
-  { code: "CUP", name: "Cuban Peso" },
-  { code: "CVE", name: "Cape Verdean Escudo" },
-  { code: "CZK", name: "Czech Koruna" },
-  { code: "DJF", name: "Djiboutian Franc" },
-  { code: "DKK", name: "Danish Krone" },
-  { code: "DOP", name: "Dominican Peso" },
-  { code: "DZD", name: "Algerian Dinar" },
-  { code: "EGP", name: "Egyptian Pound" },
-  { code: "ERN", name: "Eritrean Nakfa" },
-  { code: "ETB", name: "Ethiopian Birr" },
-  { code: "EUR", name: "Euro" },
-  { code: "FJD", name: "Fijian Dollar" },
-  { code: "FKP", name: "Falkland Islands Pound" },
-  { code: "GBP", name: "British Pound Sterling" },
-  { code: "GEL", name: "Georgian Lari" },
-  { code: "GHS", name: "Ghanaian Cedi" },
-  { code: "GIP", name: "Gibraltar Pound" },
-  { code: "GMD", name: "Gambian Dalasi" },
-  { code: "GNF", name: "Guinean Franc" },
-  { code: "GTQ", name: "Guatemalan Quetzal" },
-  { code: "GYD", name: "Guyanaese Dollar" },
-  { code: "HKD", name: "Hong Kong Dollar" },
-  { code: "HNL", name: "Honduran Lempira" },
-  { code: "HRK", name: "Croatian Kuna" },
-  { code: "HTG", name: "Haitian Gourde" },
-  { code: "HUF", name: "Hungarian Forint" },
-  { code: "IDR", name: "Indonesian Rupiah" },
-  { code: "ILS", name: "Israeli New Shekel" },
-  { code: "INR", name: "Indian Rupee" },
-  { code: "IQD", name: "Iraqi Dinar" },
-  { code: "IRR", name: "Iranian Rial" },
-  { code: "ISK", name: "Icelandic Króna" },
-  { code: "JMD", name: "Jamaican Dollar" },
-  { code: "JOD", name: "Jordanian Dinar" },
-  { code: "JPY", name: "Japanese Yen" },
-  { code: "KES", name: "Kenyan Shilling" },
-  { code: "KGS", name: "Kyrgyzstani Som" },
-  { code: "KHR", name: "Cambodian Riel" },
-  { code: "KMF", name: "Comorian Franc" },
-  { code: "KPW", name: "North Korean Won" },
-  { code: "KRW", name: "South Korean Won" },
-  { code: "KWD", name: "Kuwaiti Dinar" },
-  { code: "KYD", name: "Cayman Islands Dollar" },
-  { code: "KZT", name: "Kazakhstani Tenge" },
-  { code: "LAK", name: "Lao Kip" },
-  { code: "LBP", name: "Lebanese Pound" },
-  { code: "LKR", name: "Sri Lankan Rupee" },
-  { code: "LRD", name: "Liberian Dollar" },
-  { code: "LSL", name: "Lesotho Loti" },
-  { code: "LYD", name: "Libyan Dinar" },
-  { code: "MAD", name: "Moroccan Dirham" },
-  { code: "MDL", name: "Moldovan Leu" },
-  { code: "MGA", name: "Malagasy Ariary" },
-  { code: "MKD", name: "Macedonian Denar" },
-  { code: "MMK", name: "Myanmar Kyat" },
-  { code: "MNT", name: "Mongolian Tögrög" },
-  { code: "MOP", name: "Macanese Pataca" },
-  { code: "MRU", name: "Mauritanian Ouguiya" },
-  { code: "MUR", name: "Mauritian Rupee" },
-  { code: "MVR", name: "Maldivian Rufiyaa" },
-  { code: "MWK", name: "Malawian Kwacha" },
-  { code: "MXN", name: "Mexican Peso" },
-  { code: "MYR", name: "Malaysian Ringgit" },
-  { code: "MZN", name: "Mozambican Metical" },
-  { code: "NAD", name: "Namibian Dollar" },
-  { code: "NGN", name: "Nigerian Naira" },
-  { code: "NIO", name: "Nicaraguan Córdoba" },
-  { code: "NOK", name: "Norwegian Krone" },
-  { code: "NPR", name: "Nepalese Rupee" },
-  { code: "NZD", name: "New Zealand Dollar" },
-  { code: "OMR", name: "Omani Rial" },
-  { code: "PAB", name: "Panamanian Balboa" },
-  { code: "PEN", name: "Peruvian Sol" },
-  { code: "PGK", name: "Papua New Guinean Kina" },
-  { code: "PHP", name: "Philippine Peso" },
-  { code: "PKR", name: "Pakistani Rupee" },
-  { code: "PLN", name: "Polish Złoty" },
-  { code: "PYG", name: "Paraguayan Guaraní" },
-  { code: "QAR", name: "Qatari Riyal" },
-  { code: "RON", name: "Romanian Leu" },
-  { code: "RSD", name: "Serbian Dinar" },
-  { code: "RUB", name: "Russian Ruble" },
-  { code: "RWF", name: "Rwandan Franc" },
-  { code: "SAR", name: "Saudi Riyal" },
-  { code: "SBD", name: "Solomon Islands Dollar" },
-  { code: "SCR", name: "Seychellois Rupee" },
-  { code: "SDG", name: "Sudanese Pound" },
-  { code: "SEK", name: "Swedish Krona" },
-  { code: "SGD", name: "Singapore Dollar" },
-  { code: "SHP", name: "Saint Helena Pound" },
-  { code: "SLE", name: "Sierra Leonean Leone" },
-  { code: "SOS", name: "Somali Shilling" },
-  { code: "SRD", name: "Surinamese Dollar" },
-  { code: "SSP", name: "South Sudanese Pound" },
-  { code: "STN", name: "São Tomé and Príncipe Dobra" },
-  { code: "SYP", name: "Syrian Pound" },
-  { code: "SZL", name: "Eswatini Lilangeni" },
-  { code: "THB", name: "Thai Baht" },
-  { code: "TJS", name: "Tajikistani Somoni" },
-  { code: "TMT", name: "Turkmenistani Manat" },
-  { code: "TND", name: "Tunisian Dinar" },
-  { code: "TOP", name: "Tongan Paʻanga" },
-  { code: "TRY", name: "Turkish Lira" },
-  { code: "TTD", name: "Trinidad and Tobago Dollar" },
-  { code: "TWD", name: "New Taiwan Dollar" },
-  { code: "TZS", name: "Tanzanian Shilling" },
-  { code: "UAH", name: "Ukrainian Hryvnia" },
-  { code: "UGX", name: "Ugandan Shilling" },
-  { code: "USD", name: "United States Dollar" },
-  { code: "UYU", name: "Uruguayan Peso" },
-  { code: "UZS", name: "Uzbekistani Som" },
-  { code: "VES", name: "Venezuelan Bolívar" },
-  { code: "VND", name: "Vietnamese Đồng" },
-  { code: "VUV", name: "Vanuatu Vatu" },
-  { code: "WST", name: "Samoan Tala" },
-  { code: "XAF", name: "Central African CFA Franc" },
-  { code: "XCD", name: "East Caribbean Dollar" },
-  { code: "XOF", name: "West African CFA Franc" },
-  { code: "XPF", name: "CFP Franc" },
-  { code: "YER", name: "Yemeni Rial" },
-  { code: "ZAR", name: "South African Rand" },
-  { code: "ZMW", name: "Zambian Kwacha" },
-  { code: "ZWL", name: "Zimbabwean Dollar" },
-];
-
-const LANGUAGES = [
-  { code: "en-US", name: "English (United States)" },
-  { code: "en-GB", name: "English (United Kingdom)" },
-  { code: "ar", name: "Arabic" },
-  { code: "ur", name: "Urdu" },
-  { code: "de", name: "German" },
-  { code: "fr", name: "French" },
-  { code: "es", name: "Spanish" },
-  { code: "it", name: "Italian" },
-  { code: "pt", name: "Portuguese" },
-  { code: "nl", name: "Dutch" },
-  { code: "pl", name: "Polish" },
-  { code: "tr", name: "Turkish" },
-  { code: "ru", name: "Russian" },
-  { code: "zh-CN", name: "Chinese (Simplified)" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "hi", name: "Hindi" },
-  { code: "bn", name: "Bengali" },
-  { code: "id", name: "Indonesian" },
-  { code: "ms", name: "Malay" },
-  { code: "sv", name: "Swedish" },
-  { code: "da", name: "Danish" },
-  { code: "no", name: "Norwegian" },
-  { code: "fi", name: "Finnish" },
-  { code: "cs", name: "Czech" },
-  { code: "ro", name: "Romanian" },
-  { code: "uk", name: "Ukrainian" },
-];
-
-const COUNTRY_CODES = [
-  "AF","AL","DZ","AD","AO","AG","AR","AM","AU","AT","AZ","BS","BH","BD",
-  "BB","BY","BE","BZ","BJ","BT","BO","BA","BW","BR","BN","BG","BF","BI",
-  "CV","KH","CM","CA","CF","TD","CL","CN","CO","KM","CG","CD","CR","CI",
-  "HR","CU","CY","CZ","DK","DJ","DM","DO","EC","EG","SV","GQ","ER","EE",
-  "SZ","ET","FJ","FI","FR","GA","GM","GE","DE","GH","GR","GD","GT","GN",
-  "GW","GY","HT","HN","HU","IS","IN","ID","IR","IQ","IE","IL","IT","JM",
-  "JP","JO","KZ","KE","KI","KP","KR","KW","KG","LA","LV","LB","LS","LR",
-  "LY","LI","LT","LU","MG","MW","MY","MV","ML","MT","MH","MR","MU","MX",
-  "FM","MD","MC","MN","ME","MA","MZ","MM","NA","NR","NP","NL","NZ","NI",
-  "NE","NG","MK","NO","OM","PK","PW","PA","PG","PY","PE","PH","PL","PT",
-  "QA","RO","RU","RW","KN","LC","VC","WS","SM","ST","SA","SN","RS","SC",
-  "SL","SG","SK","SI","SB","SO","ZA","SS","ES","LK","SD","SR","SE","CH",
-  "SY","TW","TJ","TZ","TH","TL","TG","TO","TT","TN","TR","TM","TV","UG",
-  "UA","AE","GB","US","UY","UZ","VU","VA","VE","VN","YE","ZM","ZW",
-];
-
-const DATE_FORMATS = [
-  { value: "MM/DD/YYYY", label: "MM/DD/YYYY — 09/06/2026" },
-  { value: "DD/MM/YYYY", label: "DD/MM/YYYY — 06/09/2026" },
-  { value: "YYYY-MM-DD", label: "YYYY-MM-DD — 2026-09-06" },
-  { value: "DD MMM YYYY", label: "DD MMM YYYY — 06 Sep 2026" },
-  { value: "MMM DD, YYYY", label: "MMM DD, YYYY — Sep 06, 2026" },
-];
-
-const DEFAULT_PREFERENCES: UserPreferences = {
-  language: "en-US",
-  dateFormat: "MM/DD/YYYY",
-  timeFormat: "12h",
-  firstDayOfWeek: "Sunday",
-  numberFormat: "1,234.56",
-  taxDisplay: "exclusive",
+  manager: 3,
+  member: 4,
 };
 
 function getInitials(name: string) {
   const clean = name.trim();
 
-  if (!clean) return "U";
+  if (!clean) {
+    return "U";
+  }
 
   const parts = clean.split(/\s+/).filter(Boolean);
 
@@ -285,15 +128,22 @@ function getInitials(name: string) {
 }
 
 function formatRole(role: string) {
+  if (!role) {
+    return "Owner";
+  }
+
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-function getCountryName(code: string) {
+function getCountryName(code: string | null) {
+  if (!code) {
+    return "Not configured";
+  }
+
   try {
-    const displayNames = new Intl.DisplayNames(
-      ["en"],
-      { type: "region" }
-    );
+    const displayNames = new Intl.DisplayNames(["en"], {
+      type: "region",
+    });
 
     return displayNames.of(code) || code;
   } catch {
@@ -301,99 +151,176 @@ function getCountryName(code: string) {
   }
 }
 
-function getTimezoneList() {
-  try {
-    if (
-      typeof Intl !== "undefined" &&
-      typeof Intl.supportedValuesOf === "function"
-    ) {
-      return Intl.supportedValuesOf("timeZone");
-    }
-  } catch {
-    // Fall through to the compatibility list.
-  }
+type SettingCardProps = {
+  icon: React.ReactNode;
+  eyebrow: string;
+  title: string;
+  description: string;
+  href: string;
+  accent:
+    | "green"
+    | "blue"
+    | "purple"
+    | "amber"
+    | "slate";
+  summary?: React.ReactNode;
+};
 
-  return [
-    "Africa/Cairo",
-    "Africa/Johannesburg",
-    "Africa/Lagos",
-    "Africa/Nairobi",
-    "America/Chicago",
-    "America/Denver",
-    "America/Los_Angeles",
-    "America/New_York",
-    "America/Phoenix",
-    "America/Toronto",
-    "America/Vancouver",
-    "Asia/Dhaka",
-    "Asia/Dubai",
-    "Asia/Hong_Kong",
-    "Asia/Jakarta",
-    "Asia/Karachi",
-    "Asia/Kolkata",
-    "Asia/Riyadh",
-    "Asia/Seoul",
-    "Asia/Shanghai",
-    "Asia/Singapore",
-    "Asia/Tokyo",
-    "Australia/Melbourne",
-    "Australia/Sydney",
-    "Europe/Amsterdam",
-    "Europe/Berlin",
-    "Europe/London",
-    "Europe/Madrid",
-    "Europe/Paris",
-    "Europe/Rome",
-    "Europe/Stockholm",
-    "Pacific/Auckland",
-    "Pacific/Honolulu",
-    "Pacific/Fiji",
-    "UTC",
-  ];
+function SettingCard({
+  icon,
+  eyebrow,
+  title,
+  description,
+  href,
+  accent,
+  summary,
+}: SettingCardProps) {
+  return (
+    <Link
+      href={href}
+      className={styles.settingsLinkCard}
+    >
+      <div className={styles.settingsLinkCardTop}>
+        <div
+          className={`${styles.settingsLinkIcon} ${styles[accent]}`}
+        >
+          {icon}
+        </div>
+
+        <span className={styles.settingsLinkBadge}>
+          Open
+        </span>
+      </div>
+
+      <span className={styles.settingsLinkEyebrow}>
+        {eyebrow}
+      </span>
+
+      <h3>{title}</h3>
+
+      <p>{description}</p>
+
+      {summary && (
+        <div className={styles.settingsLinkSummary}>
+          {summary}
+        </div>
+      )}
+
+      <div className={styles.settingsLinkFooter}>
+        <span>Open settings</span>
+        <ChevronRight size={15} />
+      </div>
+    </Link>
+  );
+}
+
+type SettingSectionProps = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+};
+
+function SettingSection({
+  eyebrow,
+  title,
+  description,
+  icon,
+  children,
+}: SettingSectionProps) {
+  return (
+    <section className={styles.settingsSectionCard}>
+      <div className={styles.settingsSectionHeader}>
+        <div className={styles.settingsSectionIcon}>
+          {icon}
+        </div>
+
+        <div>
+          <span>{eyebrow}</span>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+      </div>
+
+      <div className={styles.settingsSectionBody}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+type ToggleProps = {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+};
+
+function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled = false,
+}: ToggleProps) {
+  return (
+    <div
+      className={`${styles.settingsToggleRow} ${
+        disabled ? styles.disabled : ""
+      }`}
+    >
+      <div className={styles.settingsToggleCopy}>
+        <strong>{label}</strong>
+        <span>{description}</span>
+      </div>
+
+      <button
+        type="button"
+        className={`${styles.settingsToggle} ${
+          checked ? styles.active : ""
+        }`}
+        aria-pressed={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+      >
+        <span />
+      </button>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
-  const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
+  const supabase = useMemo(
+    () => createClient(),
+    []
+  );
 
   const [loading, setLoading] = useState(true);
-  const [savingCompany, setSavingCompany] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [userEmail, setUserEmail] = useState("");
-  const [company, setCompany] = useState<Company | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [company, setCompany] =
+    useState<Company | null>(null);
 
-  const [companyName, setCompanyName] = useState("");
-  const [country, setCountry] = useState("");
-  const [state, setState] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [timezone, setTimezone] = useState("America/Chicago");
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [fullName, setFullName] = useState("");
-  const [preferences, setPreferences] =
-    useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [team, setTeam] =
+    useState<TeamMember[]>([]);
+
+  const [settings, setSettings] =
+    useState<AppSettings>(DEFAULT_SETTINGS);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  const timezones = useMemo(() => getTimezoneList(), []);
-
-  const countries = useMemo(
-    () =>
-      COUNTRY_CODES.map((code) => ({
-        code,
-        name: getCountryName(code),
-      })).sort((a, b) => a.name.localeCompare(b.name)),
-    []
-  );
 
   const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
       const {
         data: { user },
@@ -405,11 +332,9 @@ export default function SettingsPage() {
       }
 
       if (!user) {
-        router.replace("/login");
+        window.location.href = "/login";
         return;
       }
-
-      setUserEmail(user.email || "");
 
       const {
         data: membership,
@@ -437,7 +362,7 @@ export default function SettingsPage() {
       } = await supabase
         .from("companies")
         .select(
-          "id, name, country, state, currency, timezone"
+          "id, name, country, state, currency, timezone, app_settings"
         )
         .eq("id", membership.company_id)
         .maybeSingle();
@@ -453,13 +378,6 @@ export default function SettingsPage() {
       }
 
       setCompany(companyData);
-      setCompanyName(companyData.name || "");
-      setCountry(companyData.country || "");
-      setState(companyData.state || "");
-      setCurrency(companyData.currency || "USD");
-      setTimezone(
-        companyData.timezone || "America/Chicago"
-      );
 
       const {
         data: profileData,
@@ -476,27 +394,6 @@ export default function SettingsPage() {
 
       if (profileData) {
         setProfile(profileData);
-        setFullName(profileData.full_name || "");
-      }
-
-      const storedPreferences =
-        window.localStorage.getItem(
-          "sbs-user-preferences"
-        );
-
-      if (storedPreferences) {
-        try {
-          const parsedPreferences = JSON.parse(
-            storedPreferences
-          ) as Partial<UserPreferences>;
-
-          setPreferences({
-            ...DEFAULT_PREFERENCES,
-            ...parsedPreferences,
-          });
-        } catch {
-          setPreferences(DEFAULT_PREFERENCES);
-        }
       }
 
       const {
@@ -505,8 +402,10 @@ export default function SettingsPage() {
       } = await supabase
         .from("company_members")
         .select("user_id, role, company_id")
-        .eq("company_id", membership.company_id)
-        .order("role", { ascending: true });
+        .eq(
+          "company_id",
+          membership.company_id
+        );
 
       if (teamError) {
         throw teamError;
@@ -542,7 +441,8 @@ export default function SettingsPage() {
           .map((member) => ({
             ...member,
             profile:
-              profileMap.get(member.user_id) || null,
+              profileMap.get(member.user_id) ||
+              null,
           }))
           .sort(
             (a, b) =>
@@ -558,8 +458,41 @@ export default function SettingsPage() {
       } else {
         setTeam([]);
       }
+
+      let savedSettings: Partial<AppSettings> = {};
+
+      if (
+        companyData.app_settings &&
+        typeof companyData.app_settings === "object"
+      ) {
+        savedSettings =
+          companyData.app_settings;
+      } else {
+        try {
+          const stored =
+            window.localStorage.getItem(
+              "sbs-settings"
+            );
+
+          if (stored) {
+            savedSettings = JSON.parse(
+              stored
+            ) as Partial<AppSettings>;
+          }
+        } catch {
+          savedSettings = {};
+        }
+      }
+
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...savedSettings,
+      });
     } catch (err: unknown) {
-      console.error("Settings load error:", err);
+      console.error(
+        "Settings load error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -569,269 +502,133 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [router, supabase]);
+  }, [supabase]);
 
   useEffect(() => {
-    // This effect intentionally starts the asynchronous settings synchronization.
-     
     void loadSettings();
   }, [loadSettings]);
 
-  async function saveCompanySettings(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    if (!company) {
-      setError("Company information is not loaded.");
-      return;
-    }
-
-    if (!companyName.trim()) {
-      setError("Company name is required.");
-      return;
-    }
-
-    try {
-      setSavingCompany(true);
-      setMessage("");
-      setError("");
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const {
-        data: membership,
-        error: membershipError,
-      } = await supabase
-        .from("company_members")
-        .select("company_id, role")
-        .eq("user_id", user.id)
-        .eq("company_id", company.id)
-        .maybeSingle();
-
-      if (membershipError) {
-        throw membershipError;
-      }
-
-      if (!membership) {
-        throw new Error(
-          "You are not a member of this company."
-        );
-      }
-
-      const role = String(
-        membership.role || ""
-      ).toLowerCase();
-
-      if (role !== "owner" && role !== "admin") {
-        throw new Error(
-          "Only an owner or admin can update company settings."
-        );
-      }
-
-      const updatedCompany = {
-        name: companyName.trim(),
-        country: country.trim() || null,
-        state: state.trim() || null,
-        currency,
-        timezone,
-      };
-
-      const {
-        data: savedCompany,
-        error: updateError,
-      } = await supabase
-        .from("companies")
-        .update(updatedCompany)
-        .eq("id", company.id)
-        .select(
-          "id, name, country, state, currency, timezone"
-        )
-        .maybeSingle();
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      if (!savedCompany) {
-        throw new Error(
-          "The company could not be updated. Please check your company permissions and try again."
-        );
-      }
-
-      setCompany(savedCompany);
-      setCompanyName(savedCompany.name || "");
-      setCountry(savedCompany.country || "");
-      setState(savedCompany.state || "");
-      setCurrency(savedCompany.currency || "USD");
-      setTimezone(
-        savedCompany.timezone || "America/Chicago"
-      );
-
-      window.dispatchEvent(
-        new CustomEvent("sbs-company-updated", {
-          detail: {
-            id: savedCompany.id,
-            name: savedCompany.name,
-            currency: savedCompany.currency,
-            timezone: savedCompany.timezone,
-          },
-        })
-      );
-
-      setMessage(
-        "Company settings saved successfully."
-      );
-    } catch (err: unknown) {
-      console.error(
-        "Company settings update error:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not save company settings."
-      );
-    } finally {
-      setSavingCompany(false);
-    }
-  }
-
-  async function saveProfile(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    if (!fullName.trim()) {
-      setError("Your name is required.");
-      return;
-    }
-
-    try {
-      setSavingProfile(true);
-      setMessage("");
-      setError("");
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const {
-        data,
-        error: updateError,
-      } = await supabase
-        .from("profiles")
-        .update({
-          full_name: fullName.trim(),
-        })
-        .eq("id", user.id)
-        .select("id, full_name")
-        .maybeSingle();
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      if (!data) {
-        throw new Error(
-          "Your profile record could not be found. Please refresh the page and try again."
-        );
-      }
-
-      setProfile(data);
-      setFullName(data.full_name || "");
-
-      setMessage(
-        "Profile updated successfully."
-      );
-    } catch (err: unknown) {
-      console.error(
-        "Profile update error:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not update your profile."
-      );
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  function updatePreference<K extends keyof UserPreferences>(
+  function updateSetting<K extends keyof AppSettings>(
     key: K,
-    value: UserPreferences[K]
+    value: AppSettings[K]
   ) {
-    setPreferences((current) => ({
+    setSettings((current) => ({
       ...current,
       [key]: value,
     }));
   }
 
-  function savePreferences(
+  async function saveSettings(
     event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
+    if (!company) {
+      setError(
+        "No active company was found."
+      );
+      return;
+    }
+
+    if (!isAdmin) {
+      setError(
+        "Only company owners and admins can save workspace settings."
+      );
+      return;
+    }
+
     try {
-      setSavingPreferences(true);
+      setSaving(true);
       setMessage("");
       setError("");
 
-      window.localStorage.setItem(
-        "sbs-user-preferences",
-        JSON.stringify(preferences)
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from("companies")
+        .update({
+          app_settings: settings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", company.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setCompany((current) =>
+        current
+          ? {
+              ...current,
+              app_settings: settings,
+            }
+          : current
       );
 
+      try {
+        window.localStorage.setItem(
+          "sbs-settings",
+          JSON.stringify(settings)
+        );
+      } catch {
+        // Supabase is the source of truth.
+      }
+
       window.dispatchEvent(
-        new CustomEvent("sbs-preferences-updated", {
-          detail: preferences,
-        })
+        new CustomEvent(
+          "sbs-settings-updated",
+          {
+            detail: settings,
+          }
+        )
       );
 
       setMessage(
-        "Application preferences saved successfully."
+        "Settings saved successfully."
       );
     } catch (err: unknown) {
       console.error(
-        "Preferences save error:",
+        "Settings save error:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "Could not save application preferences."
+          : "Could not save your settings."
       );
     } finally {
-      setSavingPreferences(false);
+      setSaving(false);
     }
   }
+
+  const companyInitials = useMemo(
+    () =>
+      getInitials(company?.name || ""),
+    [company?.name]
+  );
+
+  const profileInitials = useMemo(
+    () =>
+      getInitials(
+        profile?.full_name || ""
+      ),
+    [profile?.full_name]
+  );
 
   const currentMember = useMemo(
     () =>
@@ -849,82 +646,25 @@ export default function SettingsPage() {
     currentRole === "owner" ||
     currentRole === "admin";
 
-  const initials = useMemo(
-    () => getInitials(fullName),
-    [fullName]
-  );
-
-  const selectedCurrency = useMemo(
-    () =>
-      CURRENCIES.find(
-        (item) => item.code === currency
-      ),
-    [currency]
-  );
-
   if (loading) {
     return (
       <AppShell
         title="Settings"
-        description="Manage your workspace, profile, regional preferences, team, security, and account."
+        description="Manage your SBS workspace configuration."
       >
-        <div className="settings-loading">
-          <div className="settings-loading-card">
-            <div className="settings-spinner" />
-            <strong>Loading settings...</strong>
+        <div className={styles.settingsLoading}>
+          <div className={styles.settingsLoadingCard}>
+            <div className={styles.settingsSpinner} />
+
+            <strong>
+              Loading settings...
+            </strong>
+
             <span>
               Preparing your workspace configuration.
             </span>
           </div>
         </div>
-
-        <style jsx>{`
-          .settings-loading {
-            min-height: 500px;
-            display: grid;
-            place-items: center;
-          }
-
-          .settings-loading-card {
-            width: min(420px, 100%);
-            background: white;
-            border: 1px solid #e5eaf0;
-            border-radius: 18px;
-            padding: 34px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            gap: 8px;
-            box-shadow: 0 8px 30px rgba(15, 23, 42, 0.05);
-          }
-
-          .settings-loading-card strong {
-            color: #172033;
-            font-size: 15px;
-          }
-
-          .settings-loading-card span {
-            color: #718096;
-            font-size: 13px;
-          }
-
-          .settings-spinner {
-            width: 34px;
-            height: 34px;
-            border: 3px solid #e7ecf2;
-            border-top-color: #172033;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-bottom: 8px;
-          }
-
-          @keyframes spin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
       </AppShell>
     );
   }
@@ -932,568 +672,834 @@ export default function SettingsPage() {
   return (
     <AppShell
       title="Settings"
-      description="Manage your workspace, profile, regional preferences, team, security, and account."
+      description="Manage your SBS workspace, business configuration, users, documents, and account."
     >
-      <div className="settings-page">
+      <div className={styles.settingsPage}>
         {message && (
-          <div className="settings-alert settings-alert-success">
-            <span className="settings-alert-icon">
-              ✓
-            </span>
+          <div
+            className={`${styles.settingsAlert} ${styles.success}`}
+          >
+            <CheckCircle2 size={17} />
             <span>{message}</span>
           </div>
         )}
 
         {error && (
-          <div className="settings-alert settings-alert-error">
-            <span className="settings-alert-icon">
+          <div
+            className={`${styles.settingsAlert} ${styles.error}`}
+          >
+            <span className={styles.alertSymbol}>
               !
             </span>
+
             <span>{error}</span>
           </div>
         )}
 
-        <section className="settings-hero">
-          <div className="settings-hero-content">
-            <div className="settings-hero-icon">
-              ⚙
+        <section className={styles.settingsHero}>
+          <div className={styles.settingsHeroMain}>
+            <div className={styles.settingsHeroIcon}>
+              <Settings2 size={25} />
             </div>
 
             <div>
-              <span className="settings-eyebrow">
+              <span className={styles.settingsEyebrow}>
                 Workspace configuration
               </span>
 
-              <h2>Settings & Administration</h2>
+              <h2>
+                Settings & Administration
+              </h2>
 
               <p>
-                Configure your company, regional preferences,
-                application behavior, profile, team access,
-                and account information.
+                Configure how your SBS workspace
+                operates. Core business settings stay
+                here, while regional, billing, expenses,
+                and your personal profile have their own
+                dedicated pages.
               </p>
             </div>
           </div>
 
-          <div className="settings-company-chip">
-            <div className="settings-company-chip-avatar">
-              {getInitials(companyName)}
+          <div className={styles.workspaceChip}>
+            <div className={styles.workspaceAvatar}>
+              {companyInitials}
             </div>
 
-            <div>
+            <div className={styles.workspaceChipCopy}>
               <span>Active workspace</span>
-              <strong>{companyName}</strong>
+
+              <strong>
+                {company?.name || "Workspace"}
+              </strong>
             </div>
           </div>
         </section>
 
-        <div className="settings-grid">
-          <section className="settings-card settings-card-wide">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Workspace
-                </span>
+        <div className={styles.settingsSectionHeading}>
+          <div>
+            <span>Account</span>
 
-                <h3>Company Profile</h3>
+            <h3>
+              Workspace & account pages
+            </h3>
 
-                <p>
-                  Manage your company identity and primary
-                  regional configuration.
-                </p>
-              </div>
+            <p>
+              These areas have their own dedicated
+              settings pages.
+            </p>
+          </div>
+        </div>
 
-              <div className="settings-card-badge">
-                {isAdmin ? "Editable" : "Read only"}
-              </div>
-            </div>
-
-            <form
-              className="settings-form"
-              onSubmit={saveCompanySettings}
-            >
-              <div className="settings-form-grid">
-                <label className="settings-field settings-field-full">
-                  <span>Company name</span>
-
-                  <input
-                    value={companyName}
-                    onChange={(event) =>
-                      setCompanyName(event.target.value)
-                    }
-                    disabled={!isAdmin || savingCompany}
-                    placeholder="Your company name"
-                  />
-
-                  <small>
-                    This name appears throughout your SBS
-                    workspace.
-                  </small>
-                </label>
-
-                <label className="settings-field">
-                  <span>Country</span>
-
-                  <select
-                    value={country}
-                    onChange={(event) =>
-                      setCountry(event.target.value)
-                    }
-                    disabled={!isAdmin || savingCompany}
-                  >
-                    <option value="">
-                      Select country
-                    </option>
-
-                    {countries.map((item) => (
-                      <option
-                        key={item.code}
-                        value={item.code}
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="settings-field">
-                  <span>State / Region</span>
-
-                  <input
-                    value={state}
-                    onChange={(event) =>
-                      setState(event.target.value)
-                    }
-                    disabled={!isAdmin || savingCompany}
-                    placeholder="State, province, or region"
-                  />
-                </label>
-
-                <label className="settings-field">
+        <div className={styles.settingsLinkGrid}>
+          <SettingCard
+            href="/settings/regional"
+            icon={<Globe2 size={20} />}
+            eyebrow="Regional"
+            title="Regional & Currency"
+            description="Manage currency, timezone, date formats, number formats, and regional preferences."
+            accent="blue"
+            summary={
+              <>
+                <div>
                   <span>Currency</span>
+                  <strong>
+                    {company?.currency || "USD"}
+                  </strong>
+                </div>
 
-                  <select
-                    value={currency}
+                <div>
+                  <span>Timezone</span>
+                  <strong>
+                    {company?.timezone ||
+                      "Not configured"}
+                  </strong>
+                </div>
+              </>
+            }
+          />
+
+          <SettingCard
+            href="/settings/billing"
+            icon={<CreditCard size={20} />}
+            eyebrow="Account"
+            title="Billing & Subscription"
+            description="Manage your SBS subscription, plan, billing information, and account billing status."
+            accent="purple"
+            summary={
+              <div className={styles.summaryStatus}>
+                <span className={styles.statusDot} />
+                <strong>
+                  Subscription management
+                </strong>
+              </div>
+            }
+          />
+
+          <SettingCard
+            href="/settings/expenses"
+            icon={<WalletCards size={20} />}
+            eyebrow="Finance"
+            title="Expenses"
+            description="Manage expense categories, approvals, defaults, and expense-related financial settings."
+            accent="amber"
+            summary={
+              <div className={styles.summaryStatus}>
+                <span className={styles.statusDot} />
+                <strong>
+                  Expense configuration
+                </strong>
+              </div>
+            }
+          />
+
+          <SettingCard
+            href="/settings/profile"
+            icon={<Users size={20} />}
+            eyebrow="Personal"
+            title="My Profile"
+            description="Update your personal account information and profile details."
+            accent="green"
+            summary={
+              <div className={styles.profileCardSummary}>
+                <div className={styles.miniAvatar}>
+                  {profileInitials}
+                </div>
+
+                <div>
+                  <strong>
+                    {profile?.full_name ||
+                      "Your Profile"}
+                  </strong>
+
+                  <span>
+                    {formatRole(currentRole)}
+                  </span>
+                </div>
+              </div>
+            }
+          />
+        </div>
+
+        <form onSubmit={saveSettings}>
+          <div
+            className={`${styles.settingsSectionHeading} ${styles.spaced}`}
+          >
+            <div>
+              <span>Business</span>
+
+              <h3>
+                Core business configuration
+              </h3>
+
+              <p>
+                These settings control how SBS handles
+                your day-to-day product business.
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.settingsSectionGrid}>
+            <SettingSection
+              eyebrow="Documents"
+              title="Document Defaults"
+              description="Control the default numbering and payment behavior used by your business documents."
+              icon={<FileText size={19} />}
+            >
+              <div className={styles.settingsFieldsGrid}>
+                <label className={styles.settingsField}>
+                  <span>Invoice prefix</span>
+                  <input
+                    value={settings.invoicePrefix}
+                    disabled={!isAdmin}
                     onChange={(event) =>
-                      setCurrency(event.target.value)
+                      updateSetting(
+                        "invoicePrefix",
+                        event.target.value
+                      )
                     }
-                    disabled={!isAdmin || savingCompany}
-                  >
-                    {CURRENCIES.map((item) => (
-                      <option
-                        key={item.code}
-                        value={item.code}
-                      >
-                        {item.code} — {item.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {selectedCurrency && (
-                    <small>
-                      {selectedCurrency.name} will be used
-                      as the workspace currency.
-                    </small>
-                  )}
+                  />
                 </label>
 
-                <label className="settings-field">
-                  <span>Timezone</span>
-
-                  <select
-                    value={timezone}
+                <label className={styles.settingsField}>
+                  <span>Estimate prefix</span>
+                  <input
+                    value={settings.estimatePrefix}
+                    disabled={!isAdmin}
                     onChange={(event) =>
-                      setTimezone(event.target.value)
+                      updateSetting(
+                        "estimatePrefix",
+                        event.target.value
+                      )
                     }
-                    disabled={!isAdmin || savingCompany}
+                  />
+                </label>
+
+                <label className={styles.settingsField}>
+                  <span>Sales order prefix</span>
+                  <input
+                    value={settings.salesOrderPrefix}
+                    disabled={!isAdmin}
+                    onChange={(event) =>
+                      updateSetting(
+                        "salesOrderPrefix",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+
+                <label className={styles.settingsField}>
+                  <span>Purchase order prefix</span>
+                  <input
+                    value={settings.purchaseOrderPrefix}
+                    disabled={!isAdmin}
+                    onChange={(event) =>
+                      updateSetting(
+                        "purchaseOrderPrefix",
+                        event.target.value
+                      )
+                    }
+                  />
+                </label>
+
+                <label className={styles.settingsField}>
+                  <span>Default payment terms</span>
+                  <select
+                    value={
+                      settings.defaultPaymentTerms
+                    }
+                    disabled={!isAdmin}
+                    onChange={(event) =>
+                      updateSetting(
+                        "defaultPaymentTerms",
+                        event.target.value
+                      )
+                    }
                   >
-                    {timezones.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
+                    <option>
+                      Due on receipt
+                    </option>
+                    <option>Net 7</option>
+                    <option>Net 15</option>
+                    <option>Net 30</option>
+                    <option>Net 60</option>
                   </select>
+                </label>
+
+                <label className={styles.settingsField}>
+                  <span>Default tax rate (%)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={
+                      settings.defaultTaxRate
+                    }
+                    disabled={!isAdmin}
+                    onChange={(event) =>
+                      updateSetting(
+                        "defaultTaxRate",
+                        event.target.value
+                      )
+                    }
+                  />
                 </label>
               </div>
+            </SettingSection>
 
-              {isAdmin && (
-                <div className="settings-form-actions">
+            <SettingSection
+              eyebrow="Company"
+              title="Company Overview"
+              description="Your primary company information comes from the workspace record."
+              icon={<Building2 size={19} />}
+            >
+              <div className={styles.companyOverview}>
+                <div className={styles.companyOverviewAvatar}>
+                  {companyInitials}
+                </div>
+
+                <div className={styles.companyOverviewMain}>
+                  <strong>
+                    {company?.name ||
+                      "Not configured"}
+                  </strong>
+
                   <span>
-                    Company changes affect invoices, reports,
-                    dates, currency formatting, and other
-                    workspace features.
+                    {getCountryName(
+                      company?.country || null
+                    )}
+                    {company?.state
+                      ? ` · ${company.state}`
+                      : ""}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.settingsInfoGrid}>
+                <div>
+                  <span>Currency</span>
+                  <strong>
+                    {company?.currency || "USD"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Timezone</span>
+                  <strong>
+                    {company?.timezone ||
+                      "Not configured"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Members</span>
+                  <strong>{team.length}</strong>
+                </div>
+
+                <div>
+                  <span>Your role</span>
+                  <strong>
+                    {formatRole(currentRole)}
+                  </strong>
+                </div>
+              </div>
+
+              <div className={styles.settingsNote}>
+                <Globe2 size={15} />
+
+                <span>
+                  Currency and regional behavior are
+                  managed from Regional Settings.
+                </span>
+              </div>
+            </SettingSection>
+
+            <SettingSection
+              eyebrow="Sales"
+              title="Sales & Orders"
+              description="Set defaults for the sales workflow and order handling."
+              icon={<Receipt size={19} />}
+            >
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Require a customer on sales orders"
+                  description="Prevent sales orders from being saved without a customer."
+                  checked={
+                    settings.salesRequireCustomer
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "salesRequireCustomer",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Automatically create invoices"
+                  description="Allow the sales workflow to create an invoice when configured to do so."
+                  checked={
+                    settings.salesAutoCreateInvoice
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "salesAutoCreateInvoice",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Require approval for discounts"
+                  description="Require an approval step when discounts are applied to sales."
+                  checked={
+                    settings.requireApprovalForDiscounts
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "requireApprovalForDiscounts",
+                      value
+                    )
+                  }
+                />
+              </div>
+            </SettingSection>
+
+            <SettingSection
+              eyebrow="Invoices"
+              title="Invoice & Document Display"
+              description="Choose which standard information appears on generated documents."
+              icon={<FileText size={19} />}
+            >
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Show company address"
+                  description="Display your company address on invoices and supported documents."
+                  checked={
+                    settings.invoiceShowCompanyAddress
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "invoiceShowCompanyAddress",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Show tax information"
+                  description="Display tax amounts and tax-related information on documents."
+                  checked={
+                    settings.invoiceShowTax
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "invoiceShowTax",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Show payment terms"
+                  description="Display payment terms on invoices and supported documents."
+                  checked={
+                    settings.invoiceShowPaymentTerms
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "invoiceShowPaymentTerms",
+                      value
+                    )
+                  }
+                />
+              </div>
+            </SettingSection>
+
+            <SettingSection
+              eyebrow="Inventory"
+              title="Inventory Behavior"
+              description="Control the basic stock rules used throughout SBS."
+              icon={<Package size={19} />}
+            >
+              <div
+                className={`${styles.settingsFieldsGrid} ${styles.single}`}
+              >
+                <label className={styles.settingsField}>
+                  <span>
+                    Low stock threshold
                   </span>
 
-                  <button
-                    type="submit"
-                    className="primary-button settings-save-button"
-                    disabled={savingCompany}
-                  >
-                    {savingCompany
-                      ? "Saving..."
-                      : "Save Company Settings"}
-                  </button>
-                </div>
-              )}
-            </form>
-          </section>
-
-          <section className="settings-card settings-card-wide">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Localization
-                </span>
-
-                <h3>Language & Regional Preferences</h3>
-
-                <p>
-                  Control how SBS displays language, dates,
-                  times, numbers, and other regional information
-                  for your account.
-                </p>
-              </div>
-
-              <div className="settings-card-badge">
-                User preference
-              </div>
-            </div>
-
-            <form
-              className="settings-form"
-              onSubmit={savePreferences}
-            >
-              <div className="settings-form-grid">
-                <label className="settings-field">
-                  <span>Application language</span>
-
-                  <select
-                    value={preferences.language}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={
+                      settings.lowStockThreshold
+                    }
+                    disabled={!isAdmin}
                     onChange={(event) =>
-                      updatePreference(
-                        "language",
+                      updateSetting(
+                        "lowStockThreshold",
                         event.target.value
                       )
                     }
-                  >
-                    {LANGUAGES.map((item) => (
-                      <option
-                        key={item.code}
-                        value={item.code}
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
 
                   <small>
-                    Full multilingual UI support can be
-                    connected to this preference as additional
-                    translations are added.
+                    Items at or below this quantity
+                    can be considered low stock.
                   </small>
                 </label>
-
-                <label className="settings-field">
-                  <span>Date format</span>
-
-                  <select
-                    value={preferences.dateFormat}
-                    onChange={(event) =>
-                      updatePreference(
-                        "dateFormat",
-                        event.target.value
-                      )
-                    }
-                  >
-                    {DATE_FORMATS.map((item) => (
-                      <option
-                        key={item.value}
-                        value={item.value}
-                      >
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="settings-field">
-                  <span>Time format</span>
-
-                  <select
-                    value={preferences.timeFormat}
-                    onChange={(event) =>
-                      updatePreference(
-                        "timeFormat",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="12h">
-                      12-hour — 2:30 PM
-                    </option>
-                    <option value="24h">
-                      24-hour — 14:30
-                    </option>
-                  </select>
-                </label>
-
-                <label className="settings-field">
-                  <span>First day of week</span>
-
-                  <select
-                    value={preferences.firstDayOfWeek}
-                    onChange={(event) =>
-                      updatePreference(
-                        "firstDayOfWeek",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="Sunday">
-                      Sunday
-                    </option>
-                    <option value="Monday">
-                      Monday
-                    </option>
-                    <option value="Saturday">
-                      Saturday
-                    </option>
-                  </select>
-                </label>
-
-                <label className="settings-field">
-                  <span>Number format</span>
-
-                  <select
-                    value={preferences.numberFormat}
-                    onChange={(event) =>
-                      updatePreference(
-                        "numberFormat",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="1,234.56">
-                      1,234.56
-                    </option>
-                    <option value="1.234,56">
-                      1.234,56
-                    </option>
-                    <option value="1 234,56">
-                      1 234,56
-                    </option>
-                    <option value="1234.56">
-                      1234.56
-                    </option>
-                  </select>
-                </label>
-
-                <label className="settings-field">
-                  <span>Tax display</span>
-
-                  <select
-                    value={preferences.taxDisplay}
-                    onChange={(event) =>
-                      updatePreference(
-                        "taxDisplay",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="exclusive">
-                      Prices exclude tax
-                    </option>
-                    <option value="inclusive">
-                      Prices include tax
-                    </option>
-                    <option value="both">
-                      Show tax separately
-                    </option>
-                  </select>
-                </label>
               </div>
 
-              <div className="settings-form-actions">
-                <span>
-                  These preferences are currently stored for
-                  your account on this device.
-                </span>
-
-                <button
-                  type="submit"
-                  className="secondary-button settings-save-button"
-                  disabled={savingPreferences}
-                >
-                  {savingPreferences
-                    ? "Saving..."
-                    : "Save Preferences"}
-                </button>
-              </div>
-            </form>
-          </section>
-
-          <section className="settings-card">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Regional Configuration
-                </span>
-
-                <h3>Workspace Region</h3>
-
-                <p>
-                  Current regional configuration used by the
-                  company workspace.
-                </p>
-              </div>
-            </div>
-
-            <div className="settings-info-list">
-              <div className="settings-info-row">
-                <span>Country</span>
-                <strong>
-                  {country
-                    ? getCountryName(country)
-                    : "Not configured"}
-                </strong>
-              </div>
-
-              <div className="settings-info-row">
-                <span>State / Region</span>
-                <strong>
-                  {state || "Not configured"}
-                </strong>
-              </div>
-
-              <div className="settings-info-row">
-                <span>Currency</span>
-                <strong>
-                  {currency || "USD"}
-                </strong>
-              </div>
-
-              <div className="settings-info-row">
-                <span>Timezone</span>
-                <strong>
-                  {timezone || "Not configured"}
-                </strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="settings-card">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Personal
-                </span>
-
-                <h3>Your Profile</h3>
-
-                <p>
-                  Update the name shown across your
-                  workspace.
-                </p>
-              </div>
-
-              <div className="settings-profile-avatar">
-                {initials}
-              </div>
-            </div>
-
-            <form
-              className="settings-form"
-              onSubmit={saveProfile}
-            >
-              <label className="settings-field">
-                <span>Full name</span>
-
-                <input
-                  value={fullName}
-                  onChange={(event) =>
-                    setFullName(event.target.value)
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Automatically deduct stock"
+                  description="Allow completed sales workflows to deduct inventory automatically."
+                  checked={
+                    settings.inventoryAutoDeduct
                   }
-                  disabled={savingProfile}
-                  placeholder="Your full name"
-                />
-              </label>
-
-              <label className="settings-field">
-                <span>Email address</span>
-
-                <input
-                  value={userEmail}
-                  disabled
-                  readOnly
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "inventoryAutoDeduct",
+                      value
+                    )
+                  }
                 />
 
-                <small>
-                  Your login email is managed by your
-                  authentication provider.
-                </small>
-              </label>
+                <Toggle
+                  label="Allow negative inventory"
+                  description="Allow transactions to reduce available stock below zero."
+                  checked={
+                    settings.inventoryNegativeStock
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "inventoryNegativeStock",
+                      value
+                    )
+                  }
+                />
 
-              <button
-                type="submit"
-                className="secondary-button"
-                disabled={savingProfile}
-              >
-                {savingProfile
-                  ? "Updating..."
-                  : "Update Profile"}
-              </button>
-            </form>
-          </section>
+                <Toggle
+                  label="Require approval for stock adjustments"
+                  description="Require approval before manual inventory adjustments are finalized."
+                  checked={
+                    settings.requireApprovalForStockAdjustments
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "requireApprovalForStockAdjustments",
+                      value
+                    )
+                  }
+                />
+              </div>
+            </SettingSection>
 
-          <section className="settings-card settings-card-wide">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Access Control
+            <SettingSection
+              eyebrow="Notifications"
+              title="Notifications & Alerts"
+              description="Control the operational alerts SBS should surface to users."
+              icon={<Bell size={19} />}
+            >
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Enable notifications"
+                  description="Enable SBS application notifications and workspace alerts."
+                  checked={
+                    settings.notificationsEnabled
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "notificationsEnabled",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Low stock alerts"
+                  description="Show notifications when inventory reaches the low-stock threshold."
+                  checked={
+                    settings.lowStockNotifications
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "lowStockNotifications",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Overdue reminders"
+                  description="Show reminders for overdue financial or sales-related items."
+                  checked={
+                    settings.overdueNotifications
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "overdueNotifications",
+                      value
+                    )
+                  }
+                />
+              </div>
+            </SettingSection>
+
+            <SettingSection
+              eyebrow="Automation"
+              title="Automation Defaults"
+              description="Control whether automated business workflows are allowed to run."
+              icon={<Wrench size={19} />}
+            >
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Enable business automation"
+                  description="Allow configured SBS automations and recurring workflows to run."
+                  checked={
+                    settings.automationEnabled
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "automationEnabled",
+                      value
+                    )
+                  }
+                />
+              </div>
+
+              <div className={styles.settingsNote}>
+                <Settings2 size={15} />
+
+                <span>
+                  Automation rules can be expanded later
+                  as more SBS workflows are connected.
                 </span>
-
-                <h3>Team & Permissions</h3>
-
-                <p>
-                  Review the members who currently have
-                  access to this company workspace.
-                </p>
               </div>
+            </SettingSection>
 
-              <div className="settings-team-count">
-                {team.length}{" "}
-                {team.length === 1
-                  ? "member"
-                  : "members"}
+            <SettingSection
+              eyebrow="Interface"
+              title="Application Preferences"
+              description="Small interface preferences for day-to-day use of SBS."
+              icon={
+                <SlidersHorizontal size={19} />
+              }
+            >
+              <div className={styles.settingsToggleList}>
+                <Toggle
+                  label="Compact tables"
+                  description="Use a denser row layout in supported data tables."
+                  checked={
+                    settings.compactTables
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "compactTables",
+                      value
+                    )
+                  }
+                />
+
+                <Toggle
+                  label="Confirm before deleting"
+                  description="Ask for confirmation before supported destructive actions."
+                  checked={
+                    settings.confirmBeforeDelete
+                  }
+                  disabled={!isAdmin}
+                  onChange={(value) =>
+                    updateSetting(
+                      "confirmBeforeDelete",
+                      value
+                    )
+                  }
+                />
               </div>
+            </SettingSection>
+
+            <SettingSection
+              eyebrow="Security"
+              title="Workspace Access"
+              description="Review the current access level and workspace protection."
+              icon={<ShieldCheck size={19} />}
+            >
+              <div className={styles.securityList}>
+                <div className={styles.securityItem}>
+                  <div className={styles.securityStatus}>
+                    <CheckCircle2 size={15} />
+                  </div>
+
+                  <div>
+                    <strong>
+                      Authentication enabled
+                    </strong>
+
+                    <span>
+                      Your account is authenticated
+                      through Supabase.
+                    </span>
+                  </div>
+                </div>
+
+                <div className={styles.securityItem}>
+                  <div className={styles.securityStatus}>
+                    <CheckCircle2 size={15} />
+                  </div>
+
+                  <div>
+                    <strong>
+                      Company isolation enabled
+                    </strong>
+
+                    <span>
+                      Workspace data is separated by
+                      company-level access policies.
+                    </span>
+                  </div>
+                </div>
+
+                <div className={styles.securityItem}>
+                  <div
+                    className={
+                      isAdmin
+                        ? styles.securityStatus
+                        : `${styles.securityStatus} ${styles.neutral}`
+                    }
+                  >
+                    {isAdmin ? (
+                      <CheckCircle2 size={15} />
+                    ) : (
+                      <Lock size={14} />
+                    )}
+                  </div>
+
+                  <div>
+                    <strong>
+                      Administrative access
+                    </strong>
+
+                    <span>
+                      {isAdmin
+                        ? "You can manage company-level settings."
+                        : "You currently have member-level access."}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </SettingSection>
+          </div>
+
+          <div className={styles.settingsSaveBar}>
+            <div>
+              <strong>
+                {isAdmin
+                  ? "Save your configuration"
+                  : "Workspace settings are read-only"}
+              </strong>
+
+              <span>
+                {isAdmin
+                  ? "Changes are stored securely in your SBS workspace."
+                  : "Only company owners and admins can change workspace settings."}
+              </span>
             </div>
 
-            {team.length === 0 ? (
-              <div className="settings-empty">
-                <div>👥</div>
-                <strong>No team members found</strong>
-                <span>
-                  Your company does not currently have
-                  additional members.
-                </span>
+            <button
+              type="submit"
+              className={styles.settingsSaveButton}
+              disabled={saving || !isAdmin}
+            >
+              <Save size={16} />
+
+              {saving
+                ? "Saving..."
+                : "Save Settings"}
+            </button>
+          </div>
+        </form>
+
+        <div className={styles.settingsBottomGrid}>
+          <section className={styles.settingsPanel}>
+            <div className={styles.panelHeader}>
+              <div className={styles.panelIcon}>
+                <Users size={18} />
               </div>
-            ) : (
-              <div className="settings-team-table">
-                {team.map((member) => {
+
+              <div>
+                <span>Workspace access</span>
+
+                <h3>
+                  Team & permissions
+                </h3>
+              </div>
+
+              <span className={styles.panelCount}>
+                {team.length}
+              </span>
+            </div>
+
+            <div className={styles.teamList}>
+              {team.length === 0 ? (
+                <div className={styles.emptyTeam}>
+                  <Users size={20} />
+
+                  <span>
+                    No workspace members found.
+                  </span>
+                </div>
+              ) : (
+                team.slice(0, 5).map((member) => {
                   const memberName =
                     member.profile?.full_name ||
                     "Unnamed User";
 
-                  const memberInitials =
-                    getInitials(memberName);
-
                   return (
                     <div
                       key={`${member.company_id}-${member.user_id}`}
-                      className="settings-team-row"
+                      className={styles.teamRow}
                     >
-                      <div className="settings-team-person">
-                        <div className="settings-team-avatar">
-                          {memberInitials}
+                      <div className={styles.teamPerson}>
+                        <div className={styles.teamAvatar}>
+                          {getInitials(memberName)}
                         </div>
 
                         <div>
@@ -1511,113 +1517,86 @@ export default function SettingsPage() {
                       </div>
 
                       <span
-                        className={`settings-role settings-role-${String(
-                          member.role
-                        ).toLowerCase()}`}
+                        className={`${styles.teamRole} ${
+                          styles[
+                            `teamRole${formatRole(
+                              member.role
+                            )}`
+                          ] || ""
+                        }`}
                       >
                         {formatRole(member.role)}
                       </span>
                     </div>
                   );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="settings-card">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Security
-                </span>
-
-                <h3>Security & Account</h3>
-
-                <p>
-                  Account-level information and security
-                  status.
-                </p>
-              </div>
-            </div>
-
-            <div className="settings-security-list">
-              <div className="settings-security-item">
-                <div className="settings-security-icon">
-                  ✓
-                </div>
-
-                <div>
-                  <strong>
-                    Authentication enabled
-                  </strong>
-
-                  <span>
-                    Your account is authenticated through
-                    Supabase.
-                  </span>
-                </div>
-              </div>
-
-              <div className="settings-security-item">
-                <div className="settings-security-icon">
-                  ✓
-                </div>
-
-                <div>
-                  <strong>
-                    Company isolation enabled
-                  </strong>
-
-                  <span>
-                    Workspace data is protected by
-                    company-level access policies.
-                  </span>
-                </div>
-              </div>
-
-              <div className="settings-security-item">
-                <div className="settings-security-icon">
-                  {isAdmin ? "✓" : "—"}
-                </div>
-
-                <div>
-                  <strong>
-                    Administrative access
-                  </strong>
-
-                  <span>
-                    {isAdmin
-                      ? "You can manage company settings."
-                      : "You have member-level access."}
-                  </span>
-                </div>
-              </div>
+                })
+              )}
             </div>
           </section>
 
-          <section className="settings-card">
-            <div className="settings-card-header">
+          <section className={styles.settingsPanel}>
+            <div className={styles.panelHeader}>
+              <div className={styles.panelIcon}>
+                <Building2 size={18} />
+              </div>
+
               <div>
-                <span className="settings-section-label">
-                  Workspace Details
-                </span>
+                <span>Workspace</span>
 
-                <h3>System Information</h3>
+                <h3>
+                  Current configuration
+                </h3>
+              </div>
 
-                <p>
-                  Internal identifiers and account
-                  information for this workspace.
-                </p>
+              <div className={styles.currencyBadge}>
+                {company?.currency || "USD"}
               </div>
             </div>
 
-            <div className="settings-system-list">
+            <div className={styles.workspaceSummaryGrid}>
               <div>
-                <span>Company ID</span>
+                <span>Company</span>
 
-                <code>
-                  {company?.id || "Unavailable"}
-                </code>
+                <strong>
+                  {company?.name ||
+                    "Not configured"}
+                </strong>
+              </div>
+
+              <div>
+                <span>Country</span>
+
+                <strong>
+                  {getCountryName(
+                    company?.country || null
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>State / Region</span>
+
+                <strong>
+                  {company?.state ||
+                    "Not configured"}
+                </strong>
+              </div>
+
+              <div>
+                <span>Currency</span>
+
+                <strong>
+                  {company?.currency || "USD"}
+                </strong>
+              </div>
+
+              <div>
+                <span>Timezone</span>
+
+                <strong>
+                  {company?.timezone ||
+                    "Not configured"}
+                </strong>
               </div>
 
               <div>
@@ -1627,824 +1606,10 @@ export default function SettingsPage() {
                   {formatRole(currentRole)}
                 </strong>
               </div>
-
-              <div>
-                <span>Account email</span>
-
-                <strong>
-                  {userEmail || "Unavailable"}
-                </strong>
-              </div>
-
-              <div>
-                <span>Application language</span>
-
-                <strong>
-                  {LANGUAGES.find(
-                    (item) =>
-                      item.code ===
-                      preferences.language
-                  )?.name ||
-                    preferences.language}
-                </strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="settings-card settings-card-wide">
-            <div className="settings-card-header">
-              <div>
-                <span className="settings-section-label">
-                  Platform Preferences
-                </span>
-
-                <h3>Current Configuration</h3>
-
-                <p>
-                  A quick overview of the preferences
-                  currently active in this workspace.
-                </p>
-              </div>
-            </div>
-
-            <div className="settings-preference-grid">
-              <div className="settings-preference-item">
-                <span>Language</span>
-                <strong>
-                  {LANGUAGES.find(
-                    (item) =>
-                      item.code ===
-                      preferences.language
-                  )?.name ||
-                    preferences.language}
-                </strong>
-              </div>
-
-              <div className="settings-preference-item">
-                <span>Date format</span>
-                <strong>
-                  {preferences.dateFormat}
-                </strong>
-              </div>
-
-              <div className="settings-preference-item">
-                <span>Time format</span>
-                <strong>
-                  {preferences.timeFormat}
-                </strong>
-              </div>
-
-              <div className="settings-preference-item">
-                <span>Week starts</span>
-                <strong>
-                  {preferences.firstDayOfWeek}
-                </strong>
-              </div>
-
-              <div className="settings-preference-item">
-                <span>Number format</span>
-                <strong>
-                  {preferences.numberFormat}
-                </strong>
-              </div>
-
-              <div className="settings-preference-item">
-                <span>Tax display</span>
-                <strong>
-                  {preferences.taxDisplay ===
-                  "inclusive"
-                    ? "Tax inclusive"
-                    : preferences.taxDisplay ===
-                        "both"
-                      ? "Tax shown separately"
-                      : "Tax exclusive"}
-                </strong>
-              </div>
             </div>
           </section>
         </div>
       </div>
-
-      <style jsx>{`
-        .settings-page {
-          width: 100%;
-          max-width: 1440px;
-          margin: 0 auto;
-        }
-
-        .settings-alert {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 13px 16px;
-          border-radius: 12px;
-          margin-bottom: 18px;
-          font-size: 13px;
-          font-weight: 600;
-          border: 1px solid transparent;
-        }
-
-        .settings-alert-success {
-          background: #ecfdf3;
-          border-color: #bbf7d0;
-          color: #166534;
-        }
-
-        .settings-alert-error {
-          background: #fff1f2;
-          border-color: #fecdd3;
-          color: #be123c;
-        }
-
-        .settings-alert-icon {
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          background: currentColor;
-          color: white;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .settings-alert-error .settings-alert-icon {
-          background: #be123c;
-        }
-
-        .settings-hero {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 24px;
-          padding: 26px;
-          margin-bottom: 22px;
-          border-radius: 20px;
-          border: 1px solid #e4e9ef;
-          background:
-            linear-gradient(
-              135deg,
-              #ffffff 0%,
-              #f7faff 100%
-            );
-          box-shadow:
-            0 8px 30px rgba(15, 23, 42, 0.045);
-        }
-
-        .settings-hero-content {
-          display: flex;
-          align-items: center;
-          gap: 17px;
-        }
-
-        .settings-hero-icon {
-          width: 52px;
-          height: 52px;
-          border-radius: 15px;
-          display: grid;
-          place-items: center;
-          background: #172033;
-          color: white;
-          font-size: 22px;
-          flex: 0 0 auto;
-        }
-
-        .settings-eyebrow,
-        .settings-section-label {
-          display: block;
-          margin-bottom: 5px;
-          color: #718096;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: 0.11em;
-          text-transform: uppercase;
-        }
-
-        .settings-hero h2 {
-          margin: 0;
-          color: #172033;
-          font-size: 24px;
-          line-height: 1.2;
-          letter-spacing: -0.025em;
-        }
-
-        .settings-hero p {
-          margin: 7px 0 0;
-          color: #718096;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-
-        .settings-company-chip {
-          min-width: 230px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 14px;
-          border: 1px solid #e4e9ef;
-          border-radius: 14px;
-          background: white;
-        }
-
-        .settings-company-chip-avatar {
-          width: 38px;
-          height: 38px;
-          border-radius: 11px;
-          display: grid;
-          place-items: center;
-          background: #edf2f7;
-          color: #172033;
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        .settings-company-chip span,
-        .settings-company-chip strong {
-          display: block;
-        }
-
-        .settings-company-chip span {
-          margin-bottom: 2px;
-          color: #8a94a6;
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-        }
-
-        .settings-company-chip strong {
-          color: #172033;
-          font-size: 13px;
-          max-width: 180px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .settings-grid {
-          display: grid;
-          grid-template-columns: repeat(
-            2,
-            minmax(0, 1fr)
-          );
-          gap: 18px;
-        }
-
-        .settings-card {
-          min-width: 0;
-          padding: 22px;
-          border: 1px solid #e4e9ef;
-          border-radius: 18px;
-          background: white;
-          box-shadow:
-            0 6px 24px rgba(15, 23, 42, 0.035);
-        }
-
-        .settings-card-wide {
-          grid-column: span 2;
-        }
-
-        .settings-card-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 18px;
-          margin-bottom: 20px;
-        }
-
-        .settings-card-header h3 {
-          margin: 0;
-          color: #172033;
-          font-size: 17px;
-          letter-spacing: -0.015em;
-        }
-
-        .settings-card-header p {
-          max-width: 700px;
-          margin: 6px 0 0;
-          color: #718096;
-          font-size: 12px;
-          line-height: 1.55;
-        }
-
-        .settings-card-badge,
-        .settings-team-count {
-          flex: 0 0 auto;
-          padding: 7px 10px;
-          border-radius: 999px;
-          background: #f2f5f8;
-          color: #566274;
-          font-size: 10px;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .settings-form-grid {
-          display: grid;
-          grid-template-columns: repeat(
-            2,
-            minmax(0, 1fr)
-          );
-          gap: 16px;
-        }
-
-        .settings-field {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-
-        .settings-field-full {
-          grid-column: span 2;
-        }
-
-        .settings-field > span {
-          color: #334155;
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        .settings-field input,
-        .settings-field select {
-          width: 100%;
-          min-height: 42px;
-          box-sizing: border-box;
-          padding: 10px 12px;
-          border: 1px solid #dfe5ec;
-          border-radius: 10px;
-          outline: none;
-          background: #fff;
-          color: #172033;
-          font: inherit;
-          font-size: 13px;
-          transition:
-            border-color 0.15s ease,
-            box-shadow 0.15s ease;
-        }
-
-        .settings-field input:focus,
-        .settings-field select:focus {
-          border-color: #9aa6b6;
-          box-shadow:
-            0 0 0 3px rgba(23, 32, 51, 0.06);
-        }
-
-        .settings-field input:disabled,
-        .settings-field select:disabled {
-          background: #f7f9fb;
-          color: #7b8798;
-          cursor: not-allowed;
-        }
-
-        .settings-field input[readonly] {
-          background: #f7f9fb;
-          color: #6b7688;
-        }
-
-        .settings-field small {
-          color: #8a94a6;
-          font-size: 10px;
-          line-height: 1.45;
-        }
-
-        .settings-form-actions {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-          margin-top: 20px;
-          padding-top: 18px;
-          border-top: 1px solid #edf0f4;
-        }
-
-        .settings-form-actions > span {
-          color: #8a94a6;
-          font-size: 10px;
-          line-height: 1.45;
-        }
-
-        .settings-save-button {
-          flex: 0 0 auto;
-          min-height: 42px;
-        }
-
-        .settings-info-list {
-          display: flex;
-          flex-direction: column;
-          border-top: 1px solid #edf0f4;
-        }
-
-        .settings-info-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 14px 0;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .settings-info-row span {
-          color: #718096;
-          font-size: 12px;
-        }
-
-        .settings-info-row strong {
-          max-width: 60%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          color: #172033;
-          font-size: 12px;
-          text-align: right;
-        }
-
-        .settings-profile-avatar {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          display: grid;
-          place-items: center;
-          background: #172033;
-          color: white;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .settings-form {
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-        }
-
-        .secondary-button {
-          width: fit-content;
-          min-height: 40px;
-          padding: 9px 14px;
-          border: 1px solid #d8dee7;
-          border-radius: 10px;
-          background: white;
-          color: #172033;
-          font: inherit;
-          font-size: 12px;
-          font-weight: 800;
-          cursor: pointer;
-          transition:
-            background 0.15s ease,
-            border-color 0.15s ease,
-            transform 0.15s ease;
-        }
-
-        .secondary-button:hover:not(:disabled) {
-          background: #f7f9fb;
-          border-color: #c6ced9;
-        }
-
-        .secondary-button:disabled,
-        .primary-button:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-
-        .settings-team-table {
-          border-top: 1px solid #edf0f4;
-        }
-
-        .settings-team-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          padding: 14px 0;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .settings-team-person {
-          min-width: 0;
-          display: flex;
-          align-items: center;
-          gap: 11px;
-        }
-
-        .settings-team-avatar {
-          width: 38px;
-          height: 38px;
-          border-radius: 11px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          background: #eef2f6;
-          color: #172033;
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .settings-team-person strong,
-        .settings-team-person span {
-          display: block;
-        }
-
-        .settings-team-person strong {
-          color: #273244;
-          font-size: 12px;
-        }
-
-        .settings-team-person span {
-          margin-top: 2px;
-          color: #8a94a6;
-          font-size: 10px;
-        }
-
-        .settings-role {
-          flex: 0 0 auto;
-          padding: 6px 9px;
-          border-radius: 999px;
-          background: #f2f5f8;
-          color: #566274;
-          font-size: 9px;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .settings-role-owner {
-          background: #edf2f7;
-          color: #172033;
-        }
-
-        .settings-role-admin {
-          background: #f3f4f6;
-          color: #374151;
-        }
-
-        .settings-empty {
-          min-height: 170px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          gap: 6px;
-          border: 1px dashed #dbe2ea;
-          border-radius: 14px;
-          background: #fafbfd;
-        }
-
-        .settings-empty > div {
-          font-size: 24px;
-          margin-bottom: 4px;
-        }
-
-        .settings-empty strong {
-          color: #334155;
-          font-size: 13px;
-        }
-
-        .settings-empty span {
-          color: #8a94a6;
-          font-size: 11px;
-        }
-
-        .settings-security-list {
-          display: flex;
-          flex-direction: column;
-          gap: 13px;
-        }
-
-        .settings-security-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 11px;
-          padding: 12px;
-          border: 1px solid #edf0f4;
-          border-radius: 12px;
-          background: #fafbfd;
-        }
-
-        .settings-security-icon {
-          width: 24px;
-          height: 24px;
-          border-radius: 8px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 auto;
-          background: #eaf7ef;
-          color: #21864a;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .settings-security-item strong,
-        .settings-security-item span {
-          display: block;
-        }
-
-        .settings-security-item strong {
-          color: #334155;
-          font-size: 11px;
-        }
-
-        .settings-security-item span {
-          margin-top: 3px;
-          color: #8a94a6;
-          font-size: 10px;
-          line-height: 1.45;
-        }
-
-        .settings-system-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-        }
-
-        .settings-system-list > div {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          padding: 12px 0;
-          border-bottom: 1px solid #edf0f4;
-        }
-
-        .settings-system-list > div:last-child {
-          border-bottom: 0;
-        }
-
-        .settings-system-list span {
-          color: #8a94a6;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .settings-system-list strong,
-        .settings-system-list code {
-          color: #334155;
-          font-size: 11px;
-          overflow-wrap: anywhere;
-        }
-
-        .settings-system-list code {
-          padding: 7px 9px;
-          border-radius: 8px;
-          background: #f5f7fa;
-          font-family:
-            var(--font-geist-mono),
-            monospace;
-        }
-
-        .settings-preference-grid {
-          display: grid;
-          grid-template-columns: repeat(
-            3,
-            minmax(0, 1fr)
-          );
-          gap: 12px;
-        }
-
-        .settings-preference-item {
-          min-width: 0;
-          padding: 15px;
-          border: 1px solid #edf0f4;
-          border-radius: 12px;
-          background: #fafbfd;
-        }
-
-        .settings-preference-item span,
-        .settings-preference-item strong {
-          display: block;
-        }
-
-        .settings-preference-item span {
-          margin-bottom: 5px;
-          color: #8a94a6;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .settings-preference-item strong {
-          color: #334155;
-          font-size: 12px;
-          overflow-wrap: anywhere;
-        }
-
-        @media (max-width: 1050px) {
-          .settings-hero {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .settings-company-chip {
-            width: 100%;
-            box-sizing: border-box;
-          }
-
-          .settings-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .settings-card-wide {
-            grid-column: span 1;
-          }
-
-          .settings-preference-grid {
-            grid-template-columns: repeat(
-              2,
-              minmax(0, 1fr)
-            );
-          }
-        }
-
-        @media (max-width: 700px) {
-          .settings-hero {
-            padding: 19px;
-            border-radius: 16px;
-          }
-
-          .settings-hero-content {
-            align-items: flex-start;
-          }
-
-          .settings-hero-icon {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            font-size: 18px;
-          }
-
-          .settings-hero h2 {
-            font-size: 20px;
-          }
-
-          .settings-card {
-            padding: 17px;
-            border-radius: 15px;
-          }
-
-          .settings-form-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .settings-field-full {
-            grid-column: span 1;
-          }
-
-          .settings-form-actions {
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .settings-save-button {
-            width: 100%;
-          }
-
-          .settings-team-row {
-            align-items: flex-start;
-          }
-
-          .settings-role {
-            margin-top: 4px;
-          }
-
-          .settings-preference-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .settings-hero-content {
-            flex-direction: column;
-          }
-
-          .settings-company-chip {
-            min-width: 0;
-          }
-
-          .settings-card-header {
-            flex-direction: column;
-          }
-
-          .settings-card-badge,
-          .settings-team-count {
-            align-self: flex-start;
-          }
-
-          .settings-info-row {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .settings-info-row strong {
-            max-width: 100%;
-            text-align: left;
-          }
-
-          .settings-team-row {
-            flex-direction: column;
-          }
-        }
-      `}</style>
     </AppShell>
   );
 }

@@ -3,7 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PageTitle from "@/app/components/page-title";
 import { WorkspaceAccessProvider } from "@/app/components/workspace-access-provider";
+import { RegionalSettingsProvider } from "@/app/components/regional-settings-provider";
 import { getWorkspaceNavigationAccess } from "@/lib/auth/workspace-navigation-access";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -18,6 +20,7 @@ export const metadata: Metadata = {
   title: "SBS",
   description: "Sharif Business Solutions",
 };
+
 export default async function RootLayout({
   children,
 }: LayoutProps<"/">) {
@@ -34,8 +37,10 @@ export default async function RootLayout({
           allowedModuleSlugs={allowedModuleSlugs}
           permissionKeys={permissionKeys}
         >
-          <PageTitle />
-          {children}
+          <RegionalSettingsProvider>
+            <PageTitle />
+            {children}
+          </RegionalSettingsProvider>
         </WorkspaceAccessProvider>
       </body>
     </html>
