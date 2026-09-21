@@ -1567,9 +1567,38 @@ export default function FulfillSalesOrderPage() {
                     `/sales/${orderId}`,
                   )
                 }
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
+className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/20"              >
                 Back to Order
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    `/invoices/new?order_id=${encodeURIComponent(orderId)}`,
+                  )
+                }
+                disabled={isCancelled}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M7 3.5h7l3.5 3.5v13.5H7A2 2 0 0 1 5 18.5v-13A2 2 0 0 1 7 3.5Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    d="M14 3.5V8h4.5M9 12h6M9 15.5h6"
+                  />
+                </svg>
+                Make Invoice
               </button>
 
               <button

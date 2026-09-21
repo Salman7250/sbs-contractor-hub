@@ -7,14 +7,20 @@ import {
   useState,
 } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
 type Customer = {
   id: string;
   name: string | null;
-  email: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+type Company = {
+  id: string;
+  name: string;
+  currency?: string | null;
 };
 
 type Order = {
@@ -34,7 +40,7 @@ type Order = {
   notes: string | null;
   created_at: string;
   updated_at: string;
-  customers?: Customer[] | null;
+  customers: Customer | null;
 };
 
 type OrderItem = {
@@ -53,102 +59,76 @@ type OrderItem = {
   tax_amount: number;
   line_total: number;
   created_at: string;
+  updated_at: string;
 };
 
-type Fulfillment = {
+type ProductTracking = {
+  id: string;
+  tracking_mode: string | null;
+};
+
+type SerializedUnit = {
+  id: string;
+  serial_number: string;
+  barcode: string | null;
+  status: string;
+  product_id: string;
+  variant_id: string | null;
+  warehouse_id: string | null;
+  location_id: string | null;
+};
+
+type Invoice = {
+  id: string;
+  invoice_number: string;
+  status: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  amount_paid: number;
+  due_date: string | null;
+  order_id: string | null;
+  created_at?: string;
+};
+
+type InvoicePayment = {
   id: string;
   company_id: string;
-  order_id: string;
-  order_item_id: string;
-  warehouse_id: string;
-  location_id: string | null;
-  quantity: number;
-  inventory_movement_id: string | null;
-  created_by: string | null;
+  invoice_id: string;
+  customer_id: string | null;
+  amount: number;
+  currency: string;
+  payment_method: string | null;
+  reference: string | null;
+  paid_at: string;
+  notes: string | null;
   created_at: string;
-  batch_id: string | null;
-  batch_quantity: number | null;
-  unit_cost: number | null;
-  serialized_unit_id: string | null;
+  updated_at: string;
 };
 
 type Warehouse = {
   id: string;
   name: string;
-  code: string | null;
+  code: string;
+  is_default: boolean;
 };
 
 type WarehouseLocation = {
   id: string;
   warehouse_id: string;
   name: string;
-  code: string | null;
+  code: string;
 };
 
-type Batch = {
-  id: string;
-  lot_number: string | null;
-  received_at: string | null;
-  status: string | null;
-};
-
-type SerializedUnit = {
-  id: string;
-  serial_number: string;
-  status: string;
-};
-
-type RegionalSettings = {
-  base_currency: string;
-  currency_symbol: string;
-  currency_symbol_position: string;
-  decimal_places: number;
-  thousands_separator: string;
-  decimal_separator: string;
-};
-
-function formatMoney(
-  value: number,
-  currency: string,
-  settings?: RegionalSettings | null,
+function formatCurrency(
+  amount: number,
+  currency: string
 ) {
-  const amount = Number(value || 0);
-
   try {
-    if (
-      settings &&
-      currency === settings.base_currency
-    ) {
-      const decimalPlaces = Number(
-        settings.decimal_places ?? 2,
-      );
-
-      const fixed = amount.toFixed(decimalPlaces);
-
-      const [integerPart, decimalPart] =
-        fixed.split(".");
-
-      const formattedInteger = integerPart.replace(
-        /\B(?=(\d{3})+(?!\d))/g,
-        settings.thousands_separator || ",",
-      );
-
-      const numberPart =
-        decimalPlaces > 0
-          ? `${formattedInteger}${
-              settings.decimal_separator || "."
-            }${decimalPart}`
-          : formattedInteger;
-
-      return settings.currency_symbol_position ===
-        "after"
-        ? `${numberPart} ${settings.currency_symbol}`
-        : `${settings.currency_symbol}${numberPart}`;
-    }
-
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
@@ -156,288 +136,290 @@ function formatMoney(
   }
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
+function formatDate(value: string) {
+  const date = new Date(value);
 
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
-function getCustomerName(
-  customers?: Customer[] | null,
-) {
-  const customer = customers?.[0];
-
-  if (!customer) {
-    return "Walk-in customer";
+  if (Number.isNaN(date.getTime())) {
+    return "—";
   }
 
-  return (
-    customer.name ||
-    customer.email ||
-    "Unnamed customer"
-  );
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }
 
-function getStatusClasses(status: string) {
-  switch (status) {
-    case "confirmed":
-      return "border-blue-200 bg-blue-50 text-blue-700";
+function formatDateTime(value: string) {
+  const date = new Date(value);
 
-    case "pending":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-
-    case "cancelled":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    case "refunded":
-      return "border-purple-200 bg-purple-50 text-purple-700";
-
-    case "completed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
+  if (Number.isNaN(date.getTime())) {
+    return "—";
   }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function getPaymentClasses(status: string) {
-  switch (status) {
-    case "paid":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    case "partial":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-
-    case "refunded":
-      return "border-purple-200 bg-purple-50 text-purple-700";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
-  }
-}
-
-function getFulfillmentClasses(status: string) {
-  switch (status) {
-    case "fulfilled":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-    case "partially_fulfilled":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-
-    case "cancelled":
-      return "border-red-200 bg-red-50 text-red-700";
-
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
-  }
-}
-
-function humanize(value: string | null | undefined) {
-  if (!value) return "—";
-
+function formatStatus(value: string) {
   return value
     .replaceAll("_", " ")
-    .replace(/\b\w/g, (char) =>
-      char.toUpperCase(),
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase()
     );
 }
 
-export default function SalesOrderDetailPage() {
-  const params = useParams();
-  const router = useRouter();
+function getStatusClass(status: string) {
+  switch (status) {
+    case "completed":
+    case "paid":
+    case "fulfilled":
+      return "success";
 
-  const orderId = String(params.orderId);
+    case "processing":
+    case "shipped":
+    case "partially_paid":
+    case "partially_fulfilled":
+    case "confirmed":
+    case "sent":
+      return "warning";
+
+    case "cancelled":
+    case "refunded":
+    case "partially_refunded":
+    case "void":
+      return "danger";
+
+    default:
+      return "neutral";
+  }
+}
+
+export default function OrderDetailsPage() {
+  const router = useRouter();
+  const params = useParams();
+
+  const orderId = String(
+    params.orderId || ""
+  );
 
   const supabase = useMemo(
     () => createClient(),
-    [],
+    []
   );
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [order, setOrder] =
+    useState<Order | null>(null);
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [items, setItems] =
+    useState<OrderItem[]>([]);
 
-  const [companyId, setCompanyId] = useState<
-    string | null
-  >(null);
+  const [company, setCompany] =
+    useState<Company | null>(null);
 
-  const [order, setOrder] = useState<Order | null>(
-    null,
-  );
+  const [invoice, setInvoice] =
+    useState<Invoice | null>(null);
 
-  const [items, setItems] = useState<OrderItem[]>([]);
-  const [fulfillments, setFulfillments] = useState<
-    Fulfillment[]
-  >([]);
+  const [payments, setPayments] =
+    useState<InvoicePayment[]>([]);
 
-  const [warehouses, setWarehouses] = useState<
-    Warehouse[]
-  >([]);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [locations, setLocations] = useState<
-    WarehouseLocation[]
-  >([]);
+  const [error, setError] =
+    useState<string | null>(null);
 
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [printing, setPrinting] =
+    useState(false);
 
-  const [serializedUnits, setSerializedUnits] =
-    useState<SerializedUnit[]>([]);
+  const [isCancelling, setIsCancelling] =
+    useState(false);
 
-  const [regionalSettings, setRegionalSettings] =
-    useState<RegionalSettings | null>(null);
+  const [cancellationError, setCancellationError] =
+    useState<string | null>(null);
 
-  const loadOrder = useCallback(
-    async (showRefresh = false) => {
+  const [cancellationSuccess, setCancellationSuccess] =
+    useState<string | null>(null);
+
+  const [invoiceLoading, setInvoiceLoading] =
+    useState(false);
+
+  const [paymentsLoading, setPaymentsLoading] =
+    useState(false);
+
+  const [warehouses, setWarehouses] =
+    useState<Warehouse[]>([]);
+
+  const [locations, setLocations] =
+    useState<WarehouseLocation[]>([]);
+
+  const [selectedWarehouseId, setSelectedWarehouseId] =
+    useState("");
+
+  const [selectedLocationId, setSelectedLocationId] =
+    useState("");
+
+  const [fulfillmentOptionsLoading, setFulfillmentOptionsLoading] =
+    useState(false);
+
+  const [isFulfilling, setIsFulfilling] =
+    useState(false);
+
+  const [fulfillmentError, setFulfillmentError] =
+    useState<string | null>(null);
+
+  const [fulfillmentSuccess, setFulfillmentSuccess] =
+    useState<string | null>(null);
+
+  const [productTrackingModes, setProductTrackingModes] =
+    useState<Record<string, string>>({});
+
+  const [availableSerials, setAvailableSerials] =
+    useState<Record<string, SerializedUnit[]>>({});
+
+  const [selectedSerials, setSelectedSerials] =
+    useState<Record<string, string[]>>({});
+
+  const [serialsLoading, setSerialsLoading] =
+    useState(false);
+
+  const loadFinancialConnections = useCallback(
+    async (
+      companyId: string,
+      currentOrderId: string
+    ) => {
+      setInvoiceLoading(true);
+      setPaymentsLoading(true);
+
       try {
-        if (showRefresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
+        const {
+          data: invoiceData,
+          error: invoiceError,
+        } = await supabase
+          .from("invoices")
+          .select(
+            `
+              id,
+              invoice_number,
+              status,
+              subtotal,
+              tax,
+              total,
+              amount_paid,
+              due_date,
+              order_id,
+              created_at
+            `
+          )
+          .eq("order_id", currentOrderId)
+          .eq("company_id", companyId)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1);
+
+        if (invoiceError) {
+          console.error(
+            "Invoice loading error:",
+            invoiceError
+          );
+
+          setInvoice(null);
+          setPayments([]);
+          return;
         }
 
-        setErrorMessage("");
+        const latestInvoice =
+          invoiceData?.[0] || null;
+
+        setInvoice(
+          latestInvoice as Invoice | null
+        );
+
+        if (!latestInvoice) {
+          setPayments([]);
+          return;
+        }
 
         const {
-          data: { user },
-        } = await supabase.auth.getUser();
+          data: paymentData,
+          error: paymentError,
+        } = await supabase
+          .from("invoice_payments")
+          .select(
+            `
+              id,
+              company_id,
+              invoice_id,
+              customer_id,
+              amount,
+              currency,
+              payment_method,
+              reference,
+              paid_at,
+              notes,
+              created_at,
+              updated_at
+            `
+          )
+          .eq(
+            "invoice_id",
+            latestInvoice.id
+          )
+          .eq("company_id", companyId)
+          .order("paid_at", {
+            ascending: false,
+          });
 
-        if (!user) {
-          throw new Error(
-            "You must be signed in to view this sales order.",
+        if (paymentError) {
+          console.error(
+            "Invoice payments loading error:",
+            paymentError
           );
+
+          setPayments([]);
+          return;
         }
 
-        const { data: membershipData, error: membershipError } =
-          await supabase
-            .from("company_members")
-            .select("company_id")
-            .eq("user_id", user.id)
-            .limit(1)
-            .maybeSingle();
+        setPayments(
+          (paymentData || []) as InvoicePayment[]
+        );
+      } finally {
+        setInvoiceLoading(false);
+        setPaymentsLoading(false);
+      }
+    },
+    [supabase]
+  );
 
-        if (membershipError) {
-          throw membershipError;
-        }
+  const loadFulfillmentOptions = useCallback(
+    async (companyId: string) => {
+      setFulfillmentOptionsLoading(true);
+      setFulfillmentError(null);
 
-        if (!membershipData?.company_id) {
-          throw new Error(
-            "No company membership was found.",
-          );
-        }
-
-        const currentCompanyId =
-          membershipData.company_id;
-
-        setCompanyId(currentCompanyId);
-
+      try {
         const [
-          orderResult,
-          itemsResult,
-          fulfillmentResult,
-          warehouseResult,
-          locationResult,
-          batchResult,
-          serialResult,
-          regionalResult,
+          warehousesResult,
+          locationsResult,
         ] = await Promise.all([
           supabase
-            .from("orders")
-            .select(
-              `
-                id,
-                company_id,
-                customer_id,
-                order_number,
-                status,
-                payment_status,
-                fulfillment_status,
-                currency,
-                subtotal,
-                discount_amount,
-                tax_amount,
-                shipping_amount,
-                total_amount,
-                notes,
-                created_at,
-                updated_at,
-                customers (
-                  id,
-                  name,
-                  email
-                )
-              `,
-            )
-            .eq("id", orderId)
-            .eq("company_id", currentCompanyId)
-            .maybeSingle(),
-
-          supabase
-            .from("order_items")
-            .select(
-              `
-                id,
-                company_id,
-                order_id,
-                product_id,
-                variant_id,
-                product_name,
-                variant_name,
-                sku,
-                quantity,
-                unit_price,
-                unit_cost,
-                discount_amount,
-                tax_amount,
-                line_total,
-                created_at
-              `,
-            )
-            .eq("order_id", orderId)
-            .eq("company_id", currentCompanyId)
-            .order("created_at", {
-              ascending: true,
-            }),
-
-          supabase
-            .from("order_item_fulfillments")
-            .select(
-              `
-                id,
-                company_id,
-                order_id,
-                order_item_id,
-                warehouse_id,
-                location_id,
-                quantity,
-                inventory_movement_id,
-                created_by,
-                created_at,
-                batch_id,
-                batch_quantity,
-                unit_cost,
-                serialized_unit_id
-              `,
-            )
-            .eq("order_id", orderId)
-            .eq("company_id", currentCompanyId)
-            .order("created_at", {
-              ascending: false,
-            }),
-
-          supabase
             .from("warehouses")
-            .select("id, name, code")
-            .eq("company_id", currentCompanyId)
+            .select(
+              "id, name, code, is_default"
+            )
+            .eq(
+              "company_id",
+              companyId
+            )
+            .eq("is_active", true)
+            .order("is_default", {
+              ascending: false,
+            })
             .order("name", {
               ascending: true,
             }),
@@ -445,1568 +427,3300 @@ export default function SalesOrderDetailPage() {
           supabase
             .from("warehouse_locations")
             .select(
-              "id, warehouse_id, name, code",
+              "id, warehouse_id, name, code"
             )
-            .eq("company_id", currentCompanyId)
+            .eq(
+              "company_id",
+              companyId
+            )
+            .eq("is_active", true)
             .order("name", {
               ascending: true,
             }),
-
-          supabase
-            .from("inventory_batches")
-            .select(
-              `
-                id,
-                lot_number,
-                received_at,
-                status
-              `,
-            )
-            .eq("company_id", currentCompanyId),
-
-          supabase
-            .from("serialized_units")
-            .select(
-              `
-                id,
-                serial_number,
-                status
-              `,
-            )
-            .eq("company_id", currentCompanyId),
-
-          supabase
-            .from("company_regional_settings")
-            .select(
-              `
-                base_currency,
-                currency_symbol,
-                currency_symbol_position,
-                decimal_places,
-                thousands_separator,
-                decimal_separator
-              `,
-            )
-            .eq("company_id", currentCompanyId)
-            .maybeSingle(),
         ]);
 
-        if (orderResult.error) {
-          throw orderResult.error;
+        if (warehousesResult.error) {
+          throw warehousesResult.error;
         }
 
-        if (!orderResult.data) {
-          throw new Error(
-            "Sales order not found.",
-          );
+        if (locationsResult.error) {
+          throw locationsResult.error;
         }
 
-        if (itemsResult.error) {
-          throw itemsResult.error;
-        }
+        const loadedWarehouses =
+          (warehousesResult.data ||
+            []) as Warehouse[];
 
-        if (fulfillmentResult.error) {
-          throw fulfillmentResult.error;
-        }
+        const loadedLocations =
+          (locationsResult.data ||
+            []) as WarehouseLocation[];
 
-        if (warehouseResult.error) {
-          throw warehouseResult.error;
-        }
+        const defaultWarehouse =
+          loadedWarehouses.find(
+            (warehouse) =>
+              warehouse.is_default
+          ) ||
+          loadedWarehouses[0];
 
-        if (locationResult.error) {
-          throw locationResult.error;
-        }
-
-        if (batchResult.error) {
-          throw batchResult.error;
-        }
-
-        if (serialResult.error) {
-          throw serialResult.error;
-        }
-
-        if (regionalResult.error) {
-          throw regionalResult.error;
-        }
-
-        setOrder(
-          orderResult.data as Order,
-        );
-
-        setItems(
-          (itemsResult.data ||
-            []) as OrderItem[],
-        );
-
-        setFulfillments(
-          (fulfillmentResult.data ||
-            []) as Fulfillment[],
-        );
+        const defaultLocation =
+          defaultWarehouse
+            ? loadedLocations.find(
+                (location) =>
+                  location.warehouse_id ===
+                  defaultWarehouse.id
+              )
+            : null;
 
         setWarehouses(
-          (warehouseResult.data ||
-            []) as Warehouse[],
+          loadedWarehouses
         );
 
         setLocations(
-          (locationResult.data ||
-            []) as WarehouseLocation[],
+          loadedLocations
         );
 
-        setBatches(
-          (batchResult.data ||
-            []) as Batch[],
+        setSelectedWarehouseId(
+          defaultWarehouse?.id ||
+            ""
         );
 
-        setSerializedUnits(
-          (serialResult.data ||
-            []) as SerializedUnit[],
+        setSelectedLocationId(
+          defaultLocation?.id ||
+            ""
         );
-
-        setRegionalSettings(
-          regionalResult.data
-            ? (regionalResult.data as RegionalSettings)
-            : null,
-        );
-      } catch (error: any) {
+      } catch (caughtError) {
         console.error(
-          "Sales order detail error:",
-          error,
+          "Fulfillment options loading error:",
+          caughtError
         );
 
-        setErrorMessage(
-          error?.message ||
-            "Unable to load the sales order.",
+        setWarehouses([]);
+        setLocations([]);
+        setSelectedWarehouseId("");
+        setSelectedLocationId("");
+
+        setFulfillmentError(
+          "Unable to load active warehouses and locations."
         );
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        setFulfillmentOptionsLoading(
+          false
+        );
       }
     },
-    [orderId, supabase],
+    [supabase]
+  );
+
+  const loadOrder = useCallback(
+    async () => {
+      if (!orderId) {
+        setError("Invalid order.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      setFulfillmentError(null);
+      setFulfillmentSuccess(null);
+      setAvailableSerials({});
+      setSelectedSerials({});
+
+      const {
+        data: { user },
+        error: userError,
+      } =
+        await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError(
+          "Your session could not be verified."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const {
+        data: membership,
+        error: membershipError,
+      } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq(
+          "user_id",
+          user.id
+        )
+        .limit(1)
+        .maybeSingle();
+
+      if (
+        membershipError ||
+        !membership?.company_id
+      ) {
+        setError(
+          "Your company workspace could not be found."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const companyId =
+        membership.company_id;
+
+      const {
+        data: companyData,
+        error: companyError,
+      } = await supabase
+        .from("companies")
+        .select(
+          "id, name, currency"
+        )
+        .eq("id", companyId)
+        .maybeSingle();
+
+      if (companyError) {
+        console.error(
+          "Company loading error:",
+          companyError
+        );
+      }
+
+      if (companyData) {
+        setCompany(
+          companyData as Company
+        );
+      }
+
+      const {
+        data: orderData,
+        error: orderError,
+      } = await supabase
+        .from("orders")
+        .select(
+          `
+            id,
+            company_id,
+            customer_id,
+            order_number,
+            status,
+            payment_status,
+            fulfillment_status,
+            currency,
+            subtotal,
+            discount_amount,
+            tax_amount,
+            shipping_amount,
+            total_amount,
+            notes,
+            created_at,
+            updated_at,
+            customers (
+              id,
+              name,
+              email,
+              phone
+            )
+          `
+        )
+        .eq("id", orderId)
+        .eq(
+          "company_id",
+          companyId
+        )
+        .maybeSingle();
+
+      if (orderError) {
+        console.error(
+          "Order loading error:",
+          orderError
+        );
+
+        setError(
+          "We couldn't load this order."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      if (!orderData) {
+        setError(
+          "This order could not be found."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      const {
+        data: itemsData,
+        error: itemsError,
+      } = await supabase
+        .from("order_items")
+        .select(
+          `
+            id,
+            company_id,
+            order_id,
+            product_id,
+            variant_id,
+            product_name,
+            variant_name,
+            sku,
+            quantity,
+            unit_price,
+            unit_cost,
+            discount_amount,
+            tax_amount,
+            line_total,
+            created_at,
+            updated_at
+          `
+        )
+        .eq(
+          "order_id",
+          orderId
+        )
+        .eq(
+          "company_id",
+          companyId
+        )
+        .order("created_at", {
+          ascending: true,
+        });
+
+      if (itemsError) {
+        console.error(
+          "Order items loading error:",
+          itemsError
+        );
+
+        setError(
+          "The order loaded, but its items could not be loaded."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      const loadedItems =
+        (itemsData ||
+          []) as OrderItem[];
+
+      setOrder(
+        orderData as unknown as Order
+      );
+
+      setItems(loadedItems);
+
+      const productIds =
+        Array.from(
+          new Set(
+            loadedItems
+              .map(
+                (item) =>
+                  item.product_id
+              )
+              .filter(
+                (
+                  productId
+                ): productId is string =>
+                  Boolean(productId)
+              )
+          )
+        );
+
+      if (productIds.length > 0) {
+        const {
+          data: trackingData,
+          error: trackingError,
+        } = await supabase
+          .from("products")
+          .select(
+            "id, tracking_mode"
+          )
+          .eq(
+            "company_id",
+            companyId
+          )
+          .in(
+            "id",
+            productIds
+          );
+
+        if (trackingError) {
+          console.error(
+            "Product tracking mode loading error:",
+            trackingError
+          );
+        }
+
+        const trackingMap:
+          Record<string, string> =
+          {};
+
+        for (
+          const product of
+            (trackingData ||
+              []) as ProductTracking[]
+        ) {
+          trackingMap[
+            product.id
+          ] =
+            product.tracking_mode ||
+            "none";
+        }
+
+        setProductTrackingModes(
+          trackingMap
+        );
+      } else {
+        setProductTrackingModes({});
+      }
+
+      await Promise.all([
+        loadFinancialConnections(
+          companyId,
+          orderId
+        ),
+        loadFulfillmentOptions(
+          companyId
+        ),
+      ]);
+
+      setLoading(false);
+    },
+    [
+      orderId,
+      supabase,
+      loadFinancialConnections,
+      loadFulfillmentOptions,
+    ]
   );
 
   useEffect(() => {
-    loadOrder();
+    const timer = window.setTimeout(() => {
+      void loadOrder();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [loadOrder]);
 
-  const fulfillmentByItem = useMemo(() => {
-    const map = new Map<
-      string,
-      Fulfillment[]
-    >();
+  function printOrder() {
+    setPrinting(true);
 
-    for (const fulfillment of fulfillments) {
-      const current =
-        map.get(
-          fulfillment.order_item_id,
-        ) || [];
+    window.setTimeout(() => {
+      window.print();
 
-      current.push(fulfillment);
+      window.setTimeout(() => {
+        setPrinting(false);
+      }, 500);
+    }, 100);
+  }
 
-      map.set(
-        fulfillment.order_item_id,
-        current,
-      );
-    }
-
-    return map;
-  }, [fulfillments]);
-
-  const totalOrderedQuantity = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum + Number(item.quantity || 0),
-        0,
-      ),
-    [items],
-  );
-
-  const totalFulfilledQuantity = useMemo(
-    () =>
-      fulfillments.reduce(
-        (sum, fulfillment) =>
-          sum +
-          Number(
-            fulfillment.quantity || 0,
-          ),
-        0,
-      ),
-    [fulfillments],
-  );
-
-  const totalRemainingQuantity = Math.max(
-    0,
-    totalOrderedQuantity -
-      totalFulfilledQuantity,
-  );
-
-  const totalCost = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum +
-          Number(item.quantity || 0) *
-            Number(item.unit_cost || 0),
-        0,
-      ),
-    [items],
-  );
-
-  const grossProfit =
-    Number(order?.total_amount || 0) -
-    totalCost;
-
-  const getWarehouseName = (
-    warehouseId: string,
-  ) => {
-    const warehouse = warehouses.find(
-      (item) =>
-        item.id === warehouseId,
+  function createInvoice() {
+    router.push(
+      `/invoices/new?orderId=${encodeURIComponent(
+        orderId
+      )}`
     );
+  }
 
-    if (!warehouse) {
-      return "Unknown warehouse";
-    }
-
-    return warehouse.code
-      ? `${warehouse.name} (${warehouse.code})`
-      : warehouse.name;
-  };
-
-  const getLocationName = (
-    locationId: string | null,
-  ) => {
-    if (!locationId) {
-      return "Default location";
-    }
-
-    const location = locations.find(
-      (item) =>
-        item.id === locationId,
-    );
-
-    if (!location) {
-      return "Unknown location";
-    }
-
-    return location.code
-      ? `${location.name} (${location.code})`
-      : location.name;
-  };
-
-  const getBatch = (
-    batchId: string | null,
-  ) => {
-    if (!batchId) {
-      return null;
-    }
-
-    return (
-      batches.find(
-        (batch) =>
-          batch.id === batchId,
-      ) || null
-    );
-  };
-
-  const getSerial = (
-    serialId: string | null,
-  ) => {
-    if (!serialId) {
-      return null;
-    }
-
-    return (
-      serializedUnits.find(
-        (serial) =>
-          serial.id === serialId,
-      ) || null
-    );
-  };
-
-  const cancelOrder = async () => {
-    if (!companyId || !order) {
+  function viewInvoice() {
+    if (!invoice?.id) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        `Cancel sales order ${order.order_number}? Any existing fulfillment will be reversed according to the inventory reversal rules.`,
-      );
+    router.push(
+      `/invoices/${invoice.id}`
+    );
+  }
+
+  function recordPayment() {
+    if (!invoice?.id) {
+      return;
+    }
+
+    router.push(
+      `/payments?invoiceId=${encodeURIComponent(
+        invoice.id
+      )}`
+    );
+  }
+
+  const availableLocations =
+    useMemo(
+      () =>
+        locations.filter(
+          (location) =>
+            location.warehouse_id ===
+            selectedWarehouseId
+        ),
+      [
+        locations,
+        selectedWarehouseId,
+      ]
+    );
+
+  const serialItems =
+    useMemo(
+      () =>
+        items.filter(
+          (item) =>
+            Boolean(
+              item.product_id
+            ) &&
+            productTrackingModes[
+              item.product_id ||
+                ""
+            ] === "serial"
+        ),
+      [
+        items,
+        productTrackingModes,
+      ]
+    );
+
+  const hasSerialItems =
+    serialItems.length > 0;
+
+  const loadAvailableSerials =
+    useCallback(
+      async () => {
+        if (
+          !order ||
+          !selectedWarehouseId ||
+          !selectedLocationId ||
+          serialItems.length === 0
+        ) {
+          setAvailableSerials(
+            {}
+          );
+          setSelectedSerials({});
+          return;
+        }
+
+        setSerialsLoading(true);
+
+        try {
+          const productIds =
+            Array.from(
+              new Set(
+                serialItems
+                  .map(
+                    (item) =>
+                      item.product_id
+                  )
+                  .filter(
+                    (
+                      id
+                    ): id is string =>
+                      Boolean(id)
+                  )
+              )
+            );
+
+          const {
+            data,
+            error: serialError,
+          } =
+            await supabase
+              .from(
+                "serialized_units"
+              )
+              .select(
+                `
+                  id,
+                  serial_number,
+                  barcode,
+                  status,
+                  product_id,
+                  variant_id,
+                  warehouse_id,
+                  location_id
+                `
+              )
+              .eq(
+                "company_id",
+                order.company_id
+              )
+              .eq(
+                "status",
+                "available"
+              )
+              .eq(
+                "warehouse_id",
+                selectedWarehouseId
+              )
+              .eq(
+                "location_id",
+                selectedLocationId
+              )
+              .in(
+                "product_id",
+                productIds
+              )
+              .order(
+                "serial_number",
+                {
+                  ascending: true,
+                }
+              );
+
+          if (serialError) {
+            throw serialError;
+          }
+
+          const loadedSerials =
+            (data ||
+              []) as SerializedUnit[];
+
+          const serialMap:
+            Record<
+              string,
+              SerializedUnit[]
+            > = {};
+
+          for (
+            const item of serialItems
+          ) {
+            serialMap[item.id] =
+              loadedSerials.filter(
+                (serial) =>
+                  serial.product_id ===
+                    item.product_id &&
+                  serial.variant_id ===
+                    item.variant_id
+              );
+          }
+
+          setAvailableSerials(
+            serialMap
+          );
+
+          setSelectedSerials(
+            (current) => {
+              const next:
+                Record<
+                  string,
+                  string[]
+                > = {};
+
+              for (
+                const item of serialItems
+              ) {
+                const validIds =
+                  new Set(
+                    (
+                      serialMap[
+                        item.id
+                      ] || []
+                    ).map(
+                      (serial) =>
+                        serial.id
+                    )
+                  );
+
+                next[item.id] =
+                  (
+                    current[
+                      item.id
+                    ] || []
+                  ).filter(
+                    (id) =>
+                      validIds.has(
+                        id
+                      )
+                  );
+              }
+
+              return next;
+            }
+          );
+        } catch (caughtError) {
+          console.error(
+            "Available serial loading error:",
+            caughtError
+          );
+
+          setAvailableSerials({});
+          setSelectedSerials({});
+
+          setFulfillmentError(
+            "Unable to load available serial numbers for the selected warehouse location."
+          );
+        } finally {
+          setSerialsLoading(false);
+        }
+      },
+      [
+        order,
+        selectedWarehouseId,
+        selectedLocationId,
+        serialItems,
+        supabase,
+      ]
+    );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAvailableSerials();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    order,
+    selectedWarehouseId,
+    selectedLocationId,
+    loadAvailableSerials,
+  ]);
+
+  async function cancelOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (isCancelling) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Cancel order ${order.order_number}?\n\n` +
+        `If this order has already been fulfilled, its inventory ` +
+        `will be reversed automatically.\n\n` +
+        `This action cannot be undone.`
+    );
 
     if (!confirmed) {
       return;
     }
 
-    try {
-      setCancelling(true);
-      setErrorMessage("");
-      setSuccessMessage("");
+    setIsCancelling(true);
+    setCancellationError(null);
+    setCancellationSuccess(null);
 
-      const { error } =
-        await supabase.rpc(
-          "cancel_sales_order",
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/cancel`,
           {
-            p_company_id:
-              companyId,
-            p_order_id:
-              order.id,
-          },
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              reason:
+                "Sales order cancellation",
+            }),
+          }
         );
 
-      if (error) {
-        throw error;
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Unable to cancel this order."
+        );
       }
 
-      setSuccessMessage(
-        `Sales order ${order.order_number} has been cancelled.`,
+      setCancellationSuccess(
+        "Order cancelled successfully. Any fulfilled inventory was reversed."
       );
 
-      await loadOrder(true);
-    } catch (error: any) {
+      await loadOrder();
+      router.refresh();
+    } catch (error) {
       console.error(
-        "Cancel sales order error:",
-        error,
+        "Cancel order error:",
+        error
       );
 
-      setErrorMessage(
-        error?.message ||
-          "Unable to cancel the sales order.",
+      setCancellationError(
+        error instanceof Error
+          ? error.message
+          : "Unable to cancel this order."
       );
     } finally {
-      setCancelling(false);
+      setIsCancelling(false);
     }
-  };
+  }
+
+  async function fulfillOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (
+      !selectedWarehouseId ||
+      !selectedLocationId
+    ) {
+      setFulfillmentError(
+        "Select an active warehouse and location before fulfilling this order."
+      );
+      return;
+    }
+
+    setIsFulfilling(true);
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/fulfill`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              warehouse_id:
+                selectedWarehouseId,
+              location_id:
+                selectedLocationId,
+            }),
+          }
+        );
+
+      const result =
+        (await response.json()) as {
+          error?: string;
+          fulfilled_inventory_lines?: number;
+          fulfilled_non_inventory_lines?: number;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "The sales order could not be fulfilled."
+        );
+      }
+
+      const inventoryLineLabel =
+        result.fulfilled_inventory_lines ===
+        1
+          ? "inventory line"
+          : "inventory lines";
+
+      setFulfillmentSuccess(
+        `Order fulfilled. ${
+          result.fulfilled_inventory_lines ||
+          0
+        } ${inventoryLineLabel} were issued from inventory.`
+      );
+
+      await loadOrder();
+      router.refresh();
+    } catch (caughtError) {
+      console.error(
+        "Order fulfillment error:",
+        caughtError
+      );
+
+      setFulfillmentError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The sales order could not be fulfilled."
+      );
+    } finally {
+      setIsFulfilling(false);
+    }
+  }
+
+  async function fulfillSerialOrder() {
+    if (!order) {
+      return;
+    }
+
+    if (
+      !selectedWarehouseId ||
+      !selectedLocationId
+    ) {
+      setFulfillmentError(
+        "Select an active warehouse and location before fulfilling this order."
+      );
+      return;
+    }
+
+    if (serialItems.length === 0) {
+      return;
+    }
+
+    const allocations: {
+      order_item_id: string;
+      serialized_unit_ids: string[];
+    }[] = [];
+
+    for (
+      const item of serialItems
+    ) {
+      const selected =
+        selectedSerials[
+          item.id
+        ] || [];
+
+      const requiredQuantity =
+        Number(
+          item.quantity || 0
+        );
+
+      if (
+        !Number.isInteger(
+          requiredQuantity
+        ) ||
+        requiredQuantity <= 0
+      ) {
+        setFulfillmentError(
+          `${item.product_name} has an invalid serialized quantity.`
+        );
+        return;
+      }
+
+      if (
+        selected.length !==
+        requiredQuantity
+      ) {
+        setFulfillmentError(
+          `${item.product_name} requires ${requiredQuantity} serial number${
+            requiredQuantity === 1
+              ? ""
+              : "s"
+          }, but ${selected.length} ${
+            selected.length === 1
+              ? "was"
+              : "were"
+          } selected.`
+        );
+        return;
+      }
+
+      allocations.push({
+        order_item_id:
+          item.id,
+        serialized_unit_ids:
+          selected,
+      });
+    }
+
+    setIsFulfilling(true);
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/sales/orders/${encodeURIComponent(
+            order.id
+          )}/serial-fulfill`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              warehouse_id:
+                selectedWarehouseId,
+              location_id:
+                selectedLocationId,
+              allocations,
+            }),
+          }
+        );
+
+      const result =
+        (await response.json()) as {
+          error?: string;
+          total_quantity_fulfilled?: number;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+            "The serialized sales order could not be fulfilled."
+        );
+      }
+
+      const quantity =
+        Number(
+          result.total_quantity_fulfilled ||
+            0
+        );
+
+      setFulfillmentSuccess(
+        `Order fulfilled. ${quantity} serialized unit${
+          quantity === 1
+            ? ""
+            : "s"
+        } allocated successfully.`
+      );
+
+      setSelectedSerials({});
+
+      await loadOrder();
+      router.refresh();
+    } catch (caughtError) {
+      console.error(
+        "Serial order fulfillment error:",
+        caughtError
+      );
+
+      setFulfillmentError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The serialized sales order could not be fulfilled."
+      );
+    } finally {
+      setIsFulfilling(false);
+    }
+  }
+
+  function toggleSerial(
+    itemId: string,
+    serialId: string,
+    requiredQuantity: number
+  ) {
+    setSelectedSerials(
+      (current) => {
+        const existing =
+          current[itemId] || [];
+
+        if (
+          existing.includes(
+            serialId
+          )
+        ) {
+          return {
+            ...current,
+            [itemId]:
+              existing.filter(
+                (id) =>
+                  id !==
+                  serialId
+              ),
+          };
+        }
+
+        if (
+          existing.length >=
+          requiredQuantity
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [itemId]: [
+            ...existing,
+            serialId,
+          ],
+        };
+      }
+    );
+
+    setFulfillmentError(null);
+    setFulfillmentSuccess(null);
+  }
 
   if (loading) {
     return (
-      <AppShell>
-        <div className="min-h-screen bg-slate-50">
-          <div className="mx-auto max-w-[1600px] px-6 py-8 lg:px-8">
-            <div className="animate-pulse">
-              <div className="h-4 w-48 rounded bg-slate-200" />
+      <AppShell
+        title="Order Details"
+        description="View sale and order information."
+      >
+        <div className="order-state">
+          <div className="order-spinner" />
 
-              <div className="mt-5 h-9 w-72 rounded bg-slate-200" />
+          <strong>
+            Loading order...
+          </strong>
 
-              <div className="mt-2 h-4 w-96 rounded bg-slate-200" />
-
-              <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-                <div className="h-[700px] rounded-2xl bg-white" />
-
-                <div className="h-[500px] rounded-2xl bg-white" />
-              </div>
-            </div>
-          </div>
+          <span>
+            Getting order details, invoice and payment information.
+          </span>
         </div>
+
+        <style jsx>{`
+          .order-state {
+            min-height: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+          }
+
+          .order-spinner {
+            width: 30px;
+            height: 30px;
+            margin-bottom: 14px;
+            border: 2px solid #e4e8ee;
+            border-top-color: #697386;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+          }
+
+          .order-state strong {
+            color: #465163;
+            font-size: 14px;
+          }
+
+          .order-state span {
+            margin-top: 6px;
+            color: #9aa2af;
+            font-size: 11px;
+          }
+
+          @keyframes spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
       </AppShell>
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
-      <AppShell>
-        <div className="min-h-screen bg-slate-50">
-          <div className="mx-auto max-w-[1600px] px-6 py-8 lg:px-8">
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-8">
-              <h1 className="text-lg font-semibold text-red-900">
-                Unable to load sales order
-              </h1>
+      <AppShell
+        title="Order Details"
+        description="View sale and order information."
+      >
+        <div className="order-state">
+          <div className="order-error-icon">
+            !
+          </div>
 
-              <p className="mt-2 text-sm text-red-700">
-                {errorMessage ||
-                  "The requested sales order could not be found."}
-              </p>
+          <strong>
+            {error ||
+              "Order not found"}
+          </strong>
 
-              <button
-                type="button"
-                onClick={() =>
-                  router.push("/sales")
-                }
-                className="mt-5 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
-              >
-                Back to Sales
-              </button>
-            </div>
+          <span>
+            The requested order could not be loaded.
+          </span>
+
+          <div className="error-actions">
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/sales"
+                )
+              }
+            >
+              Back to Sales
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                void loadOrder()
+              }
+            >
+              Try Again
+            </button>
           </div>
         </div>
+
+        <style jsx>{`
+          .order-state {
+            min-height: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+          }
+
+          .order-error-icon {
+            width: 48px;
+            height: 48px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 14px;
+            border: 1px solid #ead6d6;
+            border-radius: 50%;
+            background: #fff8f8;
+            color: #915858;
+            font-size: 17px;
+            font-weight: 800;
+          }
+
+          .order-state strong {
+            color: #465163;
+            font-size: 14px;
+          }
+
+          .order-state span {
+            margin-top: 6px;
+            color: #9aa2af;
+            font-size: 10px;
+          }
+
+          .error-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 17px;
+          }
+
+          .error-actions button {
+            height: 37px;
+            padding: 0 13px;
+            border: 1px solid #dfe4eb;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #596476;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 700;
+          }
+
+          .error-actions button:hover {
+            background: #f6f8fa;
+            color: #263043;
+          }
+        `}</style>
       </AppShell>
     );
   }
 
-  const isCancelled =
-    order.status === "cancelled" ||
-    order.status === "refunded";
+  const currency =
+    order.currency ||
+    company?.currency ||
+    "USD";
 
-  const canFulfill =
-    !isCancelled &&
-    order.fulfillment_status !==
-      "fulfilled" &&
-    totalRemainingQuantity > 0;
+  const customerName =
+    order.customers?.name ||
+    "Walk-in Customer";
+
+  const companyName =
+    company?.name ||
+    "Company";
+
+  const totalQuantity =
+    items.reduce(
+      (sum, item) =>
+        sum +
+        Number(
+          item.quantity || 0
+        ),
+      0
+    );
+
+  const hasDiscount =
+    Number(
+      order.discount_amount || 0
+    ) > 0;
+
+  const hasTax =
+    Number(
+      order.tax_amount || 0
+    ) > 0;
+
+  const hasShipping =
+    Number(
+      order.shipping_amount || 0
+    ) > 0;
+
+  const recordedPaymentsTotal =
+    payments.reduce(
+      (sum, payment) =>
+        sum +
+        Number(
+          payment.amount || 0
+        ),
+      0
+    );
+
+  const paidAmount = invoice
+    ? Math.max(
+        Number(
+          invoice.amount_paid ||
+            0
+        ),
+        recordedPaymentsTotal
+      )
+    : 0;
+
+  const invoiceTotal =
+    Number(
+      invoice?.total || 0
+    );
+
+  const balanceDue =
+    Math.max(
+      invoiceTotal -
+        paidAmount,
+      0
+    );
+
+  const invoicePaymentStatus =
+    invoice
+      ? paidAmount >=
+          invoiceTotal &&
+        invoiceTotal > 0
+        ? "paid"
+        : paidAmount > 0
+          ? "partially_paid"
+          : invoice.status ===
+              "overdue"
+            ? "overdue"
+            : "unpaid"
+      : "unpaid";
+
+  const allSerialSelectionsComplete =
+    serialItems.every(
+      (item) =>
+        (
+          selectedSerials[
+            item.id
+          ] || []
+        ).length ===
+        Number(
+          item.quantity || 0
+        )
+    );
 
   return (
-    <AppShell>
-      <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-[1600px] px-6 py-6 lg:px-8">
-          {/* Header */}
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                <Link
-                  href="/dashboard"
-                  className="transition hover:text-slate-900"
-                >
-                  Dashboard
-                </Link>
+    <AppShell
+      title={
+        order.order_number
+      }
+      description={`Created ${formatDateTime(
+        order.created_at
+      )}`}
+      actions={
+        <div className="order-header-actions">
 
-                <span>/</span>
+          <button
+            type="button"
+            className="order-back-button"
+            onClick={() =>
+              router.push(
+                "/sales"
+              )
+            }
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
 
-                <Link
-                  href="/sales"
-                  className="transition hover:text-slate-900"
-                >
-                  Sales
-                </Link>
+            Back
+          </button>
 
-                <span>/</span>
+          {!invoice && (
+            <button
+              type="button"
+              className="order-invoice-button"
+              onClick={
+                createInvoice
+              }
+              disabled={
+                invoiceLoading
+              }
+            >
+              {invoiceLoading
+                ? "Loading..."
+                : "Create Invoice"}
+            </button>
+          )}
 
-                <span className="text-slate-900">
-                  {order.order_number}
-                </span>
+          {invoice && (
+            <button
+              type="button"
+              className="order-invoice-button"
+              onClick={
+                viewInvoice
+              }
+            >
+              View Invoice
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="order-print-button"
+            onClick={
+              printOrder
+            }
+          >
+            {printing
+              ? "Printing..."
+              : "Print / PDF"}
+          </button>
+
+          {order.status !== "cancelled" &&
+            order.status !== "refunded" && (
+              <button
+                type="button"
+                className="order-cancel-button"
+                onClick={() =>
+                  void cancelOrder()
+                }
+                disabled={
+                  isCancelling ||
+                  isFulfilling
+                }
+              >
+                {isCancelling
+                  ? "Cancelling..."
+                  : "Cancel Order"}
+              </button>
+          )}
+
+        </div>
+      }
+    >
+      <div className="order-page">
+
+        {cancellationError && (
+          <div className="order-alert danger">
+            {cancellationError}
+          </div>
+        )}
+
+        {cancellationSuccess && (
+          <div className="order-alert success">
+            {cancellationSuccess}
+          </div>
+        )}
+
+        {fulfillmentError && (
+          <div className="order-alert danger">
+            {fulfillmentError}
+          </div>
+        )}
+
+        {fulfillmentSuccess && (
+          <div className="order-alert success">
+            {fulfillmentSuccess}
+          </div>
+        )}
+
+        <section className="invoice-document">
+
+          <header className="invoice-header">
+
+            <div className="invoice-company-block">
+              <h1>
+                {companyName}
+              </h1>
+
+              <span>
+                Sales & Order Management
+              </span>
+            </div>
+
+            <div className="invoice-title-block">
+              <div className="invoice-title">
+                SALES ORDER
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-                  {order.order_number}
-                </h1>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusClasses(
-                      order.status,
-                    )}`}
-                  >
-                    {humanize(
-                      order.status,
-                    )}
-                  </span>
-
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${getPaymentClasses(
-                      order.payment_status,
-                    )}`}
-                  >
-                    Payment:{" "}
-                    {humanize(
-                      order.payment_status,
-                    )}
-                  </span>
-
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${getFulfillmentClasses(
-                      order.fulfillment_status,
-                    )}`}
-                  >
-                    {humanize(
-                      order.fulfillment_status,
-                    )}
-                  </span>
-                </div>
+              <div className="invoice-number">
+                {
+                  order.order_number
+                }
               </div>
+            </div>
 
-              <p className="mt-2 text-sm text-slate-500">
-                Created{" "}
+          </header>
+
+          <div className="invoice-meta-row">
+
+            <div className="invoice-meta-group">
+              <span>
+                Order Date
+              </span>
+
+              <strong>
                 {formatDate(
-                  order.created_at,
+                  order.created_at
                 )}
-              </p>
+              </strong>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  router.push("/sales")
-                }
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            <div className="invoice-meta-group">
+              <span>
+                Payment Status
+              </span>
+
+              <strong
+                className={`invoice-status ${getStatusClass(
+                  invoice
+                    ? invoicePaymentStatus
+                    : order.payment_status
+                )}`}
               >
-                Back to Sales
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  loadOrder(true)
-                }
-                disabled={refreshing}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <svg
-                  className={`h-4 w-4 ${
-                    refreshing
-                      ? "animate-spin"
-                      : ""
-                  }`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M20 11a8.1 8.1 0 0 0-14.9-4M4 5v4h4M4 13a8.1 8.1 0 0 0 14.9 4M20 19v-4h-4"
-                  />
-                </svg>
-
-                Refresh
-              </button>
-
-              {canFulfill && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    router.push(
-                      `/sales/${order.id}/fulfill`,
-                    )
-                  }
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"
-                    />
-
-                    <circle
-                      cx="7"
-                      cy="19"
-                      r="1.5"
-                    />
-
-                    <circle
-                      cx="18"
-                      cy="19"
-                      r="1.5"
-                    />
-                  </svg>
-
-                  Fulfill Order
-                </button>
-              )}
-
-              {!isCancelled && (
-                <button
-                  type="button"
-                  onClick={cancelOrder}
-                  disabled={cancelling}
-                  className="inline-flex h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {cancelling
-                    ? "Cancelling..."
-                    : "Cancel Order"}
-                </button>
-              )}
+                {formatStatus(
+                  invoice
+                    ? invoicePaymentStatus
+                    : order.payment_status
+                )}
+              </strong>
             </div>
+
+            <div className="invoice-meta-group">
+              <span>
+                Order Status
+              </span>
+
+              <strong
+                className={`invoice-status ${getStatusClass(
+                  order.status
+                )}`}
+              >
+                {formatStatus(
+                  order.status
+                )}
+              </strong>
+            </div>
+
+            <div className="invoice-meta-group">
+              <span>
+                Fulfillment
+              </span>
+
+              <strong
+                className={`invoice-status ${getStatusClass(
+                  order.fulfillment_status
+                )}`}
+              >
+                {formatStatus(
+                  order.fulfillment_status
+                )}
+              </strong>
+            </div>
+
           </div>
 
-          {/* Messages */}
-          {errorMessage && (
-            <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-              <div className="flex items-start gap-3">
-                <svg
-                  className="mt-0.5 h-5 w-5 shrink-0 text-red-600"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="9"
-                  />
+          <div className="invoice-parties">
 
-                  <path
-                    strokeLinecap="round"
-                    d="M12 8v4M12 16h.01"
-                  />
-                </svg>
+            <div className="invoice-party">
+
+              <div className="invoice-section-label">
+                BILL TO
+              </div>
+
+              <strong className="invoice-party-name">
+                {
+                  customerName
+                }
+              </strong>
+
+              {order.customers
+                ?.email && (
+                <span>
+                  {
+                    order
+                      .customers
+                      .email
+                  }
+                </span>
+              )}
+
+              {order.customers
+                ?.phone && (
+                <span>
+                  {
+                    order
+                      .customers
+                      .phone
+                  }
+                </span>
+              )}
+
+              {!order
+                .customers
+                ?.email &&
+                !order
+                  .customers
+                  ?.phone && (
+                  <span>
+                    Walk-in customer
+                  </span>
+                )}
+
+            </div>
+
+            <div className="invoice-party invoice-party-right">
+
+              <div className="invoice-section-label">
+                FROM
+              </div>
+
+              <strong className="invoice-party-name">
+                {
+                  companyName
+                }
+              </strong>
+
+              <span>
+                Sales Order
+              </span>
+
+              <span>
+                Order #
+                {
+                  order.order_number
+                }
+              </span>
+
+            </div>
+
+          </div>
+
+          <div className="invoice-items-section">
+
+            <div className="invoice-section-label">
+              ITEMS
+            </div>
+
+            {items.length ===
+            0 ? (
+              <div className="invoice-empty">
+                No items were added to this order.
+              </div>
+            ) : (
+              <div className="invoice-items-table-wrap">
+                <table className="invoice-items-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        Item
+                      </th>
+
+                      <th>
+                        SKU
+                      </th>
+
+                      <th className="numeric">
+                        Qty
+                      </th>
+
+                      <th className="numeric">
+                        Unit Price
+                      </th>
+
+                      <th className="numeric">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {items.map(
+                      (item) => (
+                        <tr
+                          key={
+                            item.id
+                          }
+                        >
+                          <td>
+                            <div className="item-name">
+                              {
+                                item.product_name
+                              }
+                            </div>
+
+                            {item.variant_name && (
+                              <div className="item-variant">
+                                {
+                                  item.variant_name
+                                }
+                              </div>
+                            )}
+                          </td>
+
+                          <td>
+                            {
+                              item.sku ||
+                              "—"
+                            }
+                          </td>
+
+                          <td className="numeric">
+                            {
+                              item.quantity
+                            }
+                          </td>
+
+                          <td className="numeric">
+                            {formatCurrency(
+                              Number(
+                                item.unit_price ||
+                                  0
+                              ),
+                              currency
+                            )}
+                          </td>
+
+                          <td className="numeric">
+                            {formatCurrency(
+                              Number(
+                                item.line_total ||
+                                  0
+                              ),
+                              currency
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+          </div>
+
+          <div className="invoice-summary-row">
+
+            <div className="invoice-notes">
+
+              {order.notes && (
+                <>
+                  <div className="invoice-section-label">
+                    NOTES
+                  </div>
+
+                  <p>
+                    {order.notes}
+                  </p>
+                </>
+              )}
+
+            </div>
+
+            <div className="invoice-totals">
+
+              <div className="invoice-total-row">
+                <span>
+                  Subtotal
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    Number(
+                      order.subtotal ||
+                        0
+                    ),
+                    currency
+                  )}
+                </strong>
+              </div>
+
+              {hasDiscount && (
+                <div className="invoice-total-row">
+                  <span>
+                    Discount
+                  </span>
+
+                  <strong>
+                    -
+                    {formatCurrency(
+                      Number(
+                        order.discount_amount ||
+                          0
+                      ),
+                      currency
+                    )}
+                  </strong>
+                </div>
+              )}
+
+              {hasTax && (
+                <div className="invoice-total-row">
+                  <span>
+                    Tax
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      Number(
+                        order.tax_amount ||
+                          0
+                      ),
+                      currency
+                    )}
+                  </strong>
+                </div>
+              )}
+
+              {hasShipping && (
+                <div className="invoice-total-row">
+                  <span>
+                    Shipping
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      Number(
+                        order.shipping_amount ||
+                          0
+                      ),
+                      currency
+                    )}
+                  </strong>
+                </div>
+              )}
+
+              <div className="invoice-total-row grand-total">
+                <span>
+                  Total
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    Number(
+                      order.total_amount ||
+                        0
+                    ),
+                    currency
+                  )}
+                </strong>
+              </div>
+
+            </div>
+
+          </div>
+
+          {invoice && (
+            <section className="attached-invoice-section">
+
+              <div className="attached-invoice-header">
 
                 <div>
-                  <p className="text-sm font-semibold text-red-800">
-                    Something went wrong
-                  </p>
+                  <div className="invoice-section-label">
+                    ATTACHED INVOICE
+                  </div>
 
-                  <p className="mt-1 text-sm text-red-700">
-                    {errorMessage}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-              <p className="text-sm font-medium text-emerald-700">
-                {successMessage}
-              </p>
-            </div>
-          )}
-
-          {/* KPI Cards */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">
-                  Order Total
-                </p>
-
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 3h12v18H6z"
-                    />
-
-                    <path
-                      strokeLinecap="round"
-                      d="M9 7h6M9 11h6M9 15h3"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <p className="mt-4 whitespace-nowrap text-2xl font-semibold tracking-tight text-slate-950">
-                {formatMoney(
-                  order.total_amount,
-                  order.currency,
-                  regionalSettings,
-                )}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">
-                  Items
-                </p>
-
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                {totalOrderedQuantity}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                {items.length} line{" "}
-                {items.length === 1
-                  ? "item"
-                  : "items"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">
-                  Fulfilled
-                </p>
-
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="m5 12 4 4L19 6"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                {totalFulfilledQuantity}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                {totalRemainingQuantity}{" "}
-                remaining
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">
-                  Gross Profit
-                </p>
-
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 3v18M17 7h-6.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H7"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <p
-                className={`mt-4 whitespace-nowrap text-2xl font-semibold tracking-tight ${
-                  grossProfit >= 0
-                    ? "text-emerald-700"
-                    : "text-red-600"
-                }`}
-              >
-                {formatMoney(
-                  grossProfit,
-                  order.currency,
-                  regionalSettings,
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-            <div className="space-y-6">
-              {/* Order Items */}
-              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-950">
-                        Order Items
-                      </h2>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        Products and quantities
-                        included in this sales
-                        order.
-                      </p>
-                    </div>
-
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {items.length}{" "}
-                      {items.length === 1
-                        ? "item"
-                        : "items"}
-                    </span>
+                  <div className="attached-invoice-title">
+                    {
+                      invoice.invoice_number
+                    }
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-[1000px] w-full">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/70">
-                        <th className="min-w-[330px] px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Product
-                        </th>
+                <div className="attached-invoice-actions">
 
-                        <th className="w-[110px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Qty
-                        </th>
+                  <button
+                    type="button"
+                    className="order-invoice-button"
+                    onClick={
+                      viewInvoice
+                    }
+                  >
+                    View Invoice
+                  </button>
 
-                        <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Unit Price
-                        </th>
+                  <button
+                    type="button"
+                    className="order-payment-button"
+                    onClick={
+                      recordPayment
+                    }
+                  >
+                    Record Payment
+                  </button>
 
-                        <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Discount
-                        </th>
-
-                        <th className="w-[170px] px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Line Total
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-                      {items.map((item) => {
-                        const itemFulfillments =
-                          fulfillmentByItem.get(
-                            item.id,
-                          ) || [];
-
-                        const fulfilledQty =
-                          itemFulfillments.reduce(
-                            (sum, fulfillment) =>
-                              sum +
-                              Number(
-                                fulfillment.quantity ||
-                                  0,
-                              ),
-                            0,
-                          );
-
-                        const remainingQty =
-                          Math.max(
-                            0,
-                            Number(
-                              item.quantity ||
-                                0,
-                            ) -
-                              fulfilledQty,
-                          );
-
-                        return (
-                          <tr
-                            key={item.id}
-                            className="transition hover:bg-slate-50/50"
-                          >
-                            <td className="min-w-[330px] px-6 py-5 align-middle">
-                              <div className="min-w-0">
-                                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
-                                  {
-                                    item.product_name
-                                  }
-                                </p>
-
-                                <div className="mt-1 flex flex-nowrap items-center gap-2 overflow-hidden">
-                                  {item.variant_name && (
-                                    <span className="whitespace-nowrap text-xs text-slate-500">
-                                      {
-                                        item.variant_name
-                                      }
-                                    </span>
-                                  )}
-
-                                  {item.sku && (
-                                    <>
-                                      <span className="shrink-0 text-slate-300">
-                                        ·
-                                      </span>
-
-                                      <span className="whitespace-nowrap text-xs text-slate-400">
-                                        SKU{" "}
-                                        {
-                                          item.sku
-                                        }
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  {fulfilledQty >
-                                    0 && (
-                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                                      Fulfilled{" "}
-                                      {
-                                        fulfilledQty
-                                      }
-                                    </span>
-                                  )}
-
-                                  {remainingQty >
-                                    0 && (
-                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                                      Remaining{" "}
-                                      {
-                                        remainingQty
-                                      }
-                                    </span>
-                                  )}
-
-                                  {remainingQty ===
-                                    0 &&
-                                    fulfilledQty >
-                                      0 && (
-                                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                                        Complete
-                                      </span>
-                                    )}
-                                </div>
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-5 text-right align-middle">
-                              <span className="text-sm font-semibold text-slate-800">
-                                {
-                                  item.quantity
-                                }
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-5 text-right align-middle">
-                              <span className="whitespace-nowrap text-sm text-slate-700">
-                                {formatMoney(
-                                  item.unit_price,
-                                  order.currency,
-                                  regionalSettings,
-                                )}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-5 text-right align-middle">
-                              <span className="whitespace-nowrap text-sm text-slate-600">
-                                {formatMoney(
-                                  item.discount_amount,
-                                  order.currency,
-                                  regionalSettings,
-                                )}
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-5 text-right align-middle">
-                              <span className="whitespace-nowrap text-sm font-semibold text-slate-900">
-                                {formatMoney(
-                                  item.line_total,
-                                  order.currency,
-                                  regionalSettings,
-                                )}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
                 </div>
-              </section>
 
-              {/* Fulfillment History */}
-              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-950">
-                        Fulfillment History
-                      </h2>
+              </div>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        Inventory allocations
-                        recorded against this
-                        order.
-                      </p>
-                    </div>
+              <div className="attached-invoice-grid">
 
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {fulfillments.length}{" "}
-                      {fulfillments.length ===
-                      1
-                        ? "record"
-                        : "records"}
-                    </span>
+                <div>
+                  <span>
+                    Invoice Status
+                  </span>
+
+                  <strong>
+                    {formatStatus(
+                      invoice.status
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Invoice Total
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      invoiceTotal,
+                      currency
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Paid
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      paidAmount,
+                      currency
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Balance Due
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      balanceDue,
+                      currency
+                    )}
+                  </strong>
+                </div>
+
+              </div>
+
+              {payments.length > 0 && (
+                <div className="invoice-payments">
+
+                  <div className="invoice-section-label">
+                    RECORDED PAYMENTS
                   </div>
-                </div>
 
-                {fulfillments.length ===
-                0 ? (
-                  <div className="px-6 py-14 text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                      <svg
-                        className="h-6 w-6"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"
-                        />
+                  <div className="invoice-payments-list">
+                    {payments.map(
+                      (payment) => (
+                        <div
+                          key={
+                            payment.id
+                          }
+                          className="invoice-payment-row"
+                        >
+                          <div>
+                            <strong>
+                              {formatCurrency(
+                                Number(
+                                  payment.amount ||
+                                    0
+                                ),
+                                payment.currency ||
+                                  currency
+                              )}
+                            </strong>
 
-                        <circle
-                          cx="7"
-                          cy="19"
-                          r="1.5"
-                        />
+                            <span>
+                              {payment.payment_method ||
+                                "Payment"}
+                              {payment.reference
+                                ? ` • ${payment.reference}`
+                                : ""}
+                            </span>
+                          </div>
 
-                        <circle
-                          cx="18"
-                          cy="19"
-                          r="1.5"
-                        />
-                      </svg>
-                    </div>
-
-                    <h3 className="mt-4 text-sm font-semibold text-slate-900">
-                      No fulfillment recorded
-                    </h3>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Batch, warehouse, and
-                      optional serial allocation
-                      will appear here after
-                      fulfillment.
-                    </p>
-
-                    {canFulfill && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          router.push(
-                            `/sales/${order.id}/fulfill`,
-                          )
-                        }
-                        className="mt-5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-                      >
-                        Start Fulfillment
-                      </button>
+                          <time>
+                            {formatDateTime(
+                              payment.paid_at
+                            )}
+                          </time>
+                        </div>
+                      )
                     )}
                   </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {fulfillments.map(
-                      (fulfillment) => {
-                        const item =
-                          items.find(
-                            (item) =>
-                              item.id ===
-                              fulfillment.order_item_id,
-                          );
 
-                        const batch =
-                          getBatch(
-                            fulfillment.batch_id,
-                          );
+                </div>
+              )}
 
-                        const serial =
-                          getSerial(
-                            fulfillment.serialized_unit_id,
+            </section>
+          )}
+
+        </section>
+
+        <div className="fulfillment-layout">
+
+          <main className="fulfillment-main">
+
+            <section className="fulfillment-card">
+
+              <div className="fulfillment-card-header">
+
+                <div>
+                  <div className="invoice-section-label">
+                    FULFILLMENT
+                  </div>
+
+                  <h2>
+                    Inventory fulfillment
+                  </h2>
+
+                  <p>
+                    Select the warehouse and location from which this sales order should be issued.
+                  </p>
+                </div>
+
+                <div className="fulfillment-quantity">
+                  <span>
+                    Total quantity
+                  </span>
+
+                  <strong>
+                    {totalQuantity}
+                  </strong>
+                </div>
+
+              </div>
+
+              <div className="fulfillment-controls">
+
+                <div className="fulfillment-field">
+
+                  <label htmlFor="warehouse">
+                    Warehouse
+                  </label>
+
+                  <select
+                    id="warehouse"
+                    value={
+                      selectedWarehouseId
+                    }
+                    onChange={(event) =>
+                      setSelectedWarehouseId(
+                        event.target.value
+                      )
+                    }
+                    disabled={
+                      fulfillmentOptionsLoading ||
+                      isFulfilling
+                    }
+                  >
+                    <option value="">
+                      Select warehouse
+                    </option>
+
+                    {warehouses.map(
+                      (warehouse) => (
+                        <option
+                          key={
+                            warehouse.id
+                          }
+                          value={
+                            warehouse.id
+                          }
+                        >
+                          {
+                            warehouse.name
+                          }
+                          {warehouse.code
+                            ? ` (${warehouse.code})`
+                            : ""}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                </div>
+
+                <div className="fulfillment-field">
+
+                  <label htmlFor="location">
+                    Location
+                  </label>
+
+                  <select
+                    id="location"
+                    value={
+                      selectedLocationId
+                    }
+                    onChange={(event) =>
+                      setSelectedLocationId(
+                        event.target.value
+                      )
+                    }
+                    disabled={
+                      fulfillmentOptionsLoading ||
+                      isFulfilling ||
+                      !selectedWarehouseId
+                    }
+                  >
+                    <option value="">
+                      Select location
+                    </option>
+
+                    {availableLocations.map(
+                      (location) => (
+                        <option
+                          key={
+                            location.id
+                          }
+                          value={
+                            location.id
+                          }
+                        >
+                          {
+                            location.name
+                          }
+                          {location.code
+                            ? ` (${location.code})`
+                            : ""}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                </div>
+
+              </div>
+
+              {hasSerialItems ? (
+                <div className="serial-section">
+
+                  <div className="serial-section-header">
+                    <div>
+                      <div className="invoice-section-label">
+                        SERIALIZED ITEMS
+                      </div>
+
+                      <h3>
+                        Select serial numbers
+                      </h3>
+
+                      <p>
+                        Choose the exact serialized units that will be issued for this order.
+                      </p>
+                    </div>
+
+                    {serialsLoading && (
+                      <span className="serial-loading">
+                        Loading serials...
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="serial-items">
+
+                    {serialItems.map(
+                      (item) => {
+                        const available =
+                          availableSerials[
+                            item.id
+                          ] || [];
+
+                        const selected =
+                          selectedSerials[
+                            item.id
+                          ] || [];
+
+                        const required =
+                          Number(
+                            item.quantity ||
+                              0
                           );
 
                         return (
                           <div
                             key={
-                              fulfillment.id
+                              item.id
                             }
-                            className="px-6 py-5"
+                            className="serial-item"
                           >
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="min-w-0">
-                                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
-                                  {item?.product_name ||
-                                    "Order item"}
-                                </p>
 
-                                {item?.variant_name && (
-                                  <p className="mt-1 whitespace-nowrap text-xs text-slate-500">
+                            <div className="serial-item-heading">
+
+                              <div>
+                                <strong>
+                                  {
+                                    item.product_name
+                                  }
+                                </strong>
+
+                                {item.variant_name && (
+                                  <span>
                                     {
                                       item.variant_name
                                     }
-
-                                    {item.sku
-                                      ? ` · SKU ${item.sku}`
-                                      : ""}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="flex shrink-0 items-center gap-2">
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                                  Qty{" "}
-                                  {
-                                    fulfillment.quantity
-                                  }
-                                </span>
-
-                                {fulfillment.serialized_unit_id && (
-                                  <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700">
-                                    Serialized
-                                  </span>
-                                )}
-
-                                {fulfillment.batch_id && (
-                                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                                    Batch
                                   </span>
                                 )}
                               </div>
-                            </div>
 
-                            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                                  Warehouse
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium text-slate-800">
-                                  {getWarehouseName(
-                                    fulfillment.warehouse_id,
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                                  Location
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium text-slate-800">
-                                  {getLocationName(
-                                    fulfillment.location_id,
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                                  Batch / Lot
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium text-slate-800">
-                                  {batch?.lot_number ||
-                                    (fulfillment.batch_id
-                                      ? "Batch recorded"
-                                      : "Not applicable")}
-                                </p>
-                              </div>
-
-                              <div className="rounded-xl bg-slate-50 p-3">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                                  Serial Number
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium text-slate-800">
-                                  {serial?.serial_number ||
-                                    "Not serialized"}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
                               <span>
-                                Fulfilled{" "}
-                                {formatDate(
-                                  fulfillment.created_at,
-                                )}
+                                {
+                                  selected.length
+                                }{" "}
+                                /{" "}
+                                {required} selected
                               </span>
 
-                              {fulfillment.unit_cost !==
-                                null && (
-                                <span>
-                                  Unit cost{" "}
-                                  {formatMoney(
-                                    fulfillment.unit_cost,
-                                    order.currency,
-                                    regionalSettings,
-                                  )}
-                                </span>
-                              )}
-
-                              {fulfillment.inventory_movement_id && (
-                                <span>
-                                  Inventory
-                                  movement
-                                  recorded
-                                </span>
-                              )}
                             </div>
+
+                            {available.length ===
+                            0 ? (
+                              <div className="serial-empty">
+                                No available serial numbers were found for this product at the selected location.
+                              </div>
+                            ) : (
+                              <div className="serial-grid">
+
+                                {available.map(
+                                  (
+                                    serial
+                                  ) => {
+                                    const isSelected =
+                                      selected.includes(
+                                        serial.id
+                                      );
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={
+                                          serial.id
+                                        }
+                                        className={
+                                          isSelected
+                                            ? "serial-chip selected"
+                                            : "serial-chip"
+                                        }
+                                        onClick={() =>
+                                          toggleSerial(
+                                            item.id,
+                                            serial.id,
+                                            required
+                                          )
+                                        }
+                                        disabled={
+                                          isFulfilling ||
+                                          (!isSelected &&
+                                            selected.length >=
+                                              required)
+                                        }
+                                      >
+                                        <strong>
+                                          {
+                                            serial.serial_number
+                                          }
+                                        </strong>
+
+                                        {serial.barcode && (
+                                          <span>
+                                            {
+                                              serial.barcode
+                                            }
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  }
+                                )}
+
+                              </div>
+                            )}
+
                           </div>
                         );
-                      },
-                    )}
-                  </div>
-                )}
-              </section>
-            </div>
-
-            {/* Sidebar */}
-            <aside className="space-y-6">
-              {/* Customer */}
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Customer
-                  </h2>
-                </div>
-
-                <div className="p-6">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-                      <svg
-                        className="h-5 w-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <circle
-                          cx="12"
-                          cy="8"
-                          r="3"
-                        />
-
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5 20a7 7 0 0 1 14 0"
-                        />
-                      </svg>
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {getCustomerName(
-                          order.customers,
-                        )}
-                      </p>
-
-                      {order.customers?.[0]?.email && (
-  <p className="mt-1 break-all text-xs text-slate-500">
-    {order.customers[0].email}
-  </p>
-)}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Financial Summary */}
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Financial Summary
-                  </h2>
-                </div>
-
-                <div className="space-y-4 px-6 py-5">
-                  <div className="flex items-center justify-between gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Subtotal
-                    </span>
-
-                    <span className="whitespace-nowrap font-medium text-slate-800">
-                      {formatMoney(
-                        order.subtotal,
-                        order.currency,
-                        regionalSettings,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Discount
-                    </span>
-
-                    <span className="whitespace-nowrap font-medium text-red-600">
-                      -
-                      {formatMoney(
-                        order.discount_amount,
-                        order.currency,
-                        regionalSettings,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Tax
-                    </span>
-
-                    <span className="whitespace-nowrap font-medium text-slate-800">
-                      {formatMoney(
-                        order.tax_amount,
-                        order.currency,
-                        regionalSettings,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 text-sm">
-                    <span className="text-slate-500">
-                      Shipping
-                    </span>
-
-                    <span className="whitespace-nowrap font-medium text-slate-800">
-                      {formatMoney(
-                        order.shipping_amount,
-                        order.currency,
-                        regionalSettings,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="border-t border-slate-200 pt-4">
-                    <div className="flex items-end justify-between gap-4">
-                      <span className="text-sm font-semibold text-slate-700">
-                        Total
-                      </span>
-
-                      <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-slate-950">
-                        {formatMoney(
-                          order.total_amount,
-                          order.currency,
-                          regionalSettings,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Fulfillment Progress */}
-              <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <h2 className="text-base font-semibold text-slate-950">
-                    Fulfillment Progress
-                  </h2>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    Quantity-level fulfillment
-                    status.
-                  </p>
-                </div>
-
-                <div className="px-6 py-5">
-                  <div className="flex items-end justify-between">
-                    <span className="text-sm text-slate-500">
-                      Fulfilled
-                    </span>
-
-                    <span className="text-sm font-semibold text-slate-900">
-                      {
-                        totalFulfilledQuantity
-                      }{" "}
-                      /{" "}
-                      {
-                        totalOrderedQuantity
                       }
-                    </span>
+                    )}
+
                   </div>
 
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
-                      style={{
-                        width: `${
-                          totalOrderedQuantity >
-                          0
-                            ? Math.min(
-                                100,
-                                (totalFulfilledQuantity /
-                                  totalOrderedQuantity) *
-                                  100,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    className="fulfill-button"
+                    onClick={() =>
+                      void fulfillSerialOrder()
+                    }
+                    disabled={
+                      isFulfilling ||
+                      fulfillmentOptionsLoading ||
+                      !selectedWarehouseId ||
+                      !selectedLocationId ||
+                      !allSerialSelectionsComplete ||
+                      serialsLoading
+                    }
+                  >
+                    {isFulfilling
+                      ? "Fulfilling..."
+                      : "Fulfill Serialized Order"}
+                  </button>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                        Fulfilled
-                      </p>
-
-                      <p className="mt-1 text-lg font-semibold text-emerald-700">
-                        {
-                          totalFulfilledQuantity
-                        }
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                        Remaining
-                      </p>
-
-                      <p className="mt-1 text-lg font-semibold text-amber-700">
-                        {
-                          totalRemainingQuantity
-                        }
-                      </p>
-                    </div>
-                  </div>
                 </div>
-              </section>
+              ) : (
+                <div className="quantity-fulfillment">
 
-              {/* Notes */}
-              {order.notes && (
-                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 px-6 py-5">
-                    <h2 className="text-base font-semibold text-slate-950">
-                      Order Notes
-                    </h2>
-                  </div>
+                  <div className="quantity-fulfillment-copy">
+                    <strong>
+                      Ready to fulfill
+                    </strong>
 
-                  <div className="px-6 py-5">
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                      {order.notes}
+                    <p>
+                      This order contains standard inventory items and can be fulfilled from the selected warehouse location.
                     </p>
                   </div>
-                </section>
+
+                  <button
+                    type="button"
+                    className="fulfill-button"
+                    onClick={() =>
+                      void fulfillOrder()
+                    }
+                    disabled={
+                      isFulfilling ||
+                      fulfillmentOptionsLoading ||
+                      !selectedWarehouseId ||
+                      !selectedLocationId
+                    }
+                  >
+                    {isFulfilling
+                      ? "Fulfilling..."
+                      : "Fulfill Order"}
+                  </button>
+
+                </div>
               )}
 
-              {/* V2 Allocation Model */}
-              <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+            </section>
+
+          </main>
+
+          <aside className="fulfillment-sidebar">
+
+            <section className="side-card">
+
+              <div className="invoice-section-label">
+                ORDER SUMMARY
+              </div>
+
+              <div className="side-summary-row">
+                <span>
+                  Items
+                </span>
+
+                <strong>
+                  {items.length}
+                </strong>
+              </div>
+
+              <div className="side-summary-row">
+                <span>
+                  Quantity
+                </span>
+
+                <strong>
+                  {totalQuantity}
+                </strong>
+              </div>
+
+              <div className="side-summary-row">
+                <span>
+                  Order total
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    Number(
+                      order.total_amount ||
+                        0
+                    ),
+                    currency
+                  )}
+                </strong>
+              </div>
+
+              <div className="side-summary-row total">
+                <span>
+                  Balance due
+                </span>
+
+                <strong>
+                  {invoice
+                    ? formatCurrency(
+                        balanceDue,
+                        currency
+                      )
+                    : "Invoice not created"}
+                </strong>
+              </div>
+
+            </section>
+
+            {order.fulfillment_status ===
+              "fulfilled" && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                     <svg
-                      className="h-4 w-4"
+                      className="h-5 w-5"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="1.8"
+                      strokeWidth="2"
                     >
-                      <rect
-                        x="4"
-                        y="4"
-                        width="16"
-                        height="16"
-                        rx="2"
-                      />
-
                       <path
                         strokeLinecap="round"
-                        d="M8 9h8M8 13h5M8 17h3"
+                        strokeLinejoin="round"
+                        d="m5 12 4 4L19 6"
                       />
                     </svg>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-blue-900">
-                      V2 Inventory Allocation
-                    </h3>
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Order fully fulfilled
+                    </p>
 
-                    <p className="mt-1 text-xs leading-5 text-blue-800/80">
-                      Fulfillment is handled
-                      separately so each order
-                      item can be allocated across
-                      multiple batches or lots, with
-                      optional serialized units.
+                    <p className="mt-1 text-xs text-emerald-700">
+                      All ordered quantities
+                      have been allocated to
+                      inventory fulfillment.
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
 
-                <div className="mt-4 space-y-2 text-xs text-blue-900/80">
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+          </aside>
 
-                    Warehouse + Location
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-
-                    Batch / Lot allocation
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-
-                    Optional serial selection
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-
-                    Inventory movement ledger
-                  </div>
-                </div>
-              </section>
-
-              {/* Primary Action */}
-              {canFulfill && (
-                <div className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(
-                        `/sales/${order.id}/fulfill`,
-                      )
-                    }
-                    className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                  >
-                    Fulfill Order
-                  </button>
-
-                  <p className="mt-2 text-center text-xs text-slate-400">
-                    {totalRemainingQuantity}{" "}
-                    unit
-                    {totalRemainingQuantity ===
-                    1
-                      ? ""
-                      : "s"}{" "}
-                    remaining to fulfill
-                  </p>
-                </div>
-              )}
-
-              {order.fulfillment_status ===
-                "fulfilled" && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                      <svg
-                        className="h-5 w-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="m5 12 4 4L19 6"
-                        />
-                      </svg>
-                    </div>
-
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-900">
-                        Order fully fulfilled
-                      </p>
-
-                      <p className="mt-1 text-xs text-emerald-700">
-                        All ordered quantities
-                        have been allocated to
-                        inventory fulfillment.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </aside>
-          </div>
         </div>
+
       </div>
+
+      <style jsx>{`
+        .order-page {
+          padding-bottom: 40px;
+        }
+
+        .order-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .order-header-actions button {
+          height: 38px;
+          padding: 0 14px;
+          border-radius: 9px;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            border-color 0.15s ease,
+            color 0.15s ease,
+            box-shadow 0.15s ease,
+            transform 0.15s ease;
+        }
+
+        .order-back-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          border: 1px solid #dfe4eb;
+          background: #ffffff;
+          color: #596476;
+        }
+
+        .order-back-button:hover {
+          background: #f6f8fa;
+          color: #263043;
+        }
+
+        .order-invoice-button {
+          border: 1px solid #059669;
+          background: #059669;
+          color: #ffffff;
+          box-shadow: 0 1px 2px rgba(5, 150, 105, 0.15);
+        }
+
+        .order-invoice-button:hover:not(:disabled) {
+          background: #047857;
+          border-color: #047857;
+          box-shadow: 0 4px 10px rgba(5, 150, 105, 0.18);
+          transform: translateY(-1px);
+        }
+
+        .order-invoice-button:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+
+        .order-print-button {
+          border: 1px solid #dfe4eb;
+          background: #ffffff;
+          color: #596476;
+        }
+
+        .order-print-button:hover {
+          background: #f6f8fa;
+          color: #263043;
+        }
+
+        .order-cancel-button {
+          border: 1px solid #f0caca;
+          background: #fff8f8;
+          color: #a64c4c;
+        }
+
+        .order-cancel-button:hover:not(:disabled) {
+          border-color: #e7a9a9;
+          background: #fff1f1;
+        }
+
+        .order-cancel-button:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .order-alert {
+          margin-bottom: 14px;
+          padding: 12px 14px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .order-alert.success {
+          border: 1px solid #b7e4cf;
+          background: #effaf4;
+          color: #18794e;
+        }
+
+        .order-alert.danger {
+          border: 1px solid #ead0d0;
+          background: #fff7f7;
+          color: #9b4b4b;
+        }
+
+        .invoice-document {
+          overflow: hidden;
+          border: 1px solid #e1e5eb;
+          border-radius: 14px;
+          background: #ffffff;
+          box-shadow: 0 1px 3px rgba(24, 39, 75, 0.04);
+        }
+
+        .invoice-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          padding: 28px 30px;
+          border-bottom: 1px solid #e7ebf0;
+        }
+
+        .invoice-company-block h1 {
+          margin: 0;
+          color: #172033;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .invoice-company-block span {
+          display: block;
+          margin-top: 5px;
+          color: #8b95a5;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .invoice-title-block {
+          text-align: right;
+        }
+
+        .invoice-title {
+          color: #8b95a5;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.16em;
+        }
+
+        .invoice-number {
+          margin-top: 5px;
+          color: #172033;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .invoice-meta-row {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border-bottom: 1px solid #e7ebf0;
+        }
+
+        .invoice-meta-group {
+          min-width: 0;
+          padding: 16px 20px;
+          border-right: 1px solid #e7ebf0;
+        }
+
+        .invoice-meta-group:last-child {
+          border-right: 0;
+        }
+
+        .invoice-meta-group span {
+          display: block;
+          color: #99a1ae;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .invoice-meta-group strong {
+          display: block;
+          margin-top: 6px;
+          color: #3d4655;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .invoice-status.success {
+          color: #198754 !important;
+        }
+
+        .invoice-status.warning {
+          color: #b7791f !important;
+        }
+
+        .invoice-status.danger {
+          color: #b34d4d !important;
+        }
+
+        .invoice-status.neutral {
+          color: #667085 !important;
+        }
+
+        .invoice-parties {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+          padding: 24px 30px;
+          border-bottom: 1px solid #e7ebf0;
+        }
+
+        .invoice-party {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
+        }
+
+        .invoice-party-right {
+          align-items: flex-end;
+          text-align: right;
+        }
+
+        .invoice-section-label {
+          margin-bottom: 7px;
+          color: #98a1ae;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .invoice-party-name {
+          color: #283142;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .invoice-party span {
+          color: #7c8696;
+          font-size: 11px;
+        }
+
+        .invoice-items-section {
+          padding: 24px 30px 0;
+        }
+
+        .invoice-items-table-wrap {
+          overflow-x: auto;
+          border: 1px solid #e7ebf0;
+          border-radius: 10px;
+        }
+
+        .invoice-items-table {
+          width: 100%;
+          border-collapse: collapse;
+          min-width: 650px;
+        }
+
+        .invoice-items-table th {
+          padding: 11px 13px;
+          border-bottom: 1px solid #e7ebf0;
+          background: #f8fafc;
+          color: #8992a1;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-align: left;
+          text-transform: uppercase;
+        }
+
+        .invoice-items-table th.numeric,
+        .invoice-items-table td.numeric {
+          text-align: right;
+        }
+
+        .invoice-items-table td {
+          padding: 13px;
+          border-bottom: 1px solid #edf0f4;
+          color: #596476;
+          font-size: 11px;
+        }
+
+        .invoice-items-table tbody tr:last-child td {
+          border-bottom: 0;
+        }
+
+        .item-name {
+          color: #283142;
+          font-weight: 700;
+        }
+
+        .item-variant {
+          margin-top: 3px;
+          color: #9aa2af;
+          font-size: 10px;
+        }
+
+        .invoice-empty {
+          padding: 28px;
+          border: 1px dashed #dfe4eb;
+          border-radius: 10px;
+          color: #98a1ae;
+          font-size: 11px;
+          text-align: center;
+        }
+
+        .invoice-summary-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+          gap: 40px;
+          padding: 24px 30px 30px;
+        }
+
+        .invoice-notes p {
+          max-width: 520px;
+          margin: 0;
+          color: #667085;
+          font-size: 11px;
+          line-height: 1.7;
+          white-space: pre-wrap;
+        }
+
+        .invoice-totals {
+          border-top: 1px solid #e7ebf0;
+        }
+
+        .invoice-total-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 10px 0;
+          color: #667085;
+          font-size: 11px;
+        }
+
+        .invoice-total-row strong {
+          color: #344054;
+          font-weight: 700;
+        }
+
+        .invoice-total-row.grand-total {
+          margin-top: 5px;
+          padding-top: 14px;
+          border-top: 1px solid #dfe4eb;
+          color: #263043;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .invoice-total-row.grand-total strong {
+          color: #172033;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .attached-invoice-section {
+          margin: 0 30px 30px;
+          border: 1px solid #cdebdc;
+          border-radius: 12px;
+          background: #f6fcf8;
+        }
+
+        .attached-invoice-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 17px 18px;
+          border-bottom: 1px solid #dcefe4;
+        }
+
+        .attached-invoice-title {
+          color: #1f5139;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .attached-invoice-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .order-payment-button {
+          height: 36px;
+          padding: 0 13px;
+          border: 1px solid #d8dee7;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #596476;
+          font-family: inherit;
+          font-size: 10px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .order-payment-button:hover {
+          background: #f5f7f9;
+          color: #263043;
+        }
+
+        .attached-invoice-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 0;
+        }
+
+        .attached-invoice-grid > div {
+          padding: 15px 18px;
+          border-right: 1px solid #dcefe4;
+        }
+
+        .attached-invoice-grid > div:last-child {
+          border-right: 0;
+        }
+
+        .attached-invoice-grid span {
+          display: block;
+          color: #789184;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .attached-invoice-grid strong {
+          display: block;
+          margin-top: 5px;
+          color: #294d3a;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .invoice-payments {
+          padding: 16px 18px;
+          border-top: 1px solid #dcefe4;
+        }
+
+        .invoice-payments-list {
+          overflow: hidden;
+          border: 1px solid #dcefe4;
+          border-radius: 9px;
+          background: #ffffff;
+        }
+
+        .invoice-payment-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          padding: 11px 13px;
+          border-bottom: 1px solid #edf3ef;
+        }
+
+        .invoice-payment-row:last-child {
+          border-bottom: 0;
+        }
+
+        .invoice-payment-row > div {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .invoice-payment-row strong {
+          color: #28513b;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .invoice-payment-row span,
+        .invoice-payment-row time {
+          color: #7b8a82;
+          font-size: 10px;
+        }
+
+        .fulfillment-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 300px;
+          gap: 16px;
+          margin-top: 16px;
+        }
+
+        .fulfillment-card,
+        .side-card {
+          border: 1px solid #e1e5eb;
+          border-radius: 14px;
+          background: #ffffff;
+          box-shadow: 0 1px 3px rgba(24, 39, 75, 0.04);
+        }
+
+        .fulfillment-card {
+          overflow: hidden;
+        }
+
+        .fulfillment-card-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          padding: 22px 24px;
+          border-bottom: 1px solid #e7ebf0;
+        }
+
+        .fulfillment-card-header h2 {
+          margin: 0;
+          color: #263043;
+          font-size: 16px;
+          font-weight: 800;
+        }
+
+        .fulfillment-card-header p {
+          max-width: 650px;
+          margin: 5px 0 0;
+          color: #8a94a3;
+          font-size: 10px;
+          line-height: 1.6;
+        }
+
+        .fulfillment-quantity {
+          min-width: 95px;
+          padding: 10px 12px;
+          border: 1px solid #e6eaf0;
+          border-radius: 10px;
+          background: #f8fafc;
+          text-align: right;
+        }
+
+        .fulfillment-quantity span {
+          display: block;
+          color: #98a1ae;
+          font-size: 9px;
+          font-weight: 700;
+        }
+
+        .fulfillment-quantity strong {
+          display: block;
+          margin-top: 3px;
+          color: #263043;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .fulfillment-controls {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          padding: 20px 24px;
+        }
+
+        .fulfillment-field label {
+          display: block;
+          margin-bottom: 6px;
+          color: #657184;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .fulfillment-field select {
+          width: 100%;
+          height: 40px;
+          padding: 0 11px;
+          border: 1px solid #dfe4eb;
+          border-radius: 9px;
+          background: #ffffff;
+          color: #3d4655;
+          outline: none;
+          font-family: inherit;
+          font-size: 11px;
+        }
+
+        .fulfillment-field select:focus {
+          border-color: #98a2b3;
+          box-shadow: 0 0 0 3px rgba(98, 112, 133, 0.08);
+        }
+
+        .serial-section {
+          margin: 0 24px 24px;
+          padding: 18px;
+          border: 1px solid #e5e9ef;
+          border-radius: 11px;
+          background: #fafbfd;
+        }
+
+        .serial-section-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 20px;
+        }
+
+        .serial-section-header h3 {
+          margin: 0;
+          color: #30394a;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .serial-section-header p {
+          margin: 4px 0 0;
+          color: #8992a1;
+          font-size: 10px;
+        }
+
+        .serial-loading {
+          color: #798494;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .serial-items {
+          display: grid;
+          gap: 12px;
+          margin-top: 16px;
+        }
+
+        .serial-item {
+          padding: 14px;
+          border: 1px solid #e2e7ed;
+          border-radius: 9px;
+          background: #ffffff;
+        }
+
+        .serial-item-heading {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+
+        .serial-item-heading strong {
+          display: block;
+          color: #313a4b;
+          font-size: 11px;
+        }
+
+        .serial-item-heading div > span {
+          display: block;
+          margin-top: 3px;
+          color: #929baa;
+          font-size: 9px;
+        }
+
+        .serial-item-heading > span {
+          color: #687385;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .serial-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .serial-chip {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          min-height: 55px;
+          padding: 9px 10px;
+          border: 1px solid #dfe4eb;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #4b5565;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .serial-chip:hover:not(:disabled) {
+          border-color: #b9c2ce;
+          background: #f8fafc;
+        }
+
+        .serial-chip.selected {
+          border-color: #9bcdb3;
+          background: #effaf4;
+          color: #1d6543;
+        }
+
+        .serial-chip:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .serial-chip strong {
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .serial-chip span {
+          margin-top: 3px;
+          color: #8992a1;
+          font-size: 8px;
+        }
+
+        .serial-empty {
+          margin-top: 12px;
+          padding: 12px;
+          border: 1px dashed #dfe4eb;
+          border-radius: 8px;
+          color: #929baa;
+          font-size: 10px;
+          text-align: center;
+        }
+
+        .fulfill-button {
+          height: 39px;
+          margin: 16px 18px 0;
+          padding: 0 15px;
+          border: 1px solid #059669;
+          border-radius: 9px;
+          background: #059669;
+          color: #ffffff;
+          font-family: inherit;
+          font-size: 10px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .fulfill-button:hover:not(:disabled) {
+          background: #047857;
+          border-color: #047857;
+        }
+
+        .fulfill-button:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .quantity-fulfillment {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          margin: 0 24px 24px;
+          padding: 17px;
+          border: 1px solid #e5e9ef;
+          border-radius: 11px;
+          background: #fafbfd;
+        }
+
+        .quantity-fulfillment .fulfill-button {
+          flex-shrink: 0;
+          margin: 0;
+        }
+
+        .quantity-fulfillment-copy strong {
+          color: #30394a;
+          font-size: 12px;
+        }
+
+        .quantity-fulfillment-copy p {
+          margin: 4px 0 0;
+          color: #8992a1;
+          font-size: 10px;
+          line-height: 1.6;
+        }
+
+        .fulfillment-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .side-card {
+          padding: 19px;
+        }
+
+        .side-summary-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 11px 0;
+          border-bottom: 1px solid #edf0f4;
+          color: #7a8493;
+          font-size: 10px;
+        }
+
+        .side-summary-row strong {
+          color: #3a4352;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .side-summary-row.total {
+          padding-top: 14px;
+          border-bottom: 0;
+          color: #4a5565;
+          font-weight: 700;
+        }
+
+        .side-summary-row.total strong {
+          color: #172033;
+          font-size: 13px;
+        }
+
+        @media (max-width: 980px) {
+          .fulfillment-layout {
+            grid-template-columns: 1fr;
+          }
+
+          .fulfillment-sidebar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .invoice-header,
+          .invoice-summary-row,
+          .fulfillment-card-header,
+          .quantity-fulfillment {
+            flex-direction: column;
+          }
+
+          .invoice-meta-row,
+          .attached-invoice-grid,
+          .fulfillment-controls,
+          .invoice-parties {
+            grid-template-columns: 1fr;
+          }
+
+          .invoice-meta-group {
+            border-right: 0;
+            border-bottom: 1px solid #e7ebf0;
+          }
+
+          .invoice-meta-group:last-child {
+            border-bottom: 0;
+          }
+
+          .invoice-party-right {
+            align-items: flex-start;
+            text-align: left;
+          }
+
+          .invoice-items-section,
+          .invoice-parties,
+          .invoice-header,
+          .invoice-summary-row {
+            padding-left: 18px;
+            padding-right: 18px;
+          }
+
+          .attached-invoice-section {
+            margin-left: 18px;
+            margin-right: 18px;
+          }
+
+          .attached-invoice-header {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .fulfillment-controls {
+            padding-left: 18px;
+            padding-right: 18px;
+          }
+
+          .serial-section {
+            margin-left: 18px;
+            margin-right: 18px;
+          }
+
+          .fulfillment-card-header {
+            padding-left: 18px;
+            padding-right: 18px;
+          }
+
+          .quantity-fulfillment {
+            margin-left: 18px;
+            margin-right: 18px;
+          }
+
+          .fulfillment-sidebar {
+            display: flex;
+          }
+        }
+
+        @media print {
+          .order-header-actions,
+          .fulfillment-layout,
+          .order-alert {
+            display: none !important;
+          }
+
+          .order-page {
+            padding: 0;
+          }
+
+          .invoice-document {
+            border: 0;
+            box-shadow: none;
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }

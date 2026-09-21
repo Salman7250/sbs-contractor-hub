@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeft,
   Check,
+  ChevronRight,
   CreditCard,
   Crown,
   FileText,
@@ -17,11 +18,14 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import styles from "./page.module.css";
+
+type BillingCycle = "monthly" | "yearly";
 
 type Plan = {
   id: string;
@@ -41,7 +45,7 @@ type Subscription = {
   company_id: string;
   plan_id: string;
   status: string;
-  billing_cycle: "monthly" | "yearly";
+  billing_cycle: BillingCycle;
   amount: number;
   currency: string;
   started_at: string | null;
@@ -100,6 +104,14 @@ type BillingPayload = {
   role: string;
 };
 
+type CheckoutResponse = {
+  error?: string;
+  approvalUrl?: string;
+  scheduledStart?: string | null;
+  createdDuringTrial?: boolean;
+  trialPreserved?: boolean;
+};
+
 function formatDate(value: string | null) {
   if (!value) {
     return "—";
@@ -130,7 +142,10 @@ function formatMoney(
   amount: number | null,
   currency = "USD",
 ) {
-  if (amount === null || amount === undefined) {
+  if (
+    amount === null ||
+    amount === undefined
+  ) {
     return "Custom";
   }
 
@@ -172,7 +187,9 @@ function statusLabel(status: string) {
   }
 }
 
-function statusClass(status: string) {
+function statusClass(
+  status: string,
+) {
   switch (status) {
     case "trialing":
       return styles.statusTrial;
@@ -193,6 +210,47 @@ function statusClass(status: string) {
   }
 }
 
+function getTrialDaysRemaining(
+  trialEndsAt: string | null,
+) {
+  if (!trialEndsAt) {
+    return 0;
+  }
+
+  const difference =
+    new Date(trialEndsAt).getTime() -
+    Date.now();
+
+  return Math.max(
+    0,
+    Math.ceil(
+      difference /
+        (1000 * 60 * 60 * 24),
+    ),
+  );
+}
+
+function getTrialTotalDays(
+  startedAt: string | null,
+  trialEndsAt: string | null,
+) {
+  if (!startedAt || !trialEndsAt) {
+    return 14;
+  }
+
+  const difference =
+    new Date(trialEndsAt).getTime() -
+    new Date(startedAt).getTime();
+
+  return Math.max(
+    1,
+    Math.ceil(
+      difference /
+        (1000 * 60 * 60 * 24),
+    ),
+  );
+}
+
 export default function BillingSettingsPage() {
   const router = useRouter();
 
@@ -201,31 +259,50 @@ export default function BillingSettingsPage() {
     [],
   );
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
+
   const [refreshing, setRefreshing] =
     useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
 
   const [data, setData] =
-    useState<BillingPayload | null>(null);
+    useState<BillingPayload | null>(
+      null,
+    );
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const [billingContactName, setBillingContactName] =
+  const [error, setError] =
     useState("");
 
-  const [billingEmail, setBillingEmail] =
+  const [success, setSuccess] =
     useState("");
 
-  const [billingPhone, setBillingPhone] =
-    useState("");
+  const [
+    billingContactName,
+    setBillingContactName,
+  ] = useState("");
 
-  const [addressLine1, setAddressLine1] =
-    useState("");
+  const [
+    billingEmail,
+    setBillingEmail,
+  ] = useState("");
 
-  const [addressLine2, setAddressLine2] =
-    useState("");
+  const [
+    billingPhone,
+    setBillingPhone,
+  ] = useState("");
+
+  const [
+    addressLine1,
+    setAddressLine1,
+  ] = useState("");
+
+  const [
+    addressLine2,
+    setAddressLine2,
+  ] = useState("");
 
   const [city, setCity] =
     useState("");
@@ -233,131 +310,155 @@ export default function BillingSettingsPage() {
   const [state, setState] =
     useState("");
 
-  const [postalCode, setPostalCode] =
-    useState("");
+  const [
+    postalCode,
+    setPostalCode,
+  ] = useState("");
 
   const [country, setCountry] =
     useState("");
 
-  const [taxRegistrationNumber, setTaxRegistrationNumber] =
-    useState("");
+  const [
+    taxRegistrationNumber,
+    setTaxRegistrationNumber,
+  ] = useState("");
 
-  const [billingCycle, setBillingCycle] =
-    useState<"monthly" | "yearly">("monthly");
+  const [
+    billingCycle,
+    setBillingCycle,
+  ] =
+    useState<BillingCycle>(
+      "monthly",
+    );
 
-  const [selectedPlan, setSelectedPlan] =
-    useState("");
+  const [
+    checkoutLoading,
+    setCheckoutLoading,
+  ] = useState("");
 
-  const [checkoutLoading, setCheckoutLoading] =
-    useState("");
+  const [
+    scheduledPlan,
+    setScheduledPlan,
+  ] = useState("");
 
-  const loadBilling = useCallback(
-    async (showRefresh = false) => {
-      try {
-        if (showRefresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
-        }
+  const loadBilling =
+    useCallback(
+      async (
+        showRefresh = false,
+      ) => {
+        try {
+          if (showRefresh) {
+            setRefreshing(true);
+          } else {
+            setLoading(true);
+          }
 
-        setError("");
+          setError("");
 
-        const {
-          data: billingData,
-          error: billingError,
-        } = await supabase.rpc(
-          "get_my_company_billing",
-        );
+          const {
+            data: billingData,
+            error: billingError,
+          } =
+            await supabase.rpc(
+              "get_my_company_billing",
+            );
 
-        if (billingError) {
-          throw new Error(
-            billingError.message,
+          if (billingError) {
+            throw new Error(
+              billingError.message,
+            );
+          }
+
+          if (!billingData) {
+            throw new Error(
+              "Unable to load billing information.",
+            );
+          }
+
+          const payload =
+            billingData as BillingPayload;
+
+          setData(payload);
+
+          const company =
+            payload.company;
+
+          setBillingContactName(
+            company.billing_contact_name ??
+              "",
           );
-        }
 
-        if (!billingData) {
-          throw new Error(
-            "Unable to load billing information.",
+          setBillingEmail(
+            company.billing_email ??
+              company.email ??
+              "",
           );
-        }
 
-        const payload =
-          billingData as BillingPayload;
-
-        setData(payload);
-
-        const company =
-          payload.company;
-
-        setBillingContactName(
-          company.billing_contact_name ??
-            "",
-        );
-
-        setBillingEmail(
-          company.billing_email ??
-            company.email ??
-            "",
-        );
-
-        setBillingPhone(
-          company.billing_phone ??
-            company.phone ??
-            "",
-        );
-
-        setAddressLine1(
-          company.address_line1 ?? "",
-        );
-
-        setAddressLine2(
-          company.address_line2 ?? "",
-        );
-
-        setCity(company.city ?? "");
-        setState(company.state ?? "");
-        setPostalCode(
-          company.postal_code ?? "",
-        );
-
-        setCountry(
-          company.country ?? "",
-        );
-
-        setTaxRegistrationNumber(
-          company.tax_registration_number ??
-            "",
-        );
-
-        if (payload.subscription) {
-          setBillingCycle(
-            payload.subscription.billing_cycle,
+          setBillingPhone(
+            company.billing_phone ??
+              company.phone ??
+              "",
           );
-        }
 
-        if (payload.plan) {
-          setSelectedPlan(
-            payload.plan.slug,
+          setAddressLine1(
+            company.address_line1 ??
+              "",
           );
-        }
-      } catch (loadError) {
-        console.error(
-          "Billing load error:",
-          loadError,
-        );
 
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "Unable to load billing information.",
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [supabase],
-  );
+          setAddressLine2(
+            company.address_line2 ??
+              "",
+          );
+
+          setCity(
+            company.city ?? "",
+          );
+
+          setState(
+            company.state ?? "",
+          );
+
+          setPostalCode(
+            company.postal_code ??
+              "",
+          );
+
+          setCountry(
+            company.country ?? "",
+          );
+
+          setTaxRegistrationNumber(
+            company.tax_registration_number ??
+              "",
+          );
+
+          if (
+            payload.subscription
+          ) {
+            setBillingCycle(
+              payload.subscription
+                .billing_cycle,
+            );
+          }
+        } catch (loadError) {
+          console.error(
+            "Billing load error:",
+            loadError,
+          );
+
+          setError(
+            loadError instanceof
+              Error
+              ? loadError.message
+              : "Unable to load billing information.",
+          );
+        } finally {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      },
+      [supabase],
+    );
 
   useEffect(() => {
     loadBilling();
@@ -448,29 +549,35 @@ export default function BillingSettingsPage() {
     }
 
     try {
-      setCheckoutLoading(plan.slug);
-      setError("");
-
-      const response = await fetch(
-        "/api/paypal/create-subscription",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            planSlug: plan.slug,
-            billingCycle,
-          }),
-        },
+      setCheckoutLoading(
+        plan.slug,
       );
 
+      setError("");
+      setSuccess("");
+
+      const response =
+        await fetch(
+          "/api/paypal/create-subscription",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              planSlug:
+                plan.slug,
+
+              billingCycle,
+            }),
+          },
+        );
+
       const result =
-        (await response.json()) as {
-          error?: string;
-          approvalUrl?: string;
-        };
+        (await response.json()) as CheckoutResponse;
 
       if (!response.ok) {
         throw new Error(
@@ -485,6 +592,21 @@ export default function BillingSettingsPage() {
         );
       }
 
+      if (
+        result.createdDuringTrial &&
+        result.scheduledStart
+      ) {
+        setScheduledPlan(
+          plan.slug,
+        );
+
+        setSuccess(
+          `Your ${plan.name} subscription is scheduled to begin after your free trial ends on ${formatDate(
+            result.scheduledStart,
+          )}.`,
+        );
+      }
+
       window.location.href =
         result.approvalUrl;
     } catch (checkoutError) {
@@ -494,7 +616,8 @@ export default function BillingSettingsPage() {
       );
 
       setError(
-        checkoutError instanceof Error
+        checkoutError instanceof
+          Error
           ? checkoutError.message
           : "Unable to start checkout.",
       );
@@ -510,54 +633,45 @@ export default function BillingSettingsPage() {
     data?.plan ?? null;
 
   const isTrial =
-    subscription?.status === "trialing";
+    subscription?.status ===
+    "trialing";
 
   const canManageBilling =
     data?.role === "owner" ||
     data?.role === "admin";
 
   const trialDaysRemaining =
-  subscription?.trial_ends_at
-    ? Math.max(
-        0,
-        Math.ceil(
-          (new Date(
-            subscription.trial_ends_at,
-          ).getTime() -
-            Date.now()) /
-            (1000 * 60 * 60 * 24),
-        ),
-      )
-    : 0;
+    getTrialDaysRemaining(
+      subscription?.trial_ends_at ??
+        null,
+    );
 
-const trialTotalDays =
-  subscription?.started_at &&
-  subscription?.trial_ends_at
-    ? Math.max(
-        1,
-        Math.ceil(
-          (new Date(
-            subscription.trial_ends_at,
-          ).getTime() -
-            new Date(
-              subscription.started_at,
-            ).getTime()) /
-            (1000 * 60 * 60 * 24),
-        ),
-      )
-    : 14;
+  const trialTotalDays =
+    getTrialTotalDays(
+      subscription?.started_at ??
+        null,
+      subscription?.trial_ends_at ??
+        null,
+    );
 
   if (loading) {
     return (
       <AppShell>
-        <div className={styles.loading}>
+        <div
+          className={
+            styles.loading
+          }
+        >
           <RefreshCw
             size={22}
-            className={styles.spin}
+            className={
+              styles.spin
+            }
           />
 
           <span>
-            Loading billing information...
+            Loading billing
+            information...
           </span>
         </div>
       </AppShell>
@@ -567,30 +681,51 @@ const trialTotalDays =
   return (
     <AppShell>
       <div className={styles.page}>
-        <header className={styles.header}>
-          <div className={styles.headerLeft}>
+        <header
+          className={
+            styles.header
+          }
+        >
+          <div
+            className={
+              styles.headerLeft
+            }
+          >
             <button
               type="button"
-              className={styles.backButton}
+              className={
+                styles.backButton
+              }
               onClick={() =>
-                router.push("/settings")
+                router.push(
+                  "/settings",
+                )
               }
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft
+                size={18}
+              />
             </button>
 
             <div>
               <div
-                className={styles.eyebrow}
+                className={
+                  styles.eyebrow
+                }
               >
                 SETTINGS
               </div>
 
-              <h1>Billing & Subscription</h1>
+              <h1>
+                Billing &
+                Subscription
+              </h1>
 
               <p>
-                Manage your SBS subscription,
-                billing information and payment
+                Manage your SBS
+                subscription,
+                billing details,
+                and payment
                 history.
               </p>
             </div>
@@ -598,11 +733,15 @@ const trialTotalDays =
 
           <button
             type="button"
-            className={styles.refreshButton}
+            className={
+              styles.refreshButton
+            }
             onClick={() =>
               loadBilling(true)
             }
-            disabled={refreshing}
+            disabled={
+              refreshing
+            }
           >
             <RefreshCw
               size={16}
@@ -619,44 +758,64 @@ const trialTotalDays =
 
         {error && (
           <div
-            className={styles.errorBanner}
+            className={
+              styles.errorBanner
+            }
             role="alert"
           >
             <span>!</span>
-            {error}
+
+            <span>
+              {error}
+            </span>
           </div>
         )}
 
         {success && (
           <div
-            className={styles.successBanner}
+            className={
+              styles.successBanner
+            }
             role="status"
           >
             <Check size={17} />
-            {success}
+
+            <span>
+              {success}
+            </span>
           </div>
         )}
 
         {isTrial && (
           <section
-            className={styles.trialBanner}
+            className={
+              styles.trialBanner
+            }
           >
             <div
-              className={styles.trialIcon}
+              className={
+                styles.trialIcon
+              }
             >
-              <Crown size={22} />
+              <Crown
+                size={22}
+              />
             </div>
 
             <div
-              className={styles.trialContent}
+              className={
+                styles.trialContent
+              }
             >
               <strong>
-  You&apos;re on your {trialTotalDays}-day
-  free trial
-</strong>
+                You're on your{" "}
+                {trialTotalDays}
+                -day free trial
+              </strong>
 
               <span>
-                {trialDaysRemaining > 0
+                {trialDaysRemaining >
+                0
                   ? `${trialDaysRemaining} ${
                       trialDaysRemaining ===
                       1
@@ -664,15 +823,23 @@ const trialTotalDays =
                         : "days"
                     } remaining`
                   : "Your trial ends today"}
-                . No payment has been
-                charged.
+                . Choose a plan
+                now and your paid
+                subscription will
+                start after the
+                trial ends.
               </span>
             </div>
 
             <div
-              className={styles.trialDate}
+              className={
+                styles.trialDate
+              }
             >
-              Trial ends
+              <span>
+                Trial ends
+              </span>
+
               <strong>
                 {formatDate(
                   subscription?.trial_ends_at ??
@@ -683,16 +850,30 @@ const trialTotalDays =
           </section>
         )}
 
-        <div className={styles.statsGrid}>
-          <div className={styles.statCard}>
+        <div
+          className={
+            styles.statsGrid
+          }
+        >
+          <div
+            className={
+              styles.statCard
+            }
+          >
             <div
-              className={styles.statIcon}
+              className={
+                styles.statIcon
+              }
             >
-              <Crown size={19} />
+              <Crown
+                size={19}
+              />
             </div>
 
             <div>
-              <span>Current plan</span>
+              <span>
+                Current plan
+              </span>
 
               <strong>
                 {currentPlan?.name ??
@@ -701,15 +882,26 @@ const trialTotalDays =
             </div>
           </div>
 
-          <div className={styles.statCard}>
+          <div
+            className={
+              styles.statCard
+            }
+          >
             <div
-              className={styles.statIcon}
+              className={
+                styles.statIcon
+              }
             >
-              <ShieldCheck size={19} />
+              <ShieldCheck
+                size={19}
+              />
             </div>
 
             <div>
-              <span>Status</span>
+              <span>
+                Subscription
+                status
+              </span>
 
               <strong
                 className={
@@ -725,15 +917,25 @@ const trialTotalDays =
             </div>
           </div>
 
-          <div className={styles.statCard}>
+          <div
+            className={
+              styles.statCard
+            }
+          >
             <div
-              className={styles.statIcon}
+              className={
+                styles.statIcon
+              }
             >
-              <CreditCard size={19} />
+              <CreditCard
+                size={19}
+              />
             </div>
 
             <div>
-              <span>Billing cycle</span>
+              <span>
+                Billing cycle
+              </span>
 
               <strong>
                 {subscription
@@ -746,15 +948,25 @@ const trialTotalDays =
             </div>
           </div>
 
-          <div className={styles.statCard}>
+          <div
+            className={
+              styles.statCard
+            }
+          >
             <div
-              className={styles.statIcon}
+              className={
+                styles.statIcon
+              }
             >
-              <FileText size={19} />
+              <FileText
+                size={19}
+              />
             </div>
 
             <div>
-              <span>Current price</span>
+              <span>
+                Current price
+              </span>
 
               <strong>
                 {subscription
@@ -772,15 +984,33 @@ const trialTotalDays =
           </div>
         </div>
 
-        <div className={styles.mainGrid}>
-          <section className={styles.card}>
-            <div className={styles.cardHeader}>
+        <div
+          className={
+            styles.mainGrid
+          }
+        >
+          <section
+            className={
+              styles.card
+            }
+          >
+            <div
+              className={
+                styles.cardHeader
+              }
+            >
               <div>
-                <h2>Billing information</h2>
+                <h2>
+                  Billing
+                  information
+                </h2>
 
                 <p>
-                  This information is used for
-                  your SBS billing records.
+                  This information
+                  is used for
+                  your SBS
+                  billing
+                  records.
                 </p>
               </div>
 
@@ -789,27 +1019,38 @@ const trialTotalDays =
                   styles.headerIcon
                 }
               >
-                <FileText size={19} />
+                <FileText
+                  size={19}
+                />
               </div>
             </div>
 
-            <div className={styles.formGrid}>
+            <div
+              className={
+                styles.formGrid
+              }
+            >
               <div
                 className={
                   styles.fieldFull
                 }
               >
                 <label>
-                  Billing contact name
+                  Billing contact
+                  name
                 </label>
 
                 <input
                   value={
                     billingContactName
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setBillingContactName(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Billing contact"
@@ -820,21 +1061,35 @@ const trialTotalDays =
                 />
               </div>
 
-              <div className={styles.field}>
-                <label>Billing email</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  Billing email
+                </label>
 
                 <div
                   className={
                     styles.inputWithIcon
                   }
                 >
-                  <Mail size={16} />
+                  <Mail
+                    size={16}
+                  />
 
                   <input
-                    value={billingEmail}
-                    onChange={(event) =>
+                    value={
+                      billingEmail
+                    }
+                    onChange={(
+                      event,
+                    ) =>
                       setBillingEmail(
-                        event.target.value,
+                        event
+                          .target
+                          .value,
                       )
                     }
                     type="email"
@@ -847,21 +1102,35 @@ const trialTotalDays =
                 </div>
               </div>
 
-              <div className={styles.field}>
-                <label>Billing phone</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  Billing phone
+                </label>
 
                 <div
                   className={
                     styles.inputWithIcon
                   }
                 >
-                  <Phone size={16} />
+                  <Phone
+                    size={16}
+                  />
 
                   <input
-                    value={billingPhone}
-                    onChange={(event) =>
+                    value={
+                      billingPhone
+                    }
+                    onChange={(
+                      event,
+                    ) =>
                       setBillingPhone(
-                        event.target.value,
+                        event
+                          .target
+                          .value,
                       )
                     }
                     type="tel"
@@ -884,10 +1153,16 @@ const trialTotalDays =
                 </label>
 
                 <input
-                  value={addressLine1}
-                  onChange={(event) =>
+                  value={
+                    addressLine1
+                  }
+                  onChange={(
+                    event,
+                  ) =>
                     setAddressLine1(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Street and building"
@@ -905,14 +1180,22 @@ const trialTotalDays =
               >
                 <label>
                   Address line 2
-                  <span>Optional</span>
+                  <span>
+                    Optional
+                  </span>
                 </label>
 
                 <input
-                  value={addressLine2}
-                  onChange={(event) =>
+                  value={
+                    addressLine2
+                  }
+                  onChange={(
+                    event,
+                  ) =>
                     setAddressLine2(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Suite, floor, unit"
@@ -923,14 +1206,24 @@ const trialTotalDays =
                 />
               </div>
 
-              <div className={styles.field}>
-                <label>City</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  City
+                </label>
 
                 <input
                   value={city}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setCity(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Dubai"
@@ -941,14 +1234,25 @@ const trialTotalDays =
                 />
               </div>
 
-              <div className={styles.field}>
-                <label>State / Province</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  State /
+                  Province
+                </label>
 
                 <input
                   value={state}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setState(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Dubai"
@@ -959,14 +1263,26 @@ const trialTotalDays =
                 />
               </div>
 
-              <div className={styles.field}>
-                <label>Postal code</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  Postal code
+                </label>
 
                 <input
-                  value={postalCode}
-                  onChange={(event) =>
+                  value={
+                    postalCode
+                  }
+                  onChange={(
+                    event,
+                  ) =>
                     setPostalCode(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="00000"
@@ -977,14 +1293,24 @@ const trialTotalDays =
                 />
               </div>
 
-              <div className={styles.field}>
-                <label>Country</label>
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label>
+                  Country
+                </label>
 
                 <input
                   value={country}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setCountry(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="United Arab Emirates"
@@ -1002,16 +1328,22 @@ const trialTotalDays =
               >
                 <label>
                   Tax / TRN number
-                  <span>Optional</span>
+                  <span>
+                    Optional
+                  </span>
                 </label>
 
                 <input
                   value={
                     taxRegistrationNumber
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setTaxRegistrationNumber(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     )
                   }
                   placeholder="Tax registration number"
@@ -1037,7 +1369,9 @@ const trialTotalDays =
                   onClick={
                     saveBillingInformation
                   }
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                 >
                   {saving ? (
                     <>
@@ -1052,8 +1386,12 @@ const trialTotalDays =
                     </>
                   ) : (
                     <>
-                      <Save size={16} />
-                      Save billing information
+                      <Save
+                        size={16}
+                      />
+
+                      Save billing
+                      information
                     </>
                   )}
                 </button>
@@ -1061,13 +1399,25 @@ const trialTotalDays =
             )}
           </section>
 
-          <section className={styles.card}>
-            <div className={styles.cardHeader}>
+          <section
+            className={
+              styles.card
+            }
+          >
+            <div
+              className={
+                styles.cardHeader
+              }
+            >
               <div>
-                <h2>Subscription</h2>
+                <h2>
+                  Subscription
+                </h2>
 
                 <p>
-                  Your current SBS subscription.
+                  Your current SBS
+                  subscription
+                  status.
                 </p>
               </div>
 
@@ -1076,7 +1426,9 @@ const trialTotalDays =
                   styles.headerIcon
                 }
               >
-                <CreditCard size={19} />
+                <CreditCard
+                  size={19}
+                />
               </div>
             </div>
 
@@ -1128,7 +1480,9 @@ const trialTotalDays =
                   }
                 >
                   <div>
-                    <span>Billing cycle</span>
+                    <span>
+                      Billing cycle
+                    </span>
 
                     <strong>
                       {subscription.billing_cycle ===
@@ -1139,7 +1493,9 @@ const trialTotalDays =
                   </div>
 
                   <div>
-                    <span>Price</span>
+                    <span>
+                      Price
+                    </span>
 
                     <strong>
                       {isTrial
@@ -1170,7 +1526,10 @@ const trialTotalDays =
                   </div>
 
                   <div>
-                    <span>Payment provider</span>
+                    <span>
+                      Payment
+                      provider
+                    </span>
 
                     <strong>
                       {subscription.provider
@@ -1186,13 +1545,21 @@ const trialTotalDays =
                       styles.noPaymentNote
                     }
                   >
-                    <ShieldCheck size={17} />
+                    <ShieldCheck
+                      size={17}
+                    />
 
                     <span>
-  No payment method is
-  required during your
-  {trialTotalDays}-day trial.
-</span>
+                      Your free trial
+                      continues
+                      normally.
+                      Selecting a
+                      paid plan
+                      schedules
+                      billing for
+                      after the
+                      trial ends.
+                    </span>
                   </div>
                 )}
               </div>
@@ -1202,29 +1569,56 @@ const trialTotalDays =
                   styles.emptySubscription
                 }
               >
-                <CreditCard size={28} />
+                <CreditCard
+                  size={28}
+                />
 
                 <strong>
-                  No active subscription
+                  No active
+                  subscription
                 </strong>
 
                 <span>
-                  Choose a plan below to
-                  activate your SBS workspace.
+                  Choose a plan
+                  below to
+                  activate your
+                  SBS workspace.
                 </span>
               </div>
             )}
           </section>
         </div>
 
-        <section className={styles.card}>
-          <div className={styles.cardHeader}>
+        <section
+          className={
+            styles.plansSection
+          }
+        >
+          <div
+            className={
+              styles.plansHeader
+            }
+          >
             <div>
-              <h2>Available plans</h2>
+              <div
+                className={
+                  styles.sectionEyebrow
+                }
+              >
+                SBS PLANS
+              </div>
+
+              <h2>
+                Choose your
+                subscription
+              </h2>
 
               <p>
-                Change your SBS plan whenever
-                your business needs more.
+                Pick the plan that
+                matches your
+                business. You can
+                change your plan
+                as your needs grow.
               </p>
             </div>
 
@@ -1236,13 +1630,19 @@ const trialTotalDays =
               <button
                 type="button"
                 className={
-                  billingCycle === "monthly"
+                  billingCycle ===
+                  "monthly"
                     ? styles.cycleActive
                     : ""
                 }
                 onClick={() =>
                   setBillingCycle(
                     "monthly",
+                  )
+                }
+                disabled={
+                  Boolean(
+                    checkoutLoading,
                   )
                 }
               >
@@ -1252,7 +1652,8 @@ const trialTotalDays =
               <button
                 type="button"
                 className={
-                  billingCycle === "yearly"
+                  billingCycle ===
+                  "yearly"
                     ? styles.cycleActive
                     : ""
                 }
@@ -1261,18 +1662,72 @@ const trialTotalDays =
                     "yearly",
                   )
                 }
+                disabled={
+                  Boolean(
+                    checkoutLoading,
+                  )
+                }
               >
                 Yearly
-                <span>Save</span>
+                <span>
+                  Save
+                </span>
               </button>
             </div>
           </div>
 
-          <div className={styles.plansGrid}>
+          {isTrial && (
+            <div
+              className={
+                styles.trialPlanNotice
+              }
+            >
+              <div
+                className={
+                  styles.trialPlanIcon
+                }
+              >
+                <Sparkles
+                  size={18}
+                />
+              </div>
+
+              <div>
+                <strong>
+                  Subscribe during
+                  your trial
+                </strong>
+
+                <span>
+                  You won't lose
+                  your remaining
+                  trial days.
+                  Your selected
+                  paid plan will
+                  start after your
+                  trial ends on{" "}
+                  <strong>
+                    {formatDate(
+                      subscription?.trial_ends_at ??
+                        null,
+                    )}
+                  </strong>
+                  .
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div
+            className={
+              styles.plansGrid
+            }
+          >
             {(data?.plans ?? []).map(
               (plan) => {
                 const isCurrent =
-                  currentPlan?.id === plan.id;
+                  currentPlan?.id ===
+                  plan.id;
 
                 const price =
                   billingCycle ===
@@ -1280,14 +1735,27 @@ const trialTotalDays =
                     ? plan.yearly_price
                     : plan.monthly_price;
 
-                const disabled =
+                const isEnterprise =
                   plan.slug ===
-                    "enterprise" ||
+                  "enterprise";
+
+                const isLoading =
+                  checkoutLoading ===
+                  plan.slug;
+
+                const isScheduled =
+                  scheduledPlan ===
+                  plan.slug;
+
+                const disabled =
+                  isEnterprise ||
                   isCurrent ||
-                  Boolean(checkoutLoading);
+                  Boolean(
+                    checkoutLoading,
+                  );
 
                 return (
-                  <div
+                  <article
                     key={plan.id}
                     className={`${styles.planCard} ${
                       isCurrent
@@ -1314,27 +1782,43 @@ const trialTotalDays =
                         styles.planTop
                       }
                     >
-                      <div>
-                        <h3>
-                          {plan.name}
-                        </h3>
-
-                        <p>
-                          {plan.description ??
-                            "SBS business management tools."}
-                        </p>
+                      <div
+                        className={
+                          styles.planIcon
+                        }
+                      >
+                        <Crown
+                          size={18}
+                        />
                       </div>
 
                       {isCurrent && (
                         <span
                           className={
-                            styles.currentCheck
+                            styles.currentBadge
                           }
                         >
-                          <Check size={15} />
+                          <Check
+                            size={13}
+                          />
+
+                          Current
                         </span>
                       )}
                     </div>
+
+                    <h3>
+                      {plan.name}
+                    </h3>
+
+                    <p
+                      className={
+                        styles.planDescription
+                      }
+                    >
+                      {plan.description ??
+                        "SBS business management tools."}
+                    </p>
 
                     <div
                       className={
@@ -1348,14 +1832,17 @@ const trialTotalDays =
                           </strong>
 
                           <span>
-                            Contact SBS
+                            Talk to our
+                            team
                           </span>
                         </>
                       ) : (
                         <>
                           <strong>
                             {formatMoney(
-                              Number(price),
+                              Number(
+                                price,
+                              ),
                               plan.currency,
                             )}
                           </strong>
@@ -1371,6 +1858,53 @@ const trialTotalDays =
                       )}
                     </div>
 
+                    <div
+                      className={
+                        styles.planDivider
+                      }
+                    />
+
+                    <ul
+                      className={
+                        styles.planFeatures
+                      }
+                    >
+                      <li>
+                        <Check
+                          size={15}
+                        />
+
+                        <span>
+                          Full SBS
+                          workspace
+                        </span>
+                      </li>
+
+                      <li>
+                        <Check
+                          size={15}
+                        />
+
+                        <span>
+                          Business
+                          management
+                          modules
+                        </span>
+                      </li>
+
+                      <li>
+                        <Check
+                          size={15}
+                        />
+
+                        <span>
+                          Secure
+                          cloud
+                          access
+                        </span>
+                      </li>
+                    </ul>
+
                     <button
                       type="button"
                       className={
@@ -1378,17 +1912,16 @@ const trialTotalDays =
                           ? styles.currentPlanButton
                           : styles.planButton
                       }
-                      disabled={disabled}
-                      onClick={() => {
-                        setSelectedPlan(
-                          plan.slug,
-                        );
-
-                        startCheckout(plan);
-                      }}
+                      disabled={
+                        disabled
+                      }
+                      onClick={() =>
+                        startCheckout(
+                          plan,
+                        )
+                      }
                     >
-                      {checkoutLoading ===
-                      plan.slug ? (
+                      {isLoading ? (
                         <>
                           <RefreshCw
                             size={16}
@@ -1397,46 +1930,81 @@ const trialTotalDays =
                             }
                           />
 
-                          Opening PayPal...
+                          Opening
+                          PayPal...
+                        </>
+                      ) : isScheduled ? (
+                        <>
+                          <Check
+                            size={16}
+                          />
+
+                          Scheduled
                         </>
                       ) : isCurrent ? (
                         "Current plan"
-                      ) : plan.slug ===
-                        "enterprise" ? (
+                      ) : isEnterprise ? (
                         "Contact us"
+                      ) : isTrial ? (
+                        <>
+                          Subscribe
+                          after trial
+                          <ChevronRight
+                            size={16}
+                          />
+                        </>
                       ) : (
-                        isTrial
-                          ? "Subscribe to plan"
-                          : "Choose plan"
+                        <>
+                          Choose plan
+                          <ChevronRight
+                            size={16}
+                          />
+                        </>
                       )}
                     </button>
 
                     {isTrial &&
-                      !isCurrent && (
-                        <small
+                      !isCurrent &&
+                      !isEnterprise && (
+                        <div
                           className={
-                            styles.trialPlanNote
+                            styles.planTrialNote
                           }
                         >
-                          Your trial remains
-                          active until you
-                          subscribe.
-                        </small>
+                          <ShieldCheck
+                            size={14}
+                          />
+
+                          No charge
+                          until your
+                          trial ends
+                        </div>
                       )}
-                  </div>
+                  </article>
                 );
               },
             )}
           </div>
         </section>
 
-        <section className={styles.card}>
-          <div className={styles.cardHeader}>
+        <section
+          className={
+            styles.card
+          }
+        >
+          <div
+            className={
+              styles.cardHeader
+            }
+          >
             <div>
-              <h2>Payment history</h2>
+              <h2>
+                Payment history
+              </h2>
 
               <p>
-                Payments made for your SBS
+                Payments made for
+                your SBS
                 subscription.
               </p>
             </div>
@@ -1446,11 +2014,14 @@ const trialTotalDays =
                 styles.headerIcon
               }
             >
-              <CreditCard size={19} />
+              <CreditCard
+                size={19}
+              />
             </div>
           </div>
 
-          {data?.payments?.length ? (
+          {data?.payments
+            ?.length ? (
             <div
               className={
                 styles.paymentTableWrap
@@ -1463,18 +2034,38 @@ const trialTotalDays =
               >
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Provider</th>
-                    <th>Status</th>
-                    <th>Amount</th>
+                    <th>
+                      Date
+                    </th>
+
+                    <th>
+                      Description
+                    </th>
+
+                    <th>
+                      Provider
+                    </th>
+
+                    <th>
+                      Status
+                    </th>
+
+                    <th>
+                      Amount
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {data.payments.map(
-                    (payment) => (
-                      <tr key={payment.id}>
+                    (
+                      payment,
+                    ) => (
+                      <tr
+                        key={
+                          payment.id
+                        }
+                      >
                         <td>
                           {formatDateTime(
                             payment.paid_at ??
@@ -1542,28 +2133,39 @@ const trialTotalDays =
                 styles.emptyPayments
               }
             >
-              <CreditCard size={25} />
+              <CreditCard
+                size={25}
+              />
 
               <strong>
                 No payments yet
               </strong>
 
               <span>
-                Your subscription payments
-                will appear here once you
-                subscribe to a paid plan.
+                Your subscription
+                payments will
+                appear here once
+                you subscribe to a
+                paid plan.
               </span>
             </div>
           )}
         </section>
 
-        <div className={styles.securityNote}>
-          <ShieldCheck size={17} />
+        <div
+          className={
+            styles.securityNote
+          }
+        >
+          <ShieldCheck
+            size={17}
+          />
 
           <span>
-            Billing information is protected
-            and only workspace owners and
-            administrators can change it.
+            Billing information is
+            protected. Only workspace
+            owners and administrators
+            can change billing details.
           </span>
         </div>
       </div>

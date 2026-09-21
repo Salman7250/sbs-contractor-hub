@@ -128,6 +128,31 @@ async function getPayPalSubscription(
   return data as PayPalSubscription;
 }
 
+function getSubscriptionStatus(
+  paypalStatus: string,
+  currentStatus: string,
+) {
+  switch (paypalStatus) {
+    case "ACTIVE":
+      return "active";
+
+    case "SUSPENDED":
+      return "paused";
+
+    case "CANCELLED":
+      return "canceled";
+
+    case "EXPIRED":
+      return "expired";
+
+    case "APPROVAL_PENDING":
+      return "pending";
+
+    default:
+      return currentStatus;
+  }
+}
+
 export async function completePayPalSubscription(
   paypalSubscriptionId: string,
 ) {
@@ -141,9 +166,11 @@ export async function completePayPalSubscription(
     createAdminClient();
 
   /*
-   * Ask PayPal for the authoritative
-   * subscription state.
+   * ---------------------------------------------------------
+   * Get the authoritative subscription state from PayPal.
+   * ---------------------------------------------------------
    */
+
   const paypalSubscription =
     await getPayPalSubscription(
       paypalSubscriptionId,
@@ -158,10 +185,16 @@ export async function completePayPalSubscription(
     );
   }
 
+  const paypalStatus =
+    paypalSubscription.status ??
+    "UNKNOWN";
+
   /*
-   * Find the SBS subscription that was
-   * created when checkout started.
+   * ---------------------------------------------------------
+   * Find the local SBS subscription.
+   * ---------------------------------------------------------
    */
+
   const {
     data: existingSubscription,
     error: lookupError,
@@ -180,8 +213,11 @@ export async function completePayPalSubscription(
         provider_customer_id,
         provider_subscription_id,
         started_at,
+        trial_ends_at,
         current_period_start,
-        current_period_end
+        current_period_end,
+        canceled_at,
+        cancel_at_period_end
       `,
     )
     .eq(
@@ -202,64 +238,67 @@ export async function completePayPalSubscription(
     );
   }
 
-  const paypalStatus =
-    paypalSubscription.status ??
-    "UNKNOWN";
+  /*
+   * ---------------------------------------------------------
+   * Determine whether the company still has an active trial.
+   *
+   * IMPORTANT:
+   *
+   * We do NOT convert the trial into an active paid
+   * subscription simply because PayPal returned ACTIVE.
+   *
+   * The SBS trial must remain intact until trial_ends_at.
+   * ---------------------------------------------------------
+   */
+
+  const now = new Date();
+
+  const trialEndsAt =
+    existingSubscription.trial_ends_at
+      ? new Date(
+          existingSubscription.trial_ends_at,
+        )
+      : null;
+
+  const trialStillActive =
+    existingSubscription.status ===
+      "trialing" &&
+    trialEndsAt !== null &&
+    trialEndsAt.getTime() >
+      now.getTime();
 
   /*
-   * PayPal subscription states:
-   *
-   * ACTIVE     -> SBS active
-   * SUSPENDED  -> SBS paused
-   * CANCELLED  -> SBS canceled
-   * EXPIRED    -> SBS canceled
-   * APPROVAL_PENDING -> SBS pending
+   * ---------------------------------------------------------
+   * Determine the normal SBS status.
+   * ---------------------------------------------------------
    */
-  let nextStatus =
-    existingSubscription.status;
 
-  switch (paypalStatus) {
-    case "ACTIVE":
-      nextStatus = "active";
-      break;
+  const mappedStatus =
+    getSubscriptionStatus(
+      paypalStatus,
+      existingSubscription.status,
+    );
 
-    case "SUSPENDED":
-      nextStatus = "paused";
-      break;
-
-    case "CANCELLED":
-      nextStatus = "canceled";
-      break;
-
-    case "EXPIRED":
-      nextStatus = "canceled";
-      break;
-
-    case "APPROVAL_PENDING":
-      nextStatus = "pending";
-      break;
-
-    default:
-      /*
-       * Do not invent an active state if
-       * PayPal gives us an unknown status.
-       */
-      nextStatus =
-        existingSubscription.status;
-      break;
-  }
+  /*
+   * ---------------------------------------------------------
+   * Build the update.
+   * ---------------------------------------------------------
+   */
 
   const update: Record<
     string,
     unknown
   > = {
-    status: nextStatus,
     provider: "paypal",
     provider_subscription_id:
       paypalSubscriptionId,
     updated_at:
-      new Date().toISOString(),
+      now.toISOString(),
   };
+
+  /*
+   * PayPal payer ID.
+   */
 
   if (
     paypalSubscription.subscriber
@@ -269,32 +308,146 @@ export async function completePayPalSubscription(
       paypalSubscription.subscriber.payer_id;
   }
 
-  if (
-    paypalSubscription.start_time
-  ) {
-    update.started_at =
-      paypalSubscription.start_time;
+  /*
+   * ---------------------------------------------------------
+   * TRIAL PROTECTION
+   *
+   * If the company is still inside its SBS free trial,
+   * keep the local paid subscription pending.
+   *
+   * The trial record/date is intentionally NOT changed here.
+   * ---------------------------------------------------------
+   */
 
-    update.current_period_start =
-      paypalSubscription.start_time;
+  if (trialStillActive) {
+    update.status = "pending";
+
+    /*
+     * Do not set started_at to PayPal's start time.
+     *
+     * The paid subscription has not started yet from the
+     * SBS customer's perspective.
+     */
+
+    /*
+     * We also deliberately do not change:
+     *
+     * - trial_ends_at
+     * - current_period_start
+     * - current_period_end
+     * - canceled_at
+     * - cancel_at_period_end
+     */
+
+    update.provider_metadata = {
+      paypal_status:
+        paypalStatus,
+
+      paypal_plan_id:
+        paypalSubscription.plan_id ??
+        null,
+
+      paypal_start_time:
+        paypalSubscription.start_time ??
+        null,
+
+      paypal_next_billing_time:
+        paypalSubscription.billing_info
+          ?.next_billing_time ??
+        null,
+
+      trial_protected: true,
+
+      trial_ends_at:
+        existingSubscription.trial_ends_at,
+
+      message:
+        "PayPal subscription approved during SBS free trial. Paid subscription remains pending until the trial ends.",
+    };
+  } else {
+    /*
+     * -------------------------------------------------------
+     * NO ACTIVE TRIAL
+     *
+     * The subscription can now follow PayPal's authoritative
+     * state.
+     * -------------------------------------------------------
+     */
+
+    update.status = mappedStatus;
+
+    /*
+     * Only set the paid subscription dates when the
+     * subscription is actually active.
+     */
+
+    if (
+      paypalStatus === "ACTIVE"
+    ) {
+      const startTime =
+        paypalSubscription.start_time ??
+        now.toISOString();
+
+      update.started_at =
+        startTime;
+
+      update.current_period_start =
+        startTime;
+
+      if (
+        paypalSubscription.billing_info
+          ?.next_billing_time
+      ) {
+        update.current_period_end =
+          paypalSubscription.billing_info
+            .next_billing_time;
+      }
+
+      update.canceled_at = null;
+
+      update.cancel_at_period_end =
+        false;
+    }
+
+    /*
+     * Canceled subscriptions.
+     */
+
+    if (
+      paypalStatus === "CANCELLED" ||
+      paypalStatus === "EXPIRED"
+    ) {
+      update.canceled_at =
+        now.toISOString();
+
+      update.cancel_at_period_end =
+        false;
+    }
+
+    update.provider_metadata = {
+      paypal_status:
+        paypalStatus,
+
+      paypal_plan_id:
+        paypalSubscription.plan_id ??
+        null,
+
+      paypal_start_time:
+        paypalSubscription.start_time ??
+        null,
+
+      paypal_next_billing_time:
+        paypalSubscription.billing_info
+          ?.next_billing_time ??
+        null,
+    };
   }
 
-  if (
-    paypalSubscription.billing_info
-      ?.next_billing_time
-  ) {
-    update.current_period_end =
-      paypalSubscription.billing_info
-        .next_billing_time;
-  }
-
-  if (nextStatus === "canceled") {
-    update.canceled_at =
-      new Date().toISOString();
-
-    update.cancel_at_period_end =
-      false;
-  }
+  /*
+   * ---------------------------------------------------------
+   * Save the local subscription.
+   * ---------------------------------------------------------
+   */
 
   const {
     data: updatedSubscription,
@@ -319,8 +472,11 @@ export async function completePayPalSubscription(
         provider_customer_id,
         provider_subscription_id,
         started_at,
+        trial_ends_at,
         current_period_start,
-        current_period_end
+        current_period_end,
+        canceled_at,
+        cancel_at_period_end
       `,
     )
     .single();
@@ -331,22 +487,53 @@ export async function completePayPalSubscription(
     );
   }
 
+  /*
+   * ---------------------------------------------------------
+   * IMPORTANT:
+   *
+   * Do NOT grant/revoke entitlements here.
+   *
+   * The webhook is responsible for the authoritative
+   * subscription lifecycle:
+   *
+   * trial -> paid active
+   * suspended
+   * canceled
+   * expired
+   *
+   * This prevents the success page from prematurely
+   * activating paid modules.
+   * ---------------------------------------------------------
+   */
+
   return {
     subscription:
       updatedSubscription,
+
     paypal: {
       id: paypalSubscription.id,
       status: paypalStatus,
+
       planId:
         paypalSubscription.plan_id ??
         null,
+
       startTime:
         paypalSubscription.start_time ??
         null,
+
       nextBillingTime:
         paypalSubscription.billing_info
           ?.next_billing_time ??
         null,
+    },
+
+    trial: {
+      stillActive:
+        trialStillActive,
+
+      endsAt:
+        existingSubscription.trial_ends_at,
     },
   };
 }

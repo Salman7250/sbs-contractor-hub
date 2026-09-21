@@ -10,7 +10,7 @@ type RequestBody = {
 };
 
 type PayPalTokenResponse = {
-  access_token: string;
+  access_token?: string;
 };
 
 type PayPalSubscriptionResponse = {
@@ -23,8 +23,20 @@ type PayPalSubscriptionResponse = {
   }>;
 };
 
+type ExistingSubscription = {
+  id: string;
+  status: string;
+  provider_subscription_id: string | null;
+  plan_id: string;
+  billing_cycle: string;
+  trial_ends_at: string | null;
+};
+
 function getPayPalBaseUrl() {
-  return process.env.PAYPAL_ENVIRONMENT === "live"
+  const environment =
+    process.env.PAYPAL_ENVIRONMENT ?? "sandbox";
+
+  return environment === "live"
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
 }
@@ -83,6 +95,12 @@ export async function POST(
   try {
     const supabase = await createClient();
 
+    /*
+     * ---------------------------------------------------------
+     * Authenticate user.
+     * ---------------------------------------------------------
+     */
+
     const {
       data: { user },
       error: userError,
@@ -97,6 +115,12 @@ export async function POST(
         { status: 401 },
       );
     }
+
+    /*
+     * ---------------------------------------------------------
+     * Read request.
+     * ---------------------------------------------------------
+     */
 
     const body =
       (await request.json()) as RequestBody;
@@ -132,7 +156,7 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Resolve the user's company.
+     * Resolve user's company.
      * ---------------------------------------------------------
      */
 
@@ -155,6 +179,11 @@ export async function POST(
       .maybeSingle();
 
     if (membershipError) {
+      console.error(
+        "Membership lookup error:",
+        membershipError,
+      );
+
       return NextResponse.json(
         {
           error:
@@ -175,7 +204,7 @@ export async function POST(
     }
 
     /*
-     * Only the workspace owner can start billing.
+     * Only workspace owner can start billing.
      */
 
     if (membership.role !== "owner") {
@@ -244,7 +273,7 @@ export async function POST(
     }
 
     /*
-     * Enterprise uses a separate sales flow.
+     * Enterprise uses sales flow.
      */
 
     if (plan.slug === "enterprise") {
@@ -256,6 +285,12 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    /*
+     * ---------------------------------------------------------
+     * Resolve PayPal plan.
+     * ---------------------------------------------------------
+     */
 
     const paypalPlanId =
       billingCycle === "monthly"
@@ -292,14 +327,11 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Find the company's existing subscription.
+     * Find existing subscriptions.
      *
      * IMPORTANT:
-     * A trialing subscription does NOT block checkout.
      *
-     * The customer is allowed to subscribe before the trial
-     * ends. The trial remains in the database until PayPal
-     * activates the new paid subscription.
+     * trialing does NOT block checkout.
      * ---------------------------------------------------------
      */
 
@@ -314,7 +346,8 @@ export async function POST(
           status,
           provider_subscription_id,
           plan_id,
-          billing_cycle
+          billing_cycle,
+          trial_ends_at
         `,
       )
       .eq(
@@ -346,13 +379,21 @@ export async function POST(
       );
     }
 
+    const subscriptions =
+      (existingSubscriptions ??
+        []) as ExistingSubscription[];
+
+    /*
+     * ---------------------------------------------------------
+     * ACTIVE subscription blocks new checkout.
+     * ---------------------------------------------------------
+     */
+
     const activeSubscription =
-      existingSubscriptions?.find(
+      subscriptions.find(
         (subscription) =>
-          subscription.status ===
-            "active" ||
-          subscription.status ===
-            "approved",
+          subscription.status === "active" ||
+          subscription.status === "approved",
       );
 
     if (activeSubscription) {
@@ -366,36 +407,43 @@ export async function POST(
     }
 
     /*
-     * If a pending PayPal subscription already exists,
-     * don't create another one.
+     * ---------------------------------------------------------
+     * Detect current trial.
+     * ---------------------------------------------------------
+     */
+
+    const trialSubscription =
+      subscriptions.find(
+        (subscription) =>
+          subscription.status === "trialing" &&
+          subscription.trial_ends_at,
+      );
+
+    const hasActiveTrial =
+      Boolean(trialSubscription);
+
+    const trialEndsAt =
+      trialSubscription?.trial_ends_at ?? null;
+
+    /*
+     * ---------------------------------------------------------
+     * Existing pending checkout.
      *
-     * This protects against double-clicks and users
-     * returning to the billing page while checkout is
-     * already waiting for approval.
+     * Cancel only the pending checkout.
+     *
+     * NEVER cancel the active trial here.
+     * ---------------------------------------------------------
      */
 
     const existingPending =
-      existingSubscriptions?.find(
+      subscriptions.find(
         (subscription) =>
-          subscription.status ===
-          "pending",
+          subscription.status === "pending",
       );
 
     if (
       existingPending?.provider_subscription_id
     ) {
-      /*
-       * We intentionally do not create another local
-       * subscription here.
-       *
-       * However, because the browser needs an approval
-       * URL and that URL is not stored reliably in the
-       * subscriptions table, we cancel the stale pending
-       * record and create a fresh checkout below.
-       *
-       * The old pending record remains in the database.
-       */
-
       await admin
         .from("subscriptions")
         .update({
@@ -417,7 +465,11 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Create local pending subscription first.
+     * Create LOCAL pending subscription.
+     *
+     * This record does not activate the paid plan.
+     *
+     * If a trial exists, the trial continues separately.
      * ---------------------------------------------------------
      */
 
@@ -429,29 +481,54 @@ export async function POST(
       .insert({
         company_id:
           membership.company_id,
-        plan_id: plan.id,
+
+        plan_id:
+          plan.id,
+
         status: "pending",
-        billing_cycle: billingCycle,
+
+        billing_cycle:
+          billingCycle,
+
         amount,
-        base_amount: amount,
+
+        base_amount:
+          amount,
+
         discount_value: 0,
+
         price_override: false,
-        currency: plan.currency,
+
+        currency:
+          plan.currency,
+
         provider: "paypal",
+
         provider_metadata: {
-          created_by_user_id: user.id,
-          plan_slug: plan.slug,
-          billing_cycle: billingCycle,
-          replacing_trial:
-            Boolean(
-              existingSubscriptions?.some(
-                (subscription) =>
-                  subscription.status ===
-                  "trialing",
-              ),
-            ),
+          created_by_user_id:
+            user.id,
+
+          plan_slug:
+            plan.slug,
+
+          billing_cycle:
+            billingCycle,
+
+          created_during_trial:
+            hasActiveTrial,
+
+          trial_preserved:
+            hasActiveTrial,
+
+          scheduled_start:
+            trialEndsAt,
+
+          checkout_created_at:
+            new Date().toISOString(),
         },
-        cancel_at_period_end: false,
+
+        cancel_at_period_end:
+          false,
       })
       .select("id")
       .single();
@@ -476,12 +553,18 @@ export async function POST(
 
     /*
      * ---------------------------------------------------------
-     * Create PayPal subscription.
+     * Get PayPal access token.
      * ---------------------------------------------------------
      */
 
     const accessToken =
       await getPayPalAccessToken();
+
+    /*
+     * ---------------------------------------------------------
+     * Build return URLs.
+     * ---------------------------------------------------------
+     */
 
     const origin =
       request.headers.get("origin") ??
@@ -489,50 +572,120 @@ export async function POST(
       "http://localhost:3000";
 
     const returnUrl =
-  `${origin}/billing/paypal/success`;
+      `${origin}/billing/paypal/success`;
 
-const cancelUrl =
-  `${origin}/billing/paypal/cancel`;
+    const cancelUrl =
+      `${origin}/billing/paypal/cancel`;
+
+    /*
+     * ---------------------------------------------------------
+     * Build PayPal subscription payload.
+     *
+     * IMPORTANT:
+     *
+     * When the customer is still on trial, we send
+     * start_time equal to the trial end.
+     *
+     * This tells PayPal not to start the paid
+     * subscription immediately.
+     * ---------------------------------------------------------
+     */
+
+    const paypalPayload: Record<
+      string,
+      unknown
+    > = {
+      plan_id: paypalPlanId,
+
+      custom_id:
+        localSubscription.id,
+
+      subscriber: {
+        email_address:
+          user.email,
+      },
+
+      application_context: {
+        brand_name:
+          "Sharif Business Solutions",
+
+        locale: "en-US",
+
+        user_action:
+          "SUBSCRIBE_NOW",
+
+        shipping_preference:
+          "NO_SHIPPING",
+
+        return_url:
+          returnUrl,
+
+        cancel_url:
+          cancelUrl,
+      },
+    };
+
+    /*
+     * Only schedule a future start when there
+     * is a real active trial end date.
+     */
+
+    if (trialEndsAt) {
+      const trialEnd =
+        new Date(trialEndsAt);
+
+      if (
+        !Number.isNaN(
+          trialEnd.getTime(),
+        ) &&
+        trialEnd.getTime() >
+          Date.now()
+      ) {
+        paypalPayload.start_time =
+          trialEnd.toISOString();
+      }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * Create PayPal subscription.
+     * ---------------------------------------------------------
+     */
 
     const paypalResponse =
       await fetch(
         `${getPayPalBaseUrl()}/v1/billing/subscriptions`,
         {
           method: "POST",
+
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization:
+              `Bearer ${accessToken}`,
+
             "Content-Type":
               "application/json",
-            Accept: "application/json",
+
+            Accept:
+              "application/json",
+
             Prefer:
               "return=representation",
           },
-          body: JSON.stringify({
-            plan_id: paypalPlanId,
 
-            custom_id:
-              localSubscription.id,
+          body:
+            JSON.stringify(
+              paypalPayload,
+            ),
 
-            subscriber: {
-              email_address:
-                user.email,
-            },
-
-            application_context: {
-              brand_name:
-                "Sharif Business Solutions",
-              locale: "en-US",
-              user_action:
-                "SUBSCRIBE_NOW",
-              shipping_preference:
-                "NO_SHIPPING",
-              return_url: returnUrl,
-              cancel_url: cancelUrl,
-            },
-          }),
           cache: "no-store",
         },
       );
+
+    /*
+     * ---------------------------------------------------------
+     * Handle PayPal failure.
+     * ---------------------------------------------------------
+     */
 
     if (!paypalResponse.ok) {
       const text =
@@ -547,15 +700,28 @@ const cancelUrl =
         .from("subscriptions")
         .update({
           status: "failed",
+
           updated_at:
             new Date().toISOString(),
+
           provider_metadata: {
             created_by_user_id:
               user.id,
-            plan_slug: plan.slug,
+
+            plan_slug:
+              plan.slug,
+
             billing_cycle:
               billingCycle,
-            paypal_error: text,
+
+            created_during_trial:
+              hasActiveTrial,
+
+            scheduled_start:
+              trialEndsAt,
+
+            paypal_error:
+              text,
           },
         })
         .eq(
@@ -572,6 +738,12 @@ const cancelUrl =
       );
     }
 
+    /*
+     * ---------------------------------------------------------
+     * Read PayPal response.
+     * ---------------------------------------------------------
+     */
+
     const paypalSubscription =
       (await paypalResponse.json()) as PayPalSubscriptionResponse;
 
@@ -580,14 +752,20 @@ const cancelUrl =
         .from("subscriptions")
         .update({
           status: "failed",
+
           updated_at:
             new Date().toISOString(),
+
           provider_metadata: {
             created_by_user_id:
               user.id,
-            plan_slug: plan.slug,
+
+            plan_slug:
+              plan.slug,
+
             billing_cycle:
               billingCycle,
+
             paypal_error:
               "PayPal did not return a subscription ID.",
           },
@@ -602,6 +780,12 @@ const cancelUrl =
       );
     }
 
+    /*
+     * ---------------------------------------------------------
+     * Find PayPal approval URL.
+     * ---------------------------------------------------------
+     */
+
     const approvalUrl =
       paypalSubscription.links?.find(
         (link) =>
@@ -613,14 +797,20 @@ const cancelUrl =
         .from("subscriptions")
         .update({
           status: "failed",
+
           updated_at:
             new Date().toISOString(),
+
           provider_metadata: {
             created_by_user_id:
               user.id,
-            plan_slug: plan.slug,
+
+            plan_slug:
+              plan.slug,
+
             billing_cycle:
               billingCycle,
+
             paypal_error:
               "PayPal did not return an approval URL.",
           },
@@ -638,6 +828,11 @@ const cancelUrl =
     /*
      * ---------------------------------------------------------
      * Save PayPal subscription ID.
+     *
+     * Still PENDING.
+     *
+     * We do NOT activate the local paid subscription here.
+     * PayPal/webhook confirmation handles that.
      * ---------------------------------------------------------
      */
 
@@ -646,28 +841,37 @@ const cancelUrl =
     } = await admin
       .from("subscriptions")
       .update({
-        provider: "paypal",
+        provider:
+          "paypal",
+
         provider_subscription_id:
           paypalSubscription.id,
+
         updated_at:
           new Date().toISOString(),
+
         provider_metadata: {
           created_by_user_id:
             user.id,
-          plan_slug: plan.slug,
+
+          plan_slug:
+            plan.slug,
+
           billing_cycle:
             billingCycle,
+
           paypal_status:
             paypalSubscription.status ??
             "APPROVAL_PENDING",
-          replacing_trial:
-            Boolean(
-              existingSubscriptions?.some(
-                (subscription) =>
-                  subscription.status ===
-                  "trialing",
-              ),
-            ),
+
+          created_during_trial:
+            hasActiveTrial,
+
+          trial_preserved:
+            hasActiveTrial,
+
+          scheduled_start:
+            trialEndsAt,
         },
       })
       .eq(
@@ -682,13 +886,31 @@ const cancelUrl =
       );
     }
 
+    /*
+     * ---------------------------------------------------------
+     * Return approval URL to browser.
+     * ---------------------------------------------------------
+     */
+
     return NextResponse.json({
       success: true,
+
       subscriptionId:
         localSubscription.id,
+
       paypalSubscriptionId:
         paypalSubscription.id,
+
       approvalUrl,
+
+      createdDuringTrial:
+        hasActiveTrial,
+
+      trialPreserved:
+        hasActiveTrial,
+
+      scheduledStart:
+        trialEndsAt,
     });
   } catch (error) {
     console.error(
