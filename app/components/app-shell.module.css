@@ -932,147 +932,143 @@
             width: min(360px, 100%);
           }
         }
+/* ================================
+   MOBILE
+================================= */
 
-        /* ================================
-           MOBILE
-        ================================= */
+@media (max-width: 868px) {
+  :global(.sbs-sidebar) {
+    width: 270px;
+    transform: translateX(-100%);
+    box-shadow: none;
+    transition:
+      transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.25s ease;
+  }
 
-        @media (max-width: 868px) {
-          :global(.sbs-sidebar) {
-            width: 270px;
-            transform: translateX(-100%);
-            box-shadow: none;
-          }
+  /* IMPORTANT:
+     mobile-open must be inside :global()
+     because AppShell adds this class directly
+     from JSX. */
+  :global(.sbs-sidebar.mobile-open) {
+    transform: translateX(0);
+    box-shadow:
+      12px 0 30px rgba(15, 23, 42, 0.25);
+  }
 
-          :global(.sbs-sidebar).mobile-open {
-            transform: translateX(0);
-            box-shadow:
-              12px 0 30px
-              rgba(15, 23, 42, 0.25);
-          }
+  :global(.sbs-main-area) {
+    margin-left: 0;
+  }
 
-          :global(.sbs-main-area) {
-            margin-left: 0;
-          }
+  :global(.sbs-mobile-menu) {
+    display: flex;
+    position: relative;
+    z-index: 400;
+  }
 
-          :global(.sbs-mobile-menu) {
-            display: flex;
-          }
+  :global(.sbs-mobile-overlay) {
+    position: fixed;
+    inset: 0;
+    display: block;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 90;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-          :global(.sbs-mobile-overlay) {
-            position: fixed;
-            inset: 0;
-            display: block;
-            background: rgba(
-              15,
-              23,
-              42,
-              0.4
-            );
-            /* no backdrop filter: cheaper on mobile GPUs */
-            z-index: 90;
-            border: none;
-            padding: 0;
-            margin: 0;
-            cursor: pointer;
-          }
+  :global(.sbs-topbar) {
+    padding: 0 16px;
+  }
 
-          :global(.sbs-topbar) {
-            padding: 0 16px;
-          }
+  :global(.sbs-topbar-search) {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
 
-          :global(.sbs-topbar-search) {
-            flex: 1;
-            min-width: 0;
-            width: auto;
-          }
+  :global(.sbs-topbar-company),
+  :global(.sbs-profile-name) {
+    display: none;
+  }
 
-          :global(.sbs-topbar-company),
-          :global(.sbs-profile-name) {
-            display: none;
-          }
+  :global(.sbs-profile) {
+    padding-left: 0;
+    border-left: none;
+  }
 
-          :global(.sbs-profile) {
-            padding-left: 0;
-            border-left: none;
-          }
+  :global(.sbs-profile-trigger) {
+    padding-right: 3px;
+  }
 
-          :global(.sbs-profile-trigger) {
-            padding-right: 3px;
-          }
+  :global(.sbs-profile-chevron) {
+    display: none;
+  }
 
-          :global(.sbs-profile-chevron) {
-            display: none;
-          }
+  :global(.sbs-profile-dropdown) {
+    position: fixed;
+    top: 60px;
+    right: 12px;
+    width: min(255px, calc(100vw - 24px));
+  }
 
-          :global(.sbs-profile-dropdown) {
-            position: fixed;
-            top: 60px;
-            right: 12px;
-            width: min(
-              255px,
-              calc(100vw - 24px)
-            );
-          }
+  :global(.sbs-notification-wrapper) {
+    z-index: 300;
+  }
 
-          :global(.sbs-notification-wrapper) {
-            z-index: 300;
-          }
+  :global(.sbs-search-results) {
+    min-width: 0;
+    width: min(420px, calc(100vw - 32px));
+  }
 
-          :global(.sbs-search-results) {
-            min-width: 0;
-            width: min(
-              100vw - 32px,
-              420px
-            );
-          }
+  :global(.sbs-content) {
+    padding: 20px 16px 32px;
+  }
+}
 
-          :global(.sbs-content) {
-            padding: 20px 16px 32px;
-          }
-        }
+/* ================================
+   SMALL MOBILE
+================================= */
 
-        /* ================================
-           SMALL MOBILE
-        ================================= */
+@media (max-width: 640px) {
+  :global(.sbs-topbar) {
+    height: 64px;
+    gap: 9px;
+  }
 
-        @media (max-width: 640px) {
-          :global(.sbs-topbar) {
-            height: 64px;
-            gap: 9px;
-          }
+  :global(.sbs-sidebar-header) {
+    height: 64px;
+  }
 
-          :global(.sbs-sidebar-header) {
-            height: 64px;
-          }
+  :global(.sbs-topbar-search) {
+    min-width: 0;
+  }
 
-          :global(.sbs-topbar-search) {
-            min-width: 0;
-          }
+  :global(.sbs-search-input) {
+    font-size: 12px;
+  }
 
-          :global(.sbs-search-input) {
-            font-size: 12px;
-          }
+  :global(.sbs-page-header) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
 
-          :global(.sbs-page-header) {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
-            margin-bottom: 20px;
-          }
+  :global(.sbs-page-title) {
+    font-size: 20px;
+  }
 
-          :global(.sbs-page-title) {
-            font-size: 20px;
-          }
+  :global(.sbs-page-actions) {
+    width: 100%;
+  }
 
-          :global(.sbs-page-actions) {
-            width: 100%;
-          }
-
-          :global(.sbs-search-results) {
-            position: fixed;
-            top: 60px;
-            left: 12px;
-            width: calc(100vw - 24px);
-          }
-        }
+  :global(.sbs-search-results) {
+    position: fixed;
+    top: 60px;
+    left: 12px;
+    width: calc(100vw - 24px);
+  }
+}
