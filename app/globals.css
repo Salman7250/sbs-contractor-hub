@@ -2184,5 +2184,158 @@ textarea::placeholder {
     box-shadow: none;
   }
 }
+/* =========================================================
+   SBS GLOBAL LOADING SCREEN
+   ========================================================= */
 
+.sbs-global-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}
 
+.sbs-loading-logo-wrap {
+  position: relative;
+  width: 220px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sbs-loading-logo {
+  position: relative;
+  z-index: 2;
+  width: 180px;
+  height: auto;
+  object-fit: contain;
+  animation: sbs-logo-pulse 1.8s ease-in-out infinite;
+}
+
+.sbs-loading-ring {
+  position: absolute;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 2px solid rgba(15, 23, 42, 0.08);
+  border-top-color: #35a866;
+  border-right-color: rgba(53, 168, 102, 0.35);
+  animation: sbs-loading-spin 1.15s linear infinite;
+}
+
+@keyframes sbs-loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sbs-logo-pulse {
+  0%,
+  100% {
+    transform: scale(0.97);
+    opacity: 0.88;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* =========================================================
+   SBS GLOBAL LOADING SCREEN
+   ========================================================= */
+
+.sbs-global-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}
+
+.sbs-loading-logo {
+  position: relative;
+  width: 180px;
+  height: 70px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sbs-loading-logo img {
+  position: relative;
+  z-index: 2;
+  width: 180px;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Moving wave */
+.sbs-logo-wave {
+  position: absolute;
+  z-index: 3;
+  left: -35%;
+  bottom: -45%;
+  width: 170%;
+  height: 90%;
+  background: rgba(53, 168, 102, 0.28);
+  border-radius: 48% 52% 0 0;
+  animation: sbs-wave-move 1.7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Soft light passing across the logo */
+.sbs-logo-shine {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: -80%;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.65),
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: sbs-logo-shine 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sbs-wave-move {
+  0% {
+    transform: translateY(45%) rotate(-2deg);
+  }
+
+  50% {
+    transform: translateY(-5%) rotate(2deg);
+  }
+
+  100% {
+    transform: translateY(45%) rotate(-2deg);
+  }
+}
+
+@keyframes sbs-logo-shine {
+  0% {
+    left: -80%;
+  }
+
+  55%,
+  100% {
+    left: 130%;
+  }
+}

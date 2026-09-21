@@ -37,6 +37,12 @@ import {
 } from "react";
 
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
+import {
+  formatMoney,
+  getCurrencySymbol,
+  type RegionalSettings,
+} from "@/lib/regional-settings";
 import { createClient } from "@/lib/supabase/client";
 
 /* -------------------------------------------------------------------------- */
@@ -279,32 +285,36 @@ const PERIOD_DAYS: Record<PeriodKey, number> = {
 
 function money(
   value: number,
-  currency = "AED",
+  settings: RegionalSettings,
 ) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value || 0);
+  return formatMoney(value, settings);
 }
 
 function compactMoney(
   value: number,
-  currency = "AED",
+  settings: RegionalSettings,
 ) {
-  if (Math.abs(value) >= 1_000_000) {
-    return `${currency === "AED" ? "AED " : currency + " "}${(
-      value / 1_000_000
-    ).toFixed(1)}M`;
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue >= 1_000_000) {
+    const number = `${(value / 1_000_000).toFixed(1)}M`;
+    const symbol = getCurrencySymbol(settings);
+
+    return settings.currency_symbol_position === "after"
+      ? `${number} ${symbol}`
+      : `${symbol}${number}`;
   }
 
-  if (Math.abs(value) >= 1_000) {
-    return `${currency === "AED" ? "AED " : currency + " "}${(
-      value / 1_000
-    ).toFixed(1)}K`;
+  if (absoluteValue >= 1_000) {
+    const number = `${(value / 1_000).toFixed(1)}K`;
+    const symbol = getCurrencySymbol(settings);
+
+    return settings.currency_symbol_position === "after"
+      ? `${number} ${symbol}`
+      : `${symbol}${number}`;
   }
 
-  return money(value, currency);
+  return money(value, settings);
 }
 
 function formatDate(value: string | null) {
@@ -414,6 +424,8 @@ function getEnabledModules(
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { settings: regionalSettings } =
+    useRegionalSettings();
 
   const supabase = useMemo(
     () => createClient(),
@@ -1221,9 +1233,6 @@ export default function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const currency =
-    company?.currency || "AED";
-
   const enabledModules =
     useMemo(
       () =>
@@ -1969,7 +1978,7 @@ export default function DashboardPage() {
           "Estimate Pipeline",
           compactMoney(
             estimatePipeline,
-            currency,
+            regionalSettings,
           ),
           "Open opportunity value",
           <FileText className="h-5 w-5" />,
@@ -2022,7 +2031,7 @@ export default function DashboardPage() {
           "Expenses",
           compactMoney(
             expensesTotal,
-            currency,
+            regionalSettings,
           ),
           "Recorded in period",
           <CreditCard className="h-5 w-5" />,
@@ -2112,7 +2121,7 @@ export default function DashboardPage() {
         activeLeads,
         periodLeads.length,
         estimatePipeline,
-        currency,
+        regionalSettings,
         openJobs,
         products.length,
         inventoryUnits,
@@ -2295,12 +2304,14 @@ export default function DashboardPage() {
               label="Revenue"
               value={money(
                 revenue,
-                currency,
+                regionalSettings,
               )}
               detail={`${periodOrders.length} sales orders`}
               icon={
-                <DollarSign className="h-5 w-5" />
-              }
+  <span className="text-lg font-medium">
+    {regionalSettings.currency_symbol}
+  </span>
+}
               accent="green"
             />
 
@@ -2308,7 +2319,7 @@ export default function DashboardPage() {
               label="Collected"
               value={money(
                 collected,
-                currency,
+                regionalSettings,
               )}
               detail={`${periodPayments.length} payments`}
               icon={
@@ -2321,7 +2332,7 @@ export default function DashboardPage() {
               label="Outstanding"
               value={money(
                 outstanding,
-                currency,
+                regionalSettings,
               )}
               detail={`${periodInvoices.length} invoices`}
               icon={
@@ -2334,12 +2345,12 @@ export default function DashboardPage() {
               label="Expenses"
               value={money(
                 expensesTotal,
-                currency,
+                regionalSettings,
               )}
               detail={`Net ${money(
                 revenue -
                   expensesTotal,
-                currency,
+                regionalSettings,
               )}`}
               icon={
                 <ArrowDownRight className="h-5 w-5" />
@@ -2390,7 +2401,6 @@ export default function DashboardPage() {
                 <RevenueChart
                   points={chartPoints}
                   max={maxChart}
-                  currency={currency}
                 />
               </div>
             </div>
@@ -2411,9 +2421,6 @@ export default function DashboardPage() {
               overdueAmount={
                 overdue
               }
-              currency={
-                currency
-              }
             />
           </section>
 
@@ -2426,7 +2433,7 @@ export default function DashboardPage() {
               title="Sales"
               value={money(
                 revenue,
-                currency,
+                regionalSettings,
               )}
               subtitle={`${periodOrders.length} orders`}
               icon={
@@ -2445,7 +2452,7 @@ export default function DashboardPage() {
               title="Pipeline"
               value={money(
                 estimatePipeline,
-                currency,
+                regionalSettings,
               )}
               subtitle={`${activeLeads} open leads`}
               icon={
@@ -2465,7 +2472,7 @@ export default function DashboardPage() {
               value={money(
                 revenue -
                   expensesTotal,
-                currency,
+                regionalSettings,
               )}
               subtitle="Revenue less recorded expenses"
               icon={
@@ -2576,7 +2583,7 @@ export default function DashboardPage() {
                           <div className="text-sm font-bold text-slate-800">
                             {money(
                               activity.amount,
-                              currency,
+                              regionalSettings,
                             )}
                           </div>
                         ) : null}
@@ -2628,9 +2635,6 @@ export default function DashboardPage() {
                   )
                     ? openRmas
                     : 0
-                }
-                currency={
-                  currency
                 }
               />
 
@@ -2746,12 +2750,12 @@ function DashboardMetric({
 function RevenueChart({
   points,
   max,
-  currency,
 }: {
   points: ChartPoint[];
   max: number;
-  currency: string;
 }) {
+  const { settings: regionalSettings } =
+    useRegionalSettings();
   const width = 1000;
   const height = 260;
   const paddingX = 36;
@@ -2896,7 +2900,7 @@ function RevenueChart({
                 {point.label}:{" "}
                 {money(
                   point.revenue,
-                  currency,
+                  regionalSettings,
                 )}
               </title>
             </g>
@@ -2936,13 +2940,13 @@ function InvoiceHealth({
   invoices,
   paid,
   overdueAmount,
-  currency,
 }: {
   invoices: Invoice[];
   paid: number;
   overdueAmount: number;
-  currency: string;
 }) {
+  const { settings: regionalSettings } =
+    useRegionalSettings();
   const total =
     invoices.length;
 
@@ -3141,7 +3145,7 @@ function InvoiceHealth({
               <span className="text-sm font-bold text-red-600">
                 {money(
                   overdueAmount,
-                  currency,
+                  regionalSettings,
                 )}
               </span>
             </div>
@@ -3282,14 +3286,14 @@ function AlertsCard({
   overdueAmount,
   activeRepairs,
   openRmas,
-  currency,
 }: {
   lowStockCount: number;
   overdueAmount: number;
   activeRepairs: number;
   openRmas: number;
-  currency: string;
 }) {
+  const { settings: regionalSettings } =
+    useRegionalSettings();
   const alerts = [
     ...(lowStockCount > 0
       ? [
@@ -3318,7 +3322,7 @@ function AlertsCard({
             ),
             title: `${money(
               overdueAmount,
-              currency,
+              regionalSettings,
             )} overdue`,
             detail:
               "Invoices require collection.",

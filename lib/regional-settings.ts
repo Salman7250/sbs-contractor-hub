@@ -1,36 +1,68 @@
 import { createClient } from "@/lib/supabase/client";
 
+export type ExchangeRate = {
+  id?: string;
+  company_id?: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  is_active: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type RegionalSettings = {
   id?: string;
   company_id?: string;
+
   base_currency: string;
   currency_symbol: string;
   currency_symbol_position: "before" | "after";
+
   decimal_places: number;
   thousands_separator: string;
   decimal_separator: string;
+
   timezone: string;
   date_format: string;
   time_format: "12h" | "24h";
+
+  exchange_rate_mode: "manual" | "automatic";
+
+  exchange_rates: ExchangeRate[];
 };
 
 export const DEFAULT_REGIONAL_SETTINGS: RegionalSettings = {
   base_currency: "USD",
   currency_symbol: "$",
   currency_symbol_position: "before",
+
   decimal_places: 2,
   thousands_separator: ",",
   decimal_separator: ".",
+
   timezone: "UTC",
   date_format: "MM/DD/YYYY",
   time_format: "12h",
+
+  exchange_rate_mode: "manual",
+  exchange_rates: [],
 };
 
 /**
- * Load the current company's regional settings.
+ * Load the current company's complete regional configuration.
  *
- * This is the single source of truth for currency formatting
- * throughout SBS.
+ * This is the central source of truth for:
+ * - Currency
+ * - Currency symbol
+ * - Currency position
+ * - Decimal places
+ * - Number separators
+ * - Timezone
+ * - Date format
+ * - Time format
+ * - Manual exchange rates
  */
 export async function getRegionalSettings(): Promise<RegionalSettings> {
   const supabase = createClient();
@@ -48,13 +80,15 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
     throw new Error("You must be logged in.");
   }
 
-  const { data: membership, error: membershipError } =
-    await supabase
-      .from("company_members")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle();
+  const {
+    data: membership,
+    error: membershipError,
+  } = await supabase
+    .from("company_members")
+    .select("company_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
 
   if (membershipError) {
     throw membershipError;
@@ -66,7 +100,12 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
     );
   }
 
-  const { data, error } = await supabase
+  const companyId = membership.company_id;
+
+  const {
+    data: regionalData,
+    error: regionalError,
+  } = await supabase
     .from("company_regional_settings")
     .select(
       `
@@ -80,40 +119,157 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
         decimal_separator,
         timezone,
         date_format,
-        time_format
+        time_format,
+        exchange_rate_mode
       `
     )
-    .eq("company_id", membership.company_id)
+    .eq("company_id", companyId)
     .maybeSingle();
 
-  if (error) {
-    throw error;
+  if (regionalError) {
+    throw regionalError;
   }
 
-  if (!data) {
-    return {
-      ...DEFAULT_REGIONAL_SETTINGS,
-      company_id: membership.company_id,
-    };
+  const {
+    data: exchangeRates,
+    error: exchangeRatesError,
+  } = await supabase
+    .from("company_exchange_rates")
+    .select(
+      `
+        id,
+        company_id,
+        from_currency,
+        to_currency,
+        rate,
+        is_active,
+        notes,
+        created_at,
+        updated_at
+      `
+    )
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .order("from_currency", {
+      ascending: true,
+    })
+    .order("to_currency", {
+      ascending: true,
+    });
+
+  if (exchangeRatesError) {
+    throw exchangeRatesError;
   }
 
   return {
     ...DEFAULT_REGIONAL_SETTINGS,
-    ...data,
+    ...(regionalData || {}),
+    company_id: companyId,
+    exchange_rates:
+      (exchangeRates || []) as ExchangeRate[],
   };
 }
 
 /**
- * Format a monetary value using the company's
- * Regional Settings configuration.
- *
- * Example:
- *
- * AED + before + 2 decimals
- * => د.إ1,250.00
- *
- * AED + after + 2 decimals
- * => 1,250.00 د.إ
+ * Find a configured exchange rate.
+ */
+export function getExchangeRate(
+  fromCurrency: string,
+  toCurrency: string,
+  settings: RegionalSettings = DEFAULT_REGIONAL_SETTINGS
+): number | null {
+  const from = fromCurrency.toUpperCase();
+  const to = toCurrency.toUpperCase();
+
+  if (from === to) {
+    return 1;
+  }
+
+  const directRate = settings.exchange_rates.find(
+    (item) =>
+      item.is_active &&
+      item.from_currency.toUpperCase() === from &&
+      item.to_currency.toUpperCase() === to
+  );
+
+  if (directRate) {
+    return Number(directRate.rate);
+  }
+
+  /*
+   * If only the reverse rate exists,
+   * calculate the inverse automatically.
+   *
+   * Example:
+   * AED -> USD = 0.2723
+   *
+   * Then:
+   * USD -> AED = 1 / 0.2723
+   */
+  const reverseRate = settings.exchange_rates.find(
+    (item) =>
+      item.is_active &&
+      item.from_currency.toUpperCase() === to &&
+      item.to_currency.toUpperCase() === from
+  );
+
+  if (reverseRate && Number(reverseRate.rate) > 0) {
+    return 1 / Number(reverseRate.rate);
+  }
+
+  return null;
+}
+
+/**
+ * Convert an amount using the company's
+ * configured manual exchange rates.
+ */
+export function convertCurrency(
+  amount: number | string | null | undefined,
+  fromCurrency: string,
+  toCurrency: string,
+  settings: RegionalSettings = DEFAULT_REGIONAL_SETTINGS
+): number {
+  const numericAmount =
+    typeof amount === "number"
+      ? amount
+      : Number(amount ?? 0);
+
+  const safeAmount = Number.isFinite(numericAmount)
+    ? numericAmount
+    : 0;
+
+  const rate = getExchangeRate(
+    fromCurrency,
+    toCurrency,
+    settings
+  );
+
+  if (rate === null) {
+    return safeAmount;
+  }
+
+  return safeAmount * rate;
+}
+
+/**
+ * Convert an amount into the company's base currency.
+ */
+export function convertToBaseCurrency(
+  amount: number | string | null | undefined,
+  currency: string,
+  settings: RegionalSettings = DEFAULT_REGIONAL_SETTINGS
+): number {
+  return convertCurrency(
+    amount,
+    currency,
+    settings.base_currency,
+    settings
+  );
+}
+
+/**
+ * Format money using the company's regional configuration.
  */
 export function formatMoney(
   amount: number | string | null | undefined,
@@ -130,10 +286,15 @@ export function formatMoney(
 
   const decimals = Math.max(
     0,
-    Math.min(6, Number(settings.decimal_places) || 0)
+    Math.min(
+      6,
+      Number(settings.decimal_places) || 0
+    )
   );
 
-  const fixed = Math.abs(safeAmount).toFixed(decimals);
+  const fixed = Math.abs(safeAmount).toFixed(
+    decimals
+  );
 
   const [integerPart, decimalPart] =
     fixed.split(".");
@@ -150,9 +311,14 @@ export function formatMoney(
 
   const sign = safeAmount < 0 ? "-" : "";
 
-  const symbol = settings.currency_symbol || settings.base_currency;
+  const symbol =
+    settings.currency_symbol ||
+    settings.base_currency;
 
-  if (settings.currency_symbol_position === "after") {
+  if (
+    settings.currency_symbol_position ===
+    "after"
+  ) {
     return `${sign}${number} ${symbol}`;
   }
 
@@ -160,8 +326,7 @@ export function formatMoney(
 }
 
 /**
- * Format a plain number using regional separators,
- * without adding a currency symbol.
+ * Format a plain number without a currency symbol.
  */
 export function formatNumber(
   amount: number | string | null | undefined,
@@ -178,10 +343,15 @@ export function formatNumber(
 
   const decimals = Math.max(
     0,
-    Math.min(6, Number(settings.decimal_places) || 0)
+    Math.min(
+      6,
+      Number(settings.decimal_places) || 0
+    )
   );
 
-  const fixed = safeAmount.toFixed(decimals);
+  const fixed = safeAmount.toFixed(
+    decimals
+  );
 
   const [integerPart, decimalPart] =
     fixed.split(".");
@@ -199,19 +369,20 @@ export function formatNumber(
 }
 
 /**
- * Return the currently configured currency symbol.
+ * Return the configured currency symbol.
  */
 export function getCurrencySymbol(
   settings: RegionalSettings = DEFAULT_REGIONAL_SETTINGS
 ): string {
   return (
     settings.currency_symbol ||
-    settings.base_currency
+    settings.base_currency ||
+    "$"
   );
 }
 
 /**
- * Return the currently configured currency code.
+ * Return the configured currency code.
  */
 export function getCurrencyCode(
   settings: RegionalSettings = DEFAULT_REGIONAL_SETTINGS
