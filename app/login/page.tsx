@@ -291,11 +291,11 @@ export default function LoginPage() {
         </span>
 
         <div className={styles.footerLinks}>
-          <Link href="/">Website</Link>
+          <Link href="https://www.sharifbusinesssolutions.com">Website</Link>
           <span>•</span>
-          <a href="/privacy">Privacy</a>
+          <a href="https://www.sharifbusinesssolutions.com/privacy">Privacy</a>
           <span>•</span>
-          <a href="/terms">Terms</a>
+          <a href="https://www.sharifbusinesssolutions.com/terms">Terms</a>
         </div>
       </footer>
     </main>
