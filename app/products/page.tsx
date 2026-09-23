@@ -9,7 +9,9 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 import {
   Activity,
   Archive,
@@ -172,6 +174,7 @@ function isTracked(product: Product) {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const { settings } = useRegionalSettings();
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -1247,20 +1250,9 @@ export default function ProductsPage() {
                                                   Cost
                                                 </span>
                                                 <strong>
-                                                  {new Intl.NumberFormat(
-                                                    "en-US",
-                                                    {
-                                                      style:
-                                                        "currency",
-                                                      currency:
-                                                        "USD",
-                                                      maximumFractionDigits: 2,
-                                                    }
-                                                  ).format(
-                                                    Number(
-                                                      variant.cost_price ||
-                                                        0
-                                                    )
+                                                  {formatMoney(
+                                                    variant.cost_price || 0,
+                                                    settings
                                                   )}
                                                 </strong>
                                               </div>
@@ -1270,20 +1262,9 @@ export default function ProductsPage() {
                                                   Sell
                                                 </span>
                                                 <strong>
-                                                  {new Intl.NumberFormat(
-                                                    "en-US",
-                                                    {
-                                                      style:
-                                                        "currency",
-                                                      currency:
-                                                        "USD",
-                                                      maximumFractionDigits: 2,
-                                                    }
-                                                  ).format(
-                                                    Number(
-                                                      variant.selling_price ||
-                                                        0
-                                                    )
+                                                  {formatMoney(
+                                                    variant.selling_price || 0,
+                                                    settings
                                                   )}
                                                 </strong>
                                               </div>

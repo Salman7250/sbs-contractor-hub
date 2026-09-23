@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 
 type Customer = {
   id: string;
@@ -120,22 +122,6 @@ type WarehouseLocation = {
   code: string;
 };
 
-function formatCurrency(
-  amount: number,
-  currency: string
-) {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${currency || "USD"} ${amount.toFixed(2)}`;
-  }
-}
-
 function formatDate(value: string) {
   const date = new Date(value);
 
@@ -203,6 +189,12 @@ function getStatusClass(status: string) {
 export default function OrderDetailsPage() {
   const router = useRouter();
   const params = useParams();
+  const { settings } = useRegionalSettings();
+  const formatMoneyForDisplay = (
+    amount: number,
+    _currency?: string,
+  ) =>
+    formatRegionalMoney(amount, settings);
 
   const orderId = String(
     params.orderId || ""
@@ -2073,7 +2065,7 @@ export default function OrderDetailsPage() {
                           </td>
 
                           <td className="numeric">
-                            {formatCurrency(
+                            {formatMoneyForDisplay(
                               Number(
                                 item.unit_price ||
                                   0
@@ -2083,7 +2075,7 @@ export default function OrderDetailsPage() {
                           </td>
 
                           <td className="numeric">
-                            {formatCurrency(
+                            {formatMoneyForDisplay(
                               Number(
                                 item.line_total ||
                                   0
@@ -2127,7 +2119,7 @@ export default function OrderDetailsPage() {
                 </span>
 
                 <strong>
-                  {formatCurrency(
+                  {formatMoneyForDisplay(
                     Number(
                       order.subtotal ||
                         0
@@ -2145,7 +2137,7 @@ export default function OrderDetailsPage() {
 
                   <strong>
                     -
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       Number(
                         order.discount_amount ||
                           0
@@ -2163,7 +2155,7 @@ export default function OrderDetailsPage() {
                   </span>
 
                   <strong>
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       Number(
                         order.tax_amount ||
                           0
@@ -2181,7 +2173,7 @@ export default function OrderDetailsPage() {
                   </span>
 
                   <strong>
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       Number(
                         order.shipping_amount ||
                           0
@@ -2198,7 +2190,7 @@ export default function OrderDetailsPage() {
                 </span>
 
                 <strong>
-                  {formatCurrency(
+                  {formatMoneyForDisplay(
                     Number(
                       order.total_amount ||
                         0
@@ -2275,7 +2267,7 @@ export default function OrderDetailsPage() {
                   </span>
 
                   <strong>
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       invoiceTotal,
                       currency
                     )}
@@ -2288,7 +2280,7 @@ export default function OrderDetailsPage() {
                   </span>
 
                   <strong>
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       paidAmount,
                       currency
                     )}
@@ -2301,7 +2293,7 @@ export default function OrderDetailsPage() {
                   </span>
 
                   <strong>
-                    {formatCurrency(
+                    {formatMoneyForDisplay(
                       balanceDue,
                       currency
                     )}
@@ -2328,7 +2320,7 @@ export default function OrderDetailsPage() {
                         >
                           <div>
                             <strong>
-                              {formatCurrency(
+                              {formatMoneyForDisplay(
                                 Number(
                                   payment.amount ||
                                     0
@@ -2744,7 +2736,7 @@ export default function OrderDetailsPage() {
                 </span>
 
                 <strong>
-                  {formatCurrency(
+                  {formatMoneyForDisplay(
                     Number(
                       order.total_amount ||
                         0
@@ -2761,7 +2753,7 @@ export default function OrderDetailsPage() {
 
                 <strong>
                   {invoice
-                    ? formatCurrency(
+                    ? formatMoneyForDisplay(
                         balanceDue,
                         currency
                       )

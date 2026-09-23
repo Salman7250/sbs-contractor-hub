@@ -31,7 +31,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Product = {
   id: string;
@@ -154,13 +156,6 @@ const PAGE_SIZE = 25;
 const formatNumber = (value: number) =>
   new Intl.NumberFormat("en-US").format(value);
 
-const formatMoney = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-
 const formatDate = (
   value: string | null | undefined,
 ) => {
@@ -267,6 +262,7 @@ const trackingLabel = (
 
 export default function InventoryPage() {
   const router = useRouter();
+  const { settings } = useRegionalSettings();
 
   const supabase = useMemo(
     () => createClient(),
@@ -3068,6 +3064,7 @@ export default function InventoryPage() {
                 <div className="kpi-value">
                   {formatMoney(
                     totals.inventoryValue,
+                    settings,
                   )}
                 </div>
 
@@ -3510,6 +3507,7 @@ export default function InventoryPage() {
                                   <div className="value">
                                     {formatMoney(
                                       row.stockValue,
+                                      settings,
                                     )}
                                   </div>
                                 </td>
