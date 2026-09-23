@@ -9,7 +9,9 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 
 type ServiceJob = {
   id: string;
@@ -190,12 +192,6 @@ type ItemSummary = JobItem & {
   withProvider: number;
 };
 
-const formatMoney = (value: number) =>
-  `AED ${Number(value || 0).toLocaleString("en-AE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
 const formatDate = (value: string | null) => {
   if (!value) return "—";
 
@@ -252,6 +248,9 @@ const resultLabel = (result: string) => {
 export default function ServiceJobDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { settings } = useRegionalSettings();
+  const formatMoney = (value: number) =>
+    formatRegionalMoney(value, settings);
 
   const jobId =
     typeof params?.id === "string"

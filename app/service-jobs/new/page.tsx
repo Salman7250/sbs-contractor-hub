@@ -11,7 +11,9 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 
 type Provider = {
   id: string;
@@ -89,12 +91,6 @@ type PriorityType =
   | "high"
   | "urgent";
 
-const formatMoney = (value: number) =>
-  `AED ${Number(value || 0).toLocaleString("en-AE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
 const getTomorrowDate = () => {
   const date = new Date();
 
@@ -135,6 +131,9 @@ const getErrorMessage = (
 
 function NewServiceJobPageContent() {
   const router = useRouter();
+  const { settings } = useRegionalSettings();
+  const formatMoney = (value: number) =>
+    formatRegionalMoney(value, settings);
   const searchParams = useSearchParams();
 
   const supabase = useMemo(

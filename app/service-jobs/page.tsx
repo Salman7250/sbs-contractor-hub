@@ -8,7 +8,9 @@ import {
 } from "react";
 import Link from "next/link";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type ServiceJob = {
   id: string;
@@ -74,12 +76,6 @@ const formatDate = (value: string | null) => {
   });
 };
 
-const money = (value: number | null) =>
-  `AED ${Number(value || 0).toLocaleString("en-AE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
 const statusClass = (status: string) => {
   switch (status) {
     case "completed":
@@ -122,6 +118,10 @@ const priorityClass = (priority: string) => {
 };
 
 export default function ServiceJobsPage() {
+  const { settings } = useRegionalSettings();
+  const money = (value: number | null) =>
+    formatMoney(value, settings);
+
   const supabase = useMemo(() => createClient(), []);
 
   const [jobs, setJobs] = useState<ServiceJob[]>([]);

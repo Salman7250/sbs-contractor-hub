@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Invoice = {
   id: string;
@@ -123,6 +125,7 @@ export default function InvoiceDetailsPage() {
   const supabase = createClient();
   const router = useRouter();
   const params = useParams();
+  const { settings } = useRegionalSettings();
 
   const invoiceId =
     typeof params.invoiceId === "string"
@@ -465,23 +468,12 @@ export default function InvoiceDetailsPage() {
   }, [invoiceId, loadInvoice]);
 
   const currency =
-    company?.currency || "USD";
+    company?.currency || settings.base_currency;
 
   function formatCurrency(
     value: number
   ) {
-    try {
-      return new Intl.NumberFormat(
-        "en-US",
-        {
-          style: "currency",
-          currency,
-          maximumFractionDigits: 2,
-        }
-      ).format(value);
-    } catch {
-      return `$${value.toFixed(2)}`;
-    }
+    return formatMoney(value, settings);
   }
 
   function formatDate(
@@ -1819,7 +1811,7 @@ export default function InvoiceDetailsPage() {
 
                   <div className="amount-input-wrapper">
                     <span>
-                      {currency}
+                      {settings.currency_symbol}
                     </span>
 
                     <input

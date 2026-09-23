@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Order = {
   id: string;
@@ -64,6 +66,7 @@ const ORDER_STATUSES = [
 ];
 
 export default function SalesPage() {
+  const { settings } = useRegionalSettings();
   const supabase = createClient();
   const router = useRouter();
 
@@ -370,20 +373,7 @@ export default function SalesPage() {
     value: number,
     currencyOverride?: string,
   ) {
-    const currency =
-      currencyOverride ||
-      company?.currency ||
-      "USD";
-
-    try {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(value);
-    } catch {
-      return `$${value.toFixed(2)}`;
-    }
+    return formatMoney(value, settings);
   }
 
   function formatDate(date: string | null) {

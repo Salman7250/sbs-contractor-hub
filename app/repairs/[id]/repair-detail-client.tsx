@@ -18,6 +18,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 
 type RepairStatus =
   | "intake"
@@ -220,10 +222,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatMoney(value: number | null) {
-  return Number(value ?? 0).toFixed(2);
-}
-
 function formatSource(source: string) {
   const labels: Record<string, string> = {
     customer: "Customer",
@@ -288,6 +286,9 @@ export default function RepairDetailClient({
   activity,
 }: Props) {
   const router = useRouter();
+  const { settings } = useRegionalSettings();
+  const formatMoney = (value: number | null) =>
+    formatRegionalMoney(value, settings);
   const supabase = useMemo(() => createClient(), []);
 
   const [currentStatus, setCurrentStatus] = useState<RepairStatus>(

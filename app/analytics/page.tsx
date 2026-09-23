@@ -9,7 +9,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 import {
   Activity,
   ArrowDownRight,
@@ -239,18 +241,6 @@ function formatDecimal(value: number) {
   }).format(Number(value || 0));
 }
 
-function formatMoney(value: number, currency = "AED") {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(Number(value || 0));
-  } catch {
-    return `${currency} ${Number(value || 0).toFixed(0)}`;
-  }
-}
-
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
 
@@ -433,7 +423,7 @@ function EmptyState({
 
 function TrendChart({
   data,
-  currency,
+  settings,
   period,
   onPeriodChange,
   hoveredIndex,
@@ -445,7 +435,7 @@ function TrendChart({
     cogs: number;
     expenses: number;
   }[];
-  currency: string;
+  settings: Parameters<typeof formatRegionalMoney>[1];
   period: string;
   onPeriodChange: (value: string) => void;
   hoveredIndex: number | null;
@@ -596,7 +586,7 @@ function TrendChart({
                     textAnchor="end"
                     className="fill-slate-400 text-[10px]"
                   >
-                    {formatMoney(maxValue * ratio, currency)}
+                    {formatRegionalMoney(maxValue * ratio, settings)}
                   </text>
                 </g>
               );
@@ -708,21 +698,21 @@ function TrendChart({
                   </text>
                   <text x="14" y="47" className="fill-slate-500 text-[10px]">Revenue</text>
                   <text x={tooltipWidth - 14} y="47" textAnchor="end" className="fill-slate-900 text-[11px] font-semibold">
-                    {formatMoney(activeItem.revenue, currency)}
+                    {formatRegionalMoney(activeItem.revenue, settings)}
                   </text>
                   <text x="14" y="69" className="fill-slate-500 text-[10px]">COGS</text>
                   <text x={tooltipWidth - 14} y="69" textAnchor="end" className="fill-slate-900 text-[11px] font-semibold">
-                    {formatMoney(activeItem.cogs, currency)}
+                    {formatRegionalMoney(activeItem.cogs, settings)}
                   </text>
                   <text x="14" y="91" className="fill-slate-500 text-[10px]">Expenses</text>
                   <text x={tooltipWidth - 14} y="91" textAnchor="end" className="fill-slate-900 text-[11px] font-semibold">
-                    {formatMoney(activeItem.expenses, currency)}
+                    {formatRegionalMoney(activeItem.expenses, settings)}
                   </text>
                   <text x="14" y="113" className="fill-slate-500 text-[10px]">Net profit</text>
                   <text x={tooltipWidth - 14} y="113" textAnchor="end" className="fill-emerald-700 text-[11px] font-bold">
-                    {formatMoney(
+                    {formatRegionalMoney(
                       activeItem.revenue - activeItem.cogs - activeItem.expenses,
-                      currency,
+                      settings,
                     )}
                   </text>
                 </g>
@@ -759,7 +749,7 @@ function TrendChart({
                   onMouseEnter={() => onHover(index)}
                   onFocus={() => onHover(index)}
                   tabIndex={0}
-                  aria-label={`${formatDate(item.date.toISOString())}: revenue ${formatMoney(item.revenue, currency)}, COGS ${formatMoney(item.cogs, currency)}, expenses ${formatMoney(item.expenses, currency)}`}
+                  aria-label={`${formatDate(item.date.toISOString())}: revenue ${formatRegionalMoney(item.revenue, settings)}, COGS ${formatRegionalMoney(item.cogs, settings)}, expenses ${formatRegionalMoney(item.expenses, settings)}`}
                 />
               );
             })}
@@ -772,11 +762,13 @@ function TrendChart({
 
 function DonutChart({
   values,
+  settings,
 }: {
   values: {
     label: string;
     value: number;
   }[];
+  settings: Parameters<typeof formatRegionalMoney>[1];
 }) {
   const total = values.reduce(
     (sum, item) => sum + item.value,
@@ -853,7 +845,7 @@ function DonutChart({
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-xl font-bold text-slate-900">
-            {formatMoney(total)}
+            {formatRegionalMoney(total, settings)}
           </span>
 
           <span className="text-[11px] text-slate-500">
@@ -902,6 +894,10 @@ function DonutChart({
 
 export default function AnalyticsPage() {
   const router = useRouter();
+  const { settings } = useRegionalSettings();
+
+  const formatMoney = (value: number, _currency?: string) =>
+    formatRegionalMoney(value, settings);
 
   const supabase = useMemo(
     () => createClient(),
@@ -1309,7 +1305,7 @@ export default function AnalyticsPage() {
   /* ------------------------------------------------------------------------ */
 
   const currency =
-    company?.currency || "AED";
+    company?.currency || settings.base_currency;
 
   const filteredOrders = useMemo(() => {
     if (!analytics) return [];
@@ -2836,7 +2832,7 @@ export default function AnalyticsPage() {
         >
           <TrendChart
             data={trendData}
-            currency={currency}
+            settings={settings}
             period={financialPeriod}
             onPeriodChange={setFinancialPeriod}
             hoveredIndex={financialHoveredIndex}
@@ -3042,6 +3038,7 @@ export default function AnalyticsPage() {
               values={
                 expenseBreakdown
               }
+              settings={settings}
             />
           </SectionCard>
         </div>

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Company = {
   id: string;
@@ -58,6 +60,7 @@ type InvoicePayment = {
 export default function PaymentDetailsPage() {
   const router = useRouter();
   const params = useParams();
+  const { settings } = useRegionalSettings();
 
   const paymentId =
     typeof params.paymentId === "string"
@@ -321,26 +324,7 @@ export default function PaymentDetailsPage() {
     value: number,
     currencyOverride?: string
   ) {
-    const currency =
-      currencyOverride ||
-      company?.currency ||
-      payment?.currency ||
-      "USD";
-
-    try {
-      return new Intl.NumberFormat(
-        "en-US",
-        {
-          style: "currency",
-          currency,
-          maximumFractionDigits: 2,
-        }
-      ).format(value);
-    } catch {
-      return `${currency} ${value.toFixed(
-        2
-      )}`;
-    }
+    return formatMoney(value, settings);
   }
 
   function formatDate(

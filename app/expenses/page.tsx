@@ -8,8 +8,10 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
 import { usePermissions } from "@/hooks/use-permissions";
+import { formatMoney } from "@/lib/regional-settings";
 
 type ExpenseType =
   | "operating_expense"
@@ -178,21 +180,6 @@ const STATUS_OPTIONS: {
     label: "Cancelled",
   },
 ];
-
-function money(
-  value: number,
-  currency = "AED"
-) {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 2,
-    }).format(value || 0);
-  } catch {
-    return `${currency} ${(value || 0).toFixed(2)}`;
-  }
-}
 
 function formatDate(value: string) {
   if (!value) return "—";
@@ -457,6 +444,11 @@ function Icon({
 }
 
 export default function ExpensesPage() {
+  const { settings } = useRegionalSettings();
+
+  const money = (value: number, _currency?: string) =>
+    formatMoney(value, settings);
+
   const supabase = useMemo(
     () => createClient(),
     []

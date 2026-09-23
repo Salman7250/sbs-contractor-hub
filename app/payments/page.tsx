@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Company = {
   id: string;
@@ -59,6 +61,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function PaymentsPage() {
+  const { settings } = useRegionalSettings();
   const router = useRouter();
   const supabase = createClient();
 
@@ -278,15 +281,7 @@ export default function PaymentsPage() {
   const currency = company?.currency || "USD";
 
   function formatCurrency(value: number) {
-    try {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 2,
-      }).format(value);
-    } catch {
-      return `${currency} ${value.toFixed(2)}`;
-    }
+    return formatMoney(value, settings);
   }
 
   function formatDate(value: string) {

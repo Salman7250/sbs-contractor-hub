@@ -8,7 +8,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Invoice = {
   id: string;
@@ -52,6 +54,7 @@ const INVOICE_STATUSES = [
 export default function InvoicesPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { settings } = useRegionalSettings();
 
   const [invoices, setInvoices] =
     useState<Invoice[]>([]);
@@ -432,24 +435,7 @@ export default function InvoicesPage() {
   function formatCurrency(
     value: number
   ) {
-    const currency =
-      company?.currency ||
-      "USD";
-
-    try {
-      return new Intl.NumberFormat(
-        "en-US",
-        {
-          style: "currency",
-          currency,
-          maximumFractionDigits: 2,
-        }
-      ).format(value);
-    } catch {
-      return `$${value.toFixed(
-        2
-      )}`;
-    }
+    return formatMoney(value, settings);
   }
 
   function formatDate(

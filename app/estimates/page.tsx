@@ -9,7 +9,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 import { createClient } from "@/lib/supabase/client";
+import { formatMoney as formatRegionalMoney } from "@/lib/regional-settings";
 
 type DatabaseRow = Record<string, unknown>;
 
@@ -80,14 +82,6 @@ function getNumber(value: unknown): number {
   }
 
   return 0;
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(value);
 }
 
 function formatDate(value: string | null): string {
@@ -355,6 +349,10 @@ function Icon({
 }
 
 export default function EstimatesPage() {
+  const { settings } = useRegionalSettings();
+  const formatCurrency = (value: number) =>
+    formatRegionalMoney(value, settings);
+
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
