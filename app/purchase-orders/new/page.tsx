@@ -360,6 +360,9 @@ export default function NewPurchaseOrderPage() {
     setSelectedProductId,
   ] = useState("");
 
+  const [productSearch, setProductSearch] =
+    useState("");
+
   const [
     selectedQuantity,
     setSelectedQuantity,
@@ -386,6 +389,30 @@ export default function NewPurchaseOrderPage() {
         item.product &&
         item.variant
     );
+
+  const filteredSupplierProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+
+    if (!query) {
+      return availableSupplierProducts;
+    }
+
+    return availableSupplierProducts.filter((item) =>
+      [
+        item.product?.name,
+        item.product?.brand,
+        item.product?.category,
+        item.variant?.name,
+        item.variant?.sku,
+        item.supplier_sku,
+        item.supplier_product_name,
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value).toLowerCase().includes(query)
+        )
+    );
+  }, [availableSupplierProducts, productSearch]);
 
   const selectedSupplierProduct =
     availableSupplierProducts.find(
@@ -619,6 +646,7 @@ export default function NewPurchaseOrderPage() {
     if (!supplierId) {
       setCurrency("USD");
       setSelectedProductId("");
+      setProductSearch("");
       return;
     }
 
@@ -639,6 +667,7 @@ export default function NewPurchaseOrderPage() {
     );
 
     setSelectedProductId("");
+    setProductSearch("");
   }, [
     supplierId,
     suppliers,
@@ -1492,62 +1521,68 @@ export default function NewPurchaseOrderPage() {
                       size={16}
                     />
 
-                    <select
-                      value={
-                        selectedProductId
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        setSelectedProductId(
-                          event
-                            .target
-                            .value
-                        )
-                      }
-                      disabled={
+                    <input
+                      value={productSearch}
+                      onChange={(event) => {
+                        setProductSearch(event.target.value);
+                        if (selectedProductId) {
+                          setSelectedProductId("");
+                        }
+                      }}
+                      placeholder={
                         !supplierId
-                      }
-                    >
-                      <option value="">
-                        {!supplierId
                           ? "Select a supplier first"
-                          : availableSupplierProducts.length
-                          ? "Select product / variant"
-                          : "No supplier products available"}
-                      </option>
-
-                      {availableSupplierProducts.map(
-                        (
-                          item
-                        ) => (
-                          <option
-                            key={
-                              item.id
-                            }
-                            value={
-                              item.id
-                            }
-                          >
-                            {item.product
-                              ?.name ||
-                              "Product"}
-                            {" • "}
-                            {item.variant
-                              ?.name ||
-                              "Variant"}
-                            {item.variant
-                              ?.sku
-                              ? ` • ${item.variant.sku}`
-                              : ""}
-                            {item.is_preferred
-                              ? " • Preferred"
-                              : ""}
-                          </option>
-                        )
-                      )}
-                    </select>
+                          : "Search product, model, SKU, supplier SKU..."
+                      }
+                      disabled={!supplierId}
+                      aria-label="Search supplier products"
+                    />
                   </div>
+
+                  {supplierId && (
+                    <div className="product-search-results">
+                      {!availableSupplierProducts.length ? (
+                        <div className="product-search-empty">
+                          No supplier products available.
+                        </div>
+                      ) : !filteredSupplierProducts.length ? (
+                        <div className="product-search-empty">
+                          No matching supplier products.
+                        </div>
+                      ) : (
+                        filteredSupplierProducts.map((item) => (
+                          <button
+                            type="button"
+                            key={item.id}
+                            className={`product-search-result ${
+                              selectedProductId === item.id
+                                ? "selected"
+                                : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedProductId(item.id);
+                              setProductSearch(
+                                `${item.product?.name || "Product"} · ${item.variant?.name || "Variant"}`
+                              );
+                            }}
+                          >
+                            <strong>
+                              {item.product?.name || "Product"}
+                            </strong>
+                            <span>
+                              {item.variant?.name || "Variant"}
+                              {item.variant?.sku
+                                ? ` · SKU: ${item.variant.sku}`
+                                : ""}
+                              {item.supplier_sku
+                                ? ` · Supplier SKU: ${item.supplier_sku}`
+                                : ""}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="field quantity-field">
@@ -2480,6 +2515,59 @@ const styles = `
 
   .product-selector {
     min-width: 0;
+    position: relative;
+  }
+
+  .product-search-results {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    margin-top: 5px;
+    border: 1px solid #dbe1e7;
+    border-radius: 9px;
+    background: #ffffff;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  }
+
+  .product-search-result {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    border: 0;
+    border-bottom: 1px solid #eef2f7;
+    background: #ffffff;
+    padding: 10px 12px;
+    color: #0f172a;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .product-search-result:last-child {
+    border-bottom: 0;
+  }
+
+  .product-search-result:hover,
+  .product-search-result.selected {
+    background: #f0fdf4;
+  }
+
+  .product-search-result strong {
+    font-size: 12px;
+  }
+
+  .product-search-result span,
+  .product-search-empty {
+    color: #64748b;
+    font-size: 11px;
+  }
+
+  .product-search-empty {
+    padding: 12px;
   }
 
   .quantity-field {

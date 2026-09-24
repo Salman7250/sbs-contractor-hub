@@ -5,12 +5,14 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
+import JsBarcode from "jsbarcode";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -120,6 +122,11 @@ type ExcelRow = {
   serialNumber: string;
 };
 
+type SerialImportPreview = {
+  total: number;
+  groupedSerials: Record<string, string[]>;
+};
+
 const normalize = (value: unknown) =>
   String(value ?? "")
     .trim()
@@ -127,6 +134,18 @@ const normalize = (value: unknown) =>
     .replace(/\s+/g, "");
 
 const clean = (value: unknown) => String(value ?? "").trim();
+
+const readColumn = (
+  row: Record<string, unknown>,
+  aliases: string[]
+) => {
+  const entries = Object.entries(row);
+  const normalizedAliases = aliases.map(normalize);
+  const match = entries.find(([key]) =>
+    normalizedAliases.includes(normalize(key))
+  );
+  return clean(match?.[1]);
+};
 
 const numberValue = (value: unknown) => {
   const n = Number(value);
@@ -215,6 +234,15 @@ export default function ReceivePurchaseOrderPage() {
   >([]);
 
   const [excelFileName, setExcelFileName] = useState("");
+  const [serialImportPreview, setSerialImportPreview] =
+    useState<SerialImportPreview | null>(null);
+
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const [labelsReady, setLabelsReady] = useState(false);
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerTimerRef = useRef<number | null>(null);
 
   const activeItems = useMemo(
     () => items.filter((item) => getRemaining(item) > 0),
@@ -625,6 +653,155 @@ export default function ReceivePurchaseOrderPage() {
     }));
   };
 
+  const addSerialToSelectedLine = (value: string) => {
+    const serial = value.trim();
+
+    if (!selectedItem || !serial) {
+      return false;
+    }
+
+    const currentSerials = parseSerialText(
+      receiveLines[selectedItem.id]?.serialText || ""
+    );
+    const duplicate = currentSerials.some(
+      (entry) => normalize(entry) === normalize(serial)
+    );
+
+    if (duplicate) {
+      setScannerMessage("This serial has already been added.");
+      return false;
+    }
+
+    updateReceiveLine(selectedItem.id, {
+      serialText: [...currentSerials, serial].join("\n"),
+    });
+    setScannerMessage(`Serial captured: ${serial}`);
+    return true;
+  };
+
+  const stopScanner = () => {
+    if (scannerTimerRef.current !== null) {
+      window.clearTimeout(scannerTimerRef.current);
+      scannerTimerRef.current = null;
+    }
+
+    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+    scannerStreamRef.current = null;
+    setScannerOpen(false);
+  };
+
+  const startScanner = async () => {
+    if (!selectedItem || selectedItem.product?.tracking_mode !== "serial") {
+      setScannerMessage("Select a serial-tracked product first.");
+      return;
+    }
+
+    const barcodeDetector = (
+      window as Window & {
+        BarcodeDetector?: new (options?: {
+          formats?: string[];
+        }) => {
+          detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+        };
+      }
+    ).BarcodeDetector;
+
+    if (!barcodeDetector) {
+      setScannerMessage(
+        "Camera barcode scanning is not supported in this browser. Use Add Manually or Import Excel."
+      );
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScannerMessage("Camera access is unavailable in this browser.");
+      return;
+    }
+
+    try {
+      setScannerMessage("");
+      setScannerOpen(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      scannerStreamRef.current = stream;
+
+      if (scannerVideoRef.current) {
+        scannerVideoRef.current.srcObject = stream;
+        await scannerVideoRef.current.play();
+      }
+
+      const detector = new barcodeDetector({
+        formats: [
+          "code_128",
+          "code_39",
+          "data_matrix",
+          "qr_code",
+          "ean_13",
+        ],
+      });
+
+      const scan = async () => {
+        if (!scannerVideoRef.current || !scannerStreamRef.current) {
+          return;
+        }
+
+        try {
+          const detections = await detector.detect(scannerVideoRef.current);
+          const value = detections[0]?.rawValue?.trim();
+
+          if (value) {
+            addSerialToSelectedLine(value);
+            stopScanner();
+            return;
+          }
+        } catch {
+          setScannerMessage("Unable to read a barcode. Adjust the camera and try again.");
+        }
+
+        scannerTimerRef.current = window.setTimeout(() => {
+          void scan();
+        }, 250);
+      };
+
+      void scan();
+    } catch (error) {
+      stopScanner();
+      setScannerMessage(
+        error instanceof DOMException && error.name === "NotAllowedError"
+          ? "Camera permission was denied."
+          : "Unable to start the camera scanner."
+      );
+    }
+  };
+
+  const prepareLabels = () => {
+    setLabelsReady(true);
+    window.setTimeout(() => window.print(), 150);
+  };
+
+  useEffect(() => {
+    if (!labelsReady) return;
+
+    document
+      .querySelectorAll<SVGSVGElement>("[data-receiving-barcode]")
+      .forEach((element) => {
+        const value = element.dataset.receivingBarcode;
+        if (!value) return;
+
+        JsBarcode(element, value, {
+          format: "CODE128",
+          displayValue: false,
+          height: 34,
+          margin: 0,
+          width: 1.4,
+        });
+      });
+  }, [labelsReady, receiveLines]);
+
+  useEffect(() => () => stopScanner(), []);
+
   /*
    * Every valid SKU source that can identify an
    * open PO line.
@@ -948,30 +1125,31 @@ export default function ReceivePurchaseOrderPage() {
           (row, index) => ({
             rowNumber: index + 2,
 
-            productSku: clean(
-              row["Product SKU"] ??
-                row["product sku"] ??
-                row["ProductSKU"]
-            ),
+            productSku: readColumn(row, [
+              "Product SKU",
+              "SKU",
+              "Product Code",
+            ]),
 
-            variantSku: clean(
-              row["Variant SKU"] ??
-                row["variant sku"] ??
-                row["VariantSKU"]
-            ),
+            variantSku: readColumn(row, [
+              "Variant SKU",
+              "Variant Code",
+            ]),
 
-            supplierSku: clean(
-              row["Supplier SKU"] ??
-                row["supplier sku"] ??
-                row["SupplierSKU"]
-            ),
+            supplierSku: readColumn(row, [
+              "Supplier SKU",
+              "Supplier Code",
+            ]),
 
-            serialNumber: clean(
-              row["Serial Number"] ??
-                row["serial number"] ??
-                row["SerialNumber"] ??
-                row["Serial"]
-            ),
+            serialNumber: readColumn(row, [
+              "Serial",
+              "Serial Number",
+              "S/N",
+              "SN",
+              "Service Tag",
+              "Asset Tag",
+              "Barcode",
+            ]),
           })
         );
 
@@ -1112,61 +1290,12 @@ export default function ReceivePurchaseOrderPage() {
         return;
       }
 
-      const newLines = {
-        ...receiveLines,
-      };
-
-      for (const [
-        itemId,
-        serials,
-      ] of groupedSerials.entries()) {
-        const item =
-          activeItems.find(
-            (candidate) =>
-              candidate.id ===
-              itemId
-          );
-
-        if (!item) {
-          continue;
-        }
-
-        const current =
-          newLines[itemId];
-
-        newLines[itemId] = {
-          ...current,
-
-          quantity: Math.max(
-            numberValue(
-              current?.quantity
-            ),
-            serials.length
-          ),
-
-          serialText:
-            serials.join("\n"),
-        };
-      }
-
-      setReceiveLines(
-        newLines
-      );
-
-      const firstImportedItem =
-        groupedSerials.keys().next()
-          .value;
-
-      if (
-        firstImportedItem
-      ) {
-        setSelectedItemId(
-          firstImportedItem
-        );
-      }
-
+      setSerialImportPreview({
+        total: allSerials.length,
+        groupedSerials: Object.fromEntries(groupedSerials),
+      });
       setSuccessMessage(
-        `Imported ${allSerials.length} serial number${allSerials.length === 1 ? "" : "s"} successfully.`
+        `Import preview ready for ${allSerials.length} serial number${allSerials.length === 1 ? "" : "s"}.`
       );
     } catch (error) {
       setExcelIssues([
@@ -1181,6 +1310,39 @@ export default function ReceivePurchaseOrderPage() {
     } finally {
       event.target.value = "";
     }
+  };
+
+  const confirmSerialImport = () => {
+    if (!serialImportPreview) {
+      return;
+    }
+
+    const newLines = { ...receiveLines };
+
+    Object.entries(serialImportPreview.groupedSerials).forEach(
+      ([itemId, serials]) => {
+        const current = newLines[itemId];
+        if (!current) return;
+
+        newLines[itemId] = {
+          ...current,
+          quantity: Math.max(numberValue(current.quantity), serials.length),
+          serialText: serials.join("\n"),
+        };
+      }
+    );
+
+    setReceiveLines(newLines);
+    const firstImportedItem = Object.keys(
+      serialImportPreview.groupedSerials
+    )[0];
+    if (firstImportedItem) {
+      setSelectedItemId(firstImportedItem);
+    }
+    setSuccessMessage(
+      `Added ${serialImportPreview.total} serial number${serialImportPreview.total === 1 ? "" : "s"} to the receiving lines.`
+    );
+    setSerialImportPreview(null);
   };
 
   /*
@@ -1479,6 +1641,24 @@ export default function ReceivePurchaseOrderPage() {
           );
         }
 
+        if (
+          trackingMode === "serial" &&
+          serials.length !== qty
+        ) {
+          errors.push(
+            `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: serial-tracked products require exactly ${qty} serial numbers before receiving.`
+          );
+        }
+
+        if (
+          trackingMode !== "serial" &&
+          serials.length > 0
+        ) {
+          errors.push(
+            `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: serial numbers can only be entered for serial-tracked products.`
+          );
+        }
+
         for (const serial of serials) {
           const key =
             normalize(
@@ -1577,6 +1757,20 @@ export default function ReceivePurchaseOrderPage() {
       return;
     }
 
+    const serialsToValidate = itemsToReceive.flatMap(
+      (item) => item?.serial_numbers || []
+    );
+
+    if (serialsToValidate.length) {
+      const duplicateIssues =
+        await validateSerialsAgainstCompany(serialsToValidate);
+
+      if (duplicateIssues.length) {
+        setErrorMessage(duplicateIssues.join("\n"));
+        return;
+      }
+    }
+
     try {
       setSaving(true);
 
@@ -1612,15 +1806,43 @@ export default function ReceivePurchaseOrderPage() {
         );
       }
 
+      const receivedSerials = itemsToReceive.flatMap(
+        (item) => item?.serial_numbers || []
+      );
+
+      if (receivedSerials.length) {
+        const { data: serializedUnits, error: serializedUnitsError } =
+          await supabase
+            .from("serialized_units")
+            .select("id, serial_number, barcode")
+            .eq("company_id", companyId)
+            .eq("purchase_order_id", purchaseOrderId)
+            .in("serial_number", receivedSerials);
+
+        if (serializedUnitsError) {
+          throw new Error(serializedUnitsError.message);
+        }
+
+        for (const unit of serializedUnits || []) {
+          if (unit.barcode) continue;
+
+          const { error: barcodeError } = await supabase
+            .from("serialized_units")
+            .update({ barcode: unit.serial_number })
+            .eq("company_id", companyId)
+            .eq("id", unit.id)
+            .is("barcode", null);
+
+          if (barcodeError) {
+            throw new Error(barcodeError.message);
+          }
+        }
+      }
+
       setSuccessMessage(
         "Purchase order received successfully."
       );
-
-      setTimeout(() => {
-        router.push(
-          `/purchase-orders/${purchaseOrderId}`
-        );
-      }, 700);
+      setLabelsReady(true);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -2184,6 +2406,33 @@ export default function ReceivePurchaseOrderPage() {
               </div>
             )}
 
+            {serialImportPreview && (
+              <div className="import-preview">
+                <div>
+                  <strong>Import Preview</strong>
+                  <span>
+                    Rows found: {serialImportPreview.total} · Valid: {serialImportPreview.total} · Duplicates: 0 · Invalid: 0
+                  </span>
+                </div>
+                <div className="import-preview-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={confirmSerialImport}
+                  >
+                    Add {serialImportPreview.total} Serials
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setSerialImportPreview(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="excel-help">
               <div>
                 <strong>
@@ -2590,9 +2839,49 @@ export default function ReceivePurchaseOrderPage() {
                           <span>
                             Serial Numbers{" "}
                             <em>
-                              optional
+                              {selectedItem.product?.tracking_mode === "serial"
+                                ? "required"
+                                : "not required"}
                             </em>
                           </span>
+
+                          {selectedItem.product?.tracking_mode === "serial" && (
+                            <div className="serial-actions">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => void startScanner()}
+                              >
+                                📷 Scan Serial
+                              </button>
+
+                              <label className="upload-button">
+                                📤 Import Excel
+                                <input
+                                  type="file"
+                                  accept=".xlsx,.xls,.csv"
+                                  onChange={handleExcelImport}
+                                />
+                              </label>
+
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => {
+                                  const serial = window.prompt("Enter serial number");
+                                  if (serial) addSerialToSelectedLine(serial);
+                                }}
+                              >
+                                ✚ Add Manually
+                              </button>
+                            </div>
+                          )}
+
+                          {scannerMessage && (
+                            <small className="scanner-message">
+                              {scannerMessage}
+                            </small>
+                          )}
 
                           <textarea
                             rows={10}
@@ -2619,11 +2908,9 @@ export default function ReceivePurchaseOrderPage() {
                           />
 
                           <small>
-                            Enter only actual serial
-                            numbers physically present on
-                            the received units. You may
-                            serialize all, some, or none of
-                            the units in this batch.
+                            {selectedItem.product?.tracking_mode === "serial"
+                              ? `${parseSerialText(selectedLine.serialText).length} / ${selectedLine.quantity} serials identified.`
+                              : "Serial identification is not required for this product."}
                           </small>
                         </label>
                       </div>
@@ -2750,9 +3037,58 @@ export default function ReceivePurchaseOrderPage() {
                   "Receive Purchase Order"
                 )}
               </button>
+
+              {labelsReady && (
+                <button
+                  type="button"
+                  className="secondary-button print-labels-button"
+                  onClick={prepareLabels}
+                >
+                  🖨 Print Labels
+                </button>
+              )}
             </div>
           </div>
         </form>
+
+        {scannerOpen && (
+          <div className="scanner-overlay" role="dialog" aria-modal="true">
+            <div className="scanner-dialog">
+              <div className="section-header">
+                <div>
+                  <h2>Scan Serial</h2>
+                  <p>Point the camera at the product barcode.</p>
+                </div>
+                <button type="button" className="secondary-button" onClick={stopScanner}>
+                  Close
+                </button>
+              </div>
+              <video ref={scannerVideoRef} className="scanner-video" muted playsInline />
+              <p className="scanner-message">Scanning {selectedItem?.product_name || "selected product"}...</p>
+            </div>
+          </div>
+        )}
+
+        <div className="print-label-sheet" aria-hidden="true">
+          {activeItems.flatMap((item) => {
+            const line = receiveLines[item.id];
+            if (item.product?.tracking_mode !== "serial" || !line) return [];
+            return parseSerialText(line.serialText).map((serial) => (
+              <div className="print-label" key={`${item.id}-${serial}`}>
+                <strong>SHARIF BUSINESS SOLUTIONS</strong>
+                <span>{item.product_name}</span>
+                <span>{item.variant_name || ""}</span>
+                <b>S/N: {serial}</b>
+                <svg
+                  className="label-barcode"
+                  data-receiving-barcode={serial}
+                  aria-label={`Barcode ${serial}`}
+                />
+                <span>{serial}</span>
+              </div>
+            ));
+          })}
+        </div>
 
         <style jsx>{`
           .page-content {
@@ -3130,6 +3466,40 @@ export default function ReceivePurchaseOrderPage() {
             font-size: 11px;
           }
 
+          .import-preview {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin: 18px 20px 0;
+            padding: 13px;
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            background: #eff6ff;
+          }
+
+          .import-preview strong,
+          .import-preview span {
+            display: block;
+          }
+
+          .import-preview strong {
+            color: #1e3a8a;
+            font-size: 13px;
+          }
+
+          .import-preview span {
+            margin-top: 4px;
+            color: #475569;
+            font-size: 11px;
+          }
+
+          .import-preview-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
           .excel-help {
             display: grid;
             grid-template-columns: 1fr 1fr 1.5fr;
@@ -3444,6 +3814,92 @@ export default function ReceivePurchaseOrderPage() {
             font-size: 11px;
           }
 
+          .serial-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 8px 0;
+          }
+
+          .serial-actions .secondary-button,
+          .serial-actions .upload-button {
+            min-height: 36px;
+            padding: 0 10px;
+            font-size: 12px;
+          }
+
+          .scanner-message {
+            color: #166534;
+            font-size: 12px;
+          }
+
+          .scanner-overlay {
+            position: fixed;
+            z-index: 50;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.58);
+          }
+
+          .scanner-dialog {
+            width: min(560px, 100%);
+            overflow: hidden;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+          }
+
+          .scanner-dialog .section-header {
+            border-bottom: 1px solid #eef2f7;
+          }
+
+          .scanner-video {
+            display: block;
+            width: 100%;
+            min-height: 280px;
+            background: #0f172a;
+            object-fit: cover;
+          }
+
+          .scanner-dialog .scanner-message {
+            display: block;
+            padding: 0 18px 18px;
+          }
+
+          .print-label-sheet {
+            display: none;
+          }
+
+          .print-label {
+            display: flex;
+            width: 3.2in;
+            min-height: 1.8in;
+            flex-direction: column;
+            justify-content: center;
+            gap: 5px;
+            border: 1px solid #111827;
+            padding: 12px;
+            color: #111827;
+            text-align: center;
+          }
+
+          .print-label strong {
+            font-size: 10px;
+          }
+
+          .print-label span,
+          .print-label b {
+            font-size: 12px;
+          }
+
+          .label-barcode {
+            margin-top: 5px;
+            width: 100%;
+            height: 34px;
+          }
+
           .button-spinner {
             width: 14px;
             height: 14px;
@@ -3532,6 +3988,28 @@ export default function ReceivePurchaseOrderPage() {
 
             .editor-panel {
               padding: 18px;
+            }
+          }
+
+          @media print {
+            body :global(*) {
+              visibility: hidden;
+            }
+
+            .print-label-sheet,
+            .print-label-sheet * {
+              visibility: visible;
+            }
+
+            .print-label-sheet {
+              display: grid;
+              grid-template-columns: repeat(2, 3.2in);
+              gap: 0.2in;
+              padding: 0.2in;
+            }
+
+            .print-label {
+              break-inside: avoid;
             }
           }
         `}</style>
