@@ -4,6 +4,7 @@ import {
   FormEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Link from "next/link";
@@ -363,6 +364,12 @@ export default function NewPurchaseOrderPage() {
   const [productSearch, setProductSearch] =
     useState("");
 
+  const [productSearchOpen, setProductSearchOpen] =
+    useState(false);
+
+  const productSelectorRef =
+    useRef<HTMLDivElement | null>(null);
+
   const [
     selectedQuantity,
     setSelectedQuantity,
@@ -647,6 +654,7 @@ export default function NewPurchaseOrderPage() {
       setCurrency("USD");
       setSelectedProductId("");
       setProductSearch("");
+      setProductSearchOpen(false);
       return;
     }
 
@@ -668,10 +676,46 @@ export default function NewPurchaseOrderPage() {
 
     setSelectedProductId("");
     setProductSearch("");
+    setProductSearchOpen(false);
   }, [
     supplierId,
     suppliers,
   ]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as Node | null;
+
+      if (
+        productSelectorRef.current &&
+        target &&
+        !productSelectorRef.current.contains(target)
+      ) {
+        setProductSearchOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handlePointerDown
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handlePointerDown
+      );
+    };
+  }, []);
+
+  function selectSupplierProduct(item: SupplierProduct) {
+    setSelectedProductId(item.id);
+    setProductSearch(
+      `${item.product?.name || "Product"} · ${item.variant?.name || "Variant"}`
+    );
+    setProductSearchOpen(false);
+    setErrorMessage("");
+  }
 
   function addLine() {
     setErrorMessage("");
@@ -793,6 +837,8 @@ export default function NewPurchaseOrderPage() {
     }
 
     setSelectedProductId("");
+    setProductSearch("");
+    setProductSearchOpen(false);
     setSelectedQuantity(1);
   }
 
@@ -1510,12 +1556,15 @@ export default function NewPurchaseOrderPage() {
               </div>
 
               <div className="add-product">
-                <div className="field product-selector">
+                <div
+                  className="field product-selector"
+                  ref={productSelectorRef}
+                >
                   <label>
                     Product / Variant
                   </label>
 
-                  <div className="select-wrap">
+                  <div className="select-wrap search-input-wrap">
                     <Icon
                       name="search"
                       size={16}
@@ -1523,10 +1572,31 @@ export default function NewPurchaseOrderPage() {
 
                     <input
                       value={productSearch}
+                      onFocus={() => {
+                        if (supplierId) {
+                          setProductSearchOpen(true);
+                        }
+                      }}
                       onChange={(event) => {
                         setProductSearch(event.target.value);
-                        if (selectedProductId) {
-                          setSelectedProductId("");
+                        setSelectedProductId("");
+                        setProductSearchOpen(true);
+                        setErrorMessage("");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setProductSearchOpen(false);
+                        }
+
+                        if (
+                          event.key === "Enter" &&
+                          productSearchOpen &&
+                          filteredSupplierProducts.length > 0
+                        ) {
+                          event.preventDefault();
+                          selectSupplierProduct(
+                            filteredSupplierProducts[0]
+                          );
                         }
                       }}
                       placeholder={
@@ -1536,51 +1606,107 @@ export default function NewPurchaseOrderPage() {
                       }
                       disabled={!supplierId}
                       aria-label="Search supplier products"
+                      aria-expanded={
+                        productSearchOpen
+                      }
+                      autoComplete="off"
                     />
+
+                    {productSearch && (
+                      <button
+                        type="button"
+                        className="clear-search-button"
+                        onClick={() => {
+                          setProductSearch("");
+                          setSelectedProductId("");
+                          setProductSearchOpen(true);
+                        }}
+                        aria-label="Clear product search"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
 
-                  {supplierId && (
-                    <div className="product-search-results">
-                      {!availableSupplierProducts.length ? (
-                        <div className="product-search-empty">
-                          No supplier products available.
+                  {supplierId &&
+                    productSearchOpen && (
+                      <div className="product-search-results">
+                        {!availableSupplierProducts.length ? (
+                          <div className="product-search-empty">
+                            No supplier products available.
+                          </div>
+                        ) : !filteredSupplierProducts.length ? (
+                          <div className="product-search-empty">
+                            No matching supplier products.
+                          </div>
+                        ) : (
+                          filteredSupplierProducts
+                            .slice(0, 50)
+                            .map((item) => (
+                              <button
+                                type="button"
+                                key={item.id}
+                                className={`product-search-result ${
+                                  selectedProductId === item.id
+                                    ? "selected"
+                                    : ""
+                                }`}
+                                onClick={() =>
+                                  selectSupplierProduct(item)
+                                }
+                              >
+                                <span className="result-main">
+                                  <strong>
+                                    {item.product?.name || "Product"}
+                                  </strong>
+                                  <span className="result-variant">
+                                    {item.variant?.name || "Variant"}
+                                  </span>
+                                </span>
+
+                                <span className="result-meta">
+                                  {item.variant?.sku
+                                    ? `SKU: ${item.variant.sku}`
+                                    : ""}
+                                  {item.supplier_sku
+                                    ? `${item.variant?.sku ? " • " : ""}Supplier SKU: ${item.supplier_sku}`
+                                    : ""}
+                                </span>
+                              </button>
+                            ))
+                        )}
+                      </div>
+                    )}
+
+                  {selectedSupplierProduct && (
+                    <div className="selected-product-pill">
+                      <div className="selected-product-copy">
+                        <span className="selected-check">✓</span>
+                        <div>
+                          <strong>
+                            {selectedSupplierProduct.product?.name}
+                          </strong>
+                          <span>
+                            {selectedSupplierProduct.variant?.name}
+                            {selectedSupplierProduct.variant?.sku
+                              ? ` · ${selectedSupplierProduct.variant.sku}`
+                              : ""}
+                          </span>
                         </div>
-                      ) : !filteredSupplierProducts.length ? (
-                        <div className="product-search-empty">
-                          No matching supplier products.
-                        </div>
-                      ) : (
-                        filteredSupplierProducts.map((item) => (
-                          <button
-                            type="button"
-                            key={item.id}
-                            className={`product-search-result ${
-                              selectedProductId === item.id
-                                ? "selected"
-                                : ""
-                            }`}
-                            onClick={() => {
-                              setSelectedProductId(item.id);
-                              setProductSearch(
-                                `${item.product?.name || "Product"} · ${item.variant?.name || "Variant"}`
-                              );
-                            }}
-                          >
-                            <strong>
-                              {item.product?.name || "Product"}
-                            </strong>
-                            <span>
-                              {item.variant?.name || "Variant"}
-                              {item.variant?.sku
-                                ? ` · SKU: ${item.variant.sku}`
-                                : ""}
-                              {item.supplier_sku
-                                ? ` · Supplier SKU: ${item.supplier_sku}`
-                                : ""}
-                            </span>
-                          </button>
-                        ))
-                      )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="clear-selection-button"
+                        onClick={() => {
+                          setSelectedProductId("");
+                          setProductSearch("");
+                          setProductSearchOpen(true);
+                        }}
+                        aria-label="Clear selected product"
+                      >
+                        Change
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2518,6 +2644,38 @@ const styles = `
     position: relative;
   }
 
+  .search-input-wrap {
+    position: relative;
+  }
+
+  .search-input-wrap input {
+    padding-right: 38px;
+  }
+
+  .clear-search-button {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .clear-search-button:hover {
+    background: #f1f5f9;
+    color: #334155;
+  }
+
   .product-search-results {
     position: absolute;
     z-index: 10;
@@ -2560,6 +2718,23 @@ const styles = `
     font-size: 12px;
   }
 
+  .result-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .result-variant {
+    color: #64748b;
+    font-size: 11px;
+  }
+
+  .result-meta {
+    color: #94a3b8;
+    font-size: 10px;
+  }
+
   .product-search-result span,
   .product-search-empty {
     color: #64748b;
@@ -2597,6 +2772,73 @@ const styles = `
     background: #166534;
     color: white;
     white-space: nowrap;
+  }
+
+  .selected-product-pill {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 20px 16px;
+    padding: 10px 12px;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    background: #f7fdf9;
+  }
+
+  .selected-product-copy {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .selected-product-copy > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .selected-product-copy strong {
+    color: #166534;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .selected-product-copy span:not(.selected-check) {
+    color: #64748b;
+    font-size: 10px;
+  }
+
+  .selected-check {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .clear-selection-button {
+    flex: 0 0 auto;
+    border: 0;
+    background: transparent;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .clear-selection-button:hover {
+    text-decoration: underline;
   }
 
   .selected-product-info {
@@ -3098,6 +3340,11 @@ const styles = `
     .selected-product-info {
       grid-template-columns: 1fr 1fr;
     }
+
+    .selected-product-pill {
+      margin-left: 18px;
+      margin-right: 18px;
+    }
   }
 
   @media (max-width: 520px) {
@@ -3121,6 +3368,10 @@ const styles = `
 
     .selected-product-info {
       grid-template-columns: 1fr;
+    }
+
+    .selected-product-pill {
+      align-items: flex-start;
     }
   }
 `;

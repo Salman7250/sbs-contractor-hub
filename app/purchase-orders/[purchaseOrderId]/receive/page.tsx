@@ -44,7 +44,6 @@ type Location = {
 type Product = {
   id: string;
   name: string | null;
-  tracking_mode: string | null;
 };
 
 type Variant = {
@@ -164,20 +163,7 @@ const formatMoney = (value: number, currency: string) =>
     maximumFractionDigits: 2,
   }).format(value);
 
-const trackingLabel = (trackingMode: string | null | undefined) => {
-  switch (trackingMode) {
-    case "serial":
-      return "Serial";
-    case "batch":
-      return "Batch";
-    case "quantity":
-      return "Quantity";
-    case "none":
-      return "Not tracked";
-    default:
-      return "Unknown";
-  }
-};
+const trackingLabel = () => "Batch + Serial";
 
 const getRemaining = (item: PurchaseOrderItem) =>
   Math.max(
@@ -223,6 +209,8 @@ export default function ReceivePurchaseOrderPage() {
 
   const [notes, setNotes] = useState("");
 
+  const [batchNumber, setBatchNumber] = useState("");
+
   const [receiveLines, setReceiveLines] = useState<
     Record<string, ReceiveLine>
   >({});
@@ -239,6 +227,7 @@ export default function ReceivePurchaseOrderPage() {
 
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
+  const [scannerInput, setScannerInput] = useState("");
   const [labelsReady, setLabelsReady] = useState(false);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
@@ -365,6 +354,10 @@ export default function ReceivePurchaseOrderPage() {
       }
 
       setNotes(data.notes || "");
+      setBatchNumber((current) =>
+        current ||
+        `GRN-${String(data.po_number || "PO").replace(/[^A-Za-z0-9-]/g, "-")}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`
+      );
     },
     [purchaseOrderId, supabase]
   );
@@ -394,8 +387,7 @@ export default function ReceivePurchaseOrderPage() {
             line_total,
             product:products(
               id,
-              name,
-              tracking_mode
+              name
             ),
             variant:product_variants(
               id,
@@ -422,6 +414,12 @@ export default function ReceivePurchaseOrderPage() {
 
       setItems(loadedItems);
 
+      const initialBatch =
+        batchNumber ||
+        `GRN-${String(purchaseOrderId).slice(0, 8).toUpperCase()}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
+
+      setBatchNumber((current) => current || initialBatch);
+
       const initialLines: Record<
         string,
         ReceiveLine
@@ -433,10 +431,7 @@ export default function ReceivePurchaseOrderPage() {
         initialLines[item.id] = {
           poItemId: item.id,
           quantity: remaining > 0 ? remaining : 0,
-          lotNumber: `LOT-${Date.now()}-${item.id.slice(
-            0,
-            8
-          )}`,
+          lotNumber: initialBatch,
           serialText: "",
         };
       });
@@ -451,7 +446,7 @@ export default function ReceivePurchaseOrderPage() {
         setSelectedItemId(firstOpen.id);
       }
     },
-    [purchaseOrderId, supabase]
+    [batchNumber, purchaseOrderId, supabase]
   );
 
   const loadWarehouses = useCallback(
@@ -653,6 +648,17 @@ export default function ReceivePurchaseOrderPage() {
     }));
   };
 
+  const updateBatchNumber = (value: string) => {
+    setBatchNumber(value);
+    setReceiveLines((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((itemId) => {
+        next[itemId] = { ...next[itemId], lotNumber: value };
+      });
+      return next;
+    });
+  };
+
   const addSerialToSelectedLine = (value: string) => {
     const serial = value.trim();
 
@@ -691,8 +697,8 @@ export default function ReceivePurchaseOrderPage() {
   };
 
   const startScanner = async () => {
-    if (!selectedItem || selectedItem.product?.tracking_mode !== "serial") {
-      setScannerMessage("Select a serial-tracked product first.");
+    if (!selectedItem) {
+      setScannerMessage("Select a purchase-order product first.");
       return;
     }
 
@@ -705,13 +711,6 @@ export default function ReceivePurchaseOrderPage() {
         };
       }
     ).BarcodeDetector;
-
-    if (!barcodeDetector) {
-      setScannerMessage(
-        "Camera barcode scanning is not supported in this browser. Use Add Manually or Import Excel."
-      );
-      return;
-    }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setScannerMessage("Camera access is unavailable in this browser.");
@@ -732,15 +731,20 @@ export default function ReceivePurchaseOrderPage() {
         await scannerVideoRef.current.play();
       }
 
-      const detector = new barcodeDetector({
-        formats: [
-          "code_128",
-          "code_39",
-          "data_matrix",
-          "qr_code",
-          "ean_13",
-        ],
-      });
+      const detector = barcodeDetector
+        ? new barcodeDetector({
+            formats: [
+              "code_128",
+              "code_39",
+              "data_matrix",
+              "qr_code",
+              "ean_13",
+              "ean_8",
+              "upc_a",
+              "upc_e",
+            ],
+          })
+        : null;
 
       const scan = async () => {
         if (!scannerVideoRef.current || !scannerStreamRef.current) {
@@ -748,7 +752,9 @@ export default function ReceivePurchaseOrderPage() {
         }
 
         try {
-          const detections = await detector.detect(scannerVideoRef.current);
+          const detections = detector
+            ? await detector.detect(scannerVideoRef.current)
+            : [];
           const value = detections[0]?.rawValue?.trim();
 
           if (value) {
@@ -773,6 +779,22 @@ export default function ReceivePurchaseOrderPage() {
           ? "Camera permission was denied."
           : "Unable to start the camera scanner."
       );
+    }
+  };
+
+  const submitScannerInput = () => {
+    const value = scannerInput.trim();
+    if (!value) return;
+    if (addSerialToSelectedLine(value)) {
+      setScannerInput("");
+      stopScanner();
+    }
+  };
+
+  const handleScannerInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      submitScannerInput();
     }
   };
 
@@ -1431,10 +1453,7 @@ export default function ReceivePurchaseOrderPage() {
             getRemaining(item),
 
           "Tracking":
-            trackingLabel(
-              item.product
-                ?.tracking_mode
-            ),
+            trackingLabel(),
         })
       );
 
@@ -1556,6 +1575,12 @@ export default function ReceivePurchaseOrderPage() {
         );
       }
 
+      if (!batchNumber.trim()) {
+        errors.push(
+          "Please enter a receiving batch / GRN number."
+        );
+      }
+
       if (
         locations.length > 0 &&
         !locationId
@@ -1606,19 +1631,6 @@ export default function ReceivePurchaseOrderPage() {
           );
         }
 
-        const trackingMode =
-          item.product
-            ?.tracking_mode;
-
-        if (
-          trackingMode ===
-          "none"
-        ) {
-          errors.push(
-            `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: this product is not inventory tracked and cannot be received through this workflow.`
-          );
-        }
-
         if (
           !line.lotNumber.trim()
         ) {
@@ -1638,24 +1650,6 @@ export default function ReceivePurchaseOrderPage() {
         ) {
           errors.push(
             `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: ${serials.length} serial numbers were entered for a receiving quantity of ${qty}.`
-          );
-        }
-
-        if (
-          trackingMode === "serial" &&
-          serials.length !== qty
-        ) {
-          errors.push(
-            `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: serial-tracked products require exactly ${qty} serial numbers before receiving.`
-          );
-        }
-
-        if (
-          trackingMode !== "serial" &&
-          serials.length > 0
-        ) {
-          errors.push(
-            `${item.product_name}${item.variant_name ? ` — ${item.variant_name}` : ""}: serial numbers can only be entered for serial-tracked products.`
           );
         }
 
@@ -1740,7 +1734,7 @@ export default function ReceivePurchaseOrderPage() {
               item.id,
             quantity,
             lot_number:
-              line.lotNumber.trim(),
+              batchNumber.trim(),
             serial_numbers:
               serialNumbers,
           };
@@ -2323,6 +2317,37 @@ export default function ReceivePurchaseOrderPage() {
                 </select>
               </label>
 
+              <label>
+                <span>
+                  Receiving Batch / GRN *
+                </span>
+                <input
+                  type="text"
+                  value={batchNumber}
+                  onChange={(event) =>
+                    updateBatchNumber(event.target.value)
+                  }
+                  placeholder="GRN-20260924-001"
+                />
+                <small>
+                  One receiving batch identifier is shared across all products received in this submission.
+                </small>
+              </label>
+
+              <label>
+                <span>
+                  Products in This Batch
+                </span>
+                <input
+                  type="text"
+                  value={`${Object.values(receiveLines).filter((line) => numberValue(line.quantity) > 0).length} product line(s) / ${formatNumber(totalReceivingQuantity)} unit(s)`}
+                  readOnly
+                />
+                <small>
+                  Multiple PO products can be received under the same batch / GRN.
+                </small>
+              </label>
+
               <label className="full">
                 <span>
                   Receiving Notes
@@ -2521,10 +2546,8 @@ export default function ReceivePurchaseOrderPage() {
                 </h2>
 
                 <p>
-                  Each receiving line creates its
-                  own inventory batch. Serial numbers
-                  are optional child identities of
-                  that batch.
+                  All selected products can share the same receiving batch / GRN.
+                  Serial numbers remain attached to their individual products.
                 </p>
               </div>
             </div>
@@ -2604,11 +2627,7 @@ export default function ReceivePurchaseOrderPage() {
                             </div>
 
                             <span className="tracking-badge">
-                              {trackingLabel(
-                                item
-                                  .product
-                                  ?.tracking_mode
-                              )}
+                              {trackingLabel()}
                             </span>
                           </div>
 
@@ -2692,11 +2711,7 @@ export default function ReceivePurchaseOrderPage() {
                         </div>
 
                         <span className="tracking-badge large">
-                          {trackingLabel(
-                            selectedItem
-                              .product
-                              ?.tracking_mode
-                          )}
+                          {trackingLabel()}
                         </span>
                       </div>
 
@@ -2805,33 +2820,17 @@ export default function ReceivePurchaseOrderPage() {
 
                         <label>
                           <span>
-                            Lot / Batch Number *
+                            Receiving Batch / GRN
                           </span>
 
                           <input
                             type="text"
-                            value={
-                              selectedLine.lotNumber
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              updateReceiveLine(
-                                selectedItem.id,
-                                {
-                                  lotNumber:
-                                    event
-                                      .target
-                                      .value,
-                                }
-                              )
-                            }
-                            placeholder="LOT-..."
+                            value={batchNumber}
+                            readOnly
                           />
 
                           <small>
-                            This identifies the inventory
-                            batch and provenance record.
+                            Shared across every product being received in this submission.
                           </small>
                         </label>
 
@@ -2839,43 +2838,47 @@ export default function ReceivePurchaseOrderPage() {
                           <span>
                             Serial Numbers{" "}
                             <em>
-                              {selectedItem.product?.tracking_mode === "serial"
-                                ? "required"
-                                : "not required"}
+                              "optional child serial tracking"
                             </em>
                           </span>
 
-                          {selectedItem.product?.tracking_mode === "serial" && (
-                            <div className="serial-actions">
+                          <div className="serial-tools">
                               <button
                                 type="button"
-                                className="secondary-button"
+                                className="scanner-primary-button"
                                 onClick={() => void startScanner()}
+                                aria-label="Scan serial number with camera or barcode scanner"
                               >
-                                📷 Scan Serial
+                                <span className="scanner-button-icon">⌁</span>
+                                <span>Scan Serial Number</span>
                               </button>
 
-                              <label className="upload-button">
-                                📤 Import Excel
-                                <input
-                                  type="file"
-                                  accept=".xlsx,.xls,.csv"
-                                  onChange={handleExcelImport}
-                                />
-                              </label>
+                              <div className="serial-actions">
+                                <label className="upload-button">
+                                  📤 Import Excel
+                                  <input
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    onChange={handleExcelImport}
+                                  />
+                                </label>
 
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => {
-                                  const serial = window.prompt("Enter serial number");
-                                  if (serial) addSerialToSelectedLine(serial);
-                                }}
-                              >
-                                ✚ Add Manually
-                              </button>
-                            </div>
-                          )}
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() => {
+                                    const serial = window.prompt("Enter serial number");
+                                    if (serial) addSerialToSelectedLine(serial);
+                                  }}
+                                >
+                                  ✚ Add Manually
+                                </button>
+                              </div>
+
+                              <div className="scanner-hint">
+                                <strong>Scanner ready:</strong> Use your phone camera, or connect a USB/Bluetooth barcode scanner and scan directly into this receiving screen.
+                              </div>
+                          </div>
 
                           {scannerMessage && (
                             <small className="scanner-message">
@@ -2908,9 +2911,7 @@ export default function ReceivePurchaseOrderPage() {
                           />
 
                           <small>
-                            {selectedItem.product?.tracking_mode === "serial"
-                              ? `${parseSerialText(selectedLine.serialText).length} / ${selectedLine.quantity} serials identified.`
-                              : "Serial identification is not required for this product."}
+                            `${parseSerialText(selectedLine.serialText).length} / ${selectedLine.quantity} child serials identified.`
                           </small>
                         </label>
                       </div>
@@ -3056,14 +3057,30 @@ export default function ReceivePurchaseOrderPage() {
             <div className="scanner-dialog">
               <div className="section-header">
                 <div>
-                  <h2>Scan Serial</h2>
-                  <p>Point the camera at the product barcode.</p>
+                  <h2>Scan Serial Number</h2>
+                  <p>Point your phone or webcam at the barcode, or use a USB/Bluetooth barcode scanner.</p>
                 </div>
                 <button type="button" className="secondary-button" onClick={stopScanner}>
                   Close
                 </button>
               </div>
               <video ref={scannerVideoRef} className="scanner-video" muted playsInline />
+              <div className="scanner-fallback">
+                <strong>Scanner fallback</strong>
+                <span>Use a USB/Bluetooth barcode scanner or paste/type the serial here. Most hardware scanners behave like a keyboard and finish with Enter.</span>
+                <div className="scanner-input-row">
+                  <input
+                    autoFocus
+                    value={scannerInput}
+                    onChange={(event) => setScannerInput(event.target.value)}
+                    onKeyDown={handleScannerInputKeyDown}
+                    placeholder="Scan or enter serial number"
+                  />
+                  <button type="button" className="primary-button" onClick={submitScannerInput}>
+                    Add Serial
+                  </button>
+                </div>
+              </div>
               <p className="scanner-message">Scanning {selectedItem?.product_name || "selected product"}...</p>
             </div>
           </div>
@@ -3072,12 +3089,15 @@ export default function ReceivePurchaseOrderPage() {
         <div className="print-label-sheet" aria-hidden="true">
           {activeItems.flatMap((item) => {
             const line = receiveLines[item.id];
-            if (item.product?.tracking_mode !== "serial" || !line) return [];
+            if (!line) return [];
             return parseSerialText(line.serialText).map((serial) => (
               <div className="print-label" key={`${item.id}-${serial}`}>
                 <strong>SHARIF BUSINESS SOLUTIONS</strong>
                 <span>{item.product_name}</span>
                 <span>{item.variant_name || ""}</span>
+                {item.sku ? <span>SKU: {item.sku}</span> : null}
+                {item.description ? <span>{item.description}</span> : null}
+                <span>Batch: {batchNumber}</span>
                 <b>S/N: {serial}</b>
                 <svg
                   className="label-barcode"
@@ -3814,7 +3834,64 @@ export default function ReceivePurchaseOrderPage() {
             font-size: 11px;
           }
 
-          .serial-actions {
+          .serial-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .scanner-primary-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 16px;
+    border: 1px solid #166534;
+    border-radius: 10px;
+    background: #166534;
+    color: white;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(22, 101, 52, 0.16);
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .scanner-primary-button:hover {
+    background: #14532d;
+    transform: translateY(-1px);
+  }
+
+  .scanner-button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 7px;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .scanner-hint {
+    padding: 9px 11px;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    background: #f8fbff;
+    color: #64748b;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .scanner-hint strong {
+    color: #334155;
+  }
+
+  .serial-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
@@ -3868,6 +3945,40 @@ export default function ReceivePurchaseOrderPage() {
             padding: 0 18px 18px;
           }
 
+          .scanner-fallback {
+            padding: 16px 18px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .scanner-fallback strong {
+            color: #334155;
+            font-size: 12px;
+          }
+
+          .scanner-fallback span {
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.45;
+          }
+
+          .scanner-input-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+          }
+
+          .scanner-input-row input {
+            margin-top: 0;
+            height: 38px;
+            flex: 1;
+          }
+
+          .scanner-input-row .primary-button {
+            min-height: 38px;
+          }
+
           .print-label-sheet {
             display: none;
           }
@@ -3890,6 +4001,10 @@ export default function ReceivePurchaseOrderPage() {
           }
 
           .print-label span,
+          .print-label b {
+            font-size: 10px;
+          }
+
           .print-label b {
             font-size: 12px;
           }
