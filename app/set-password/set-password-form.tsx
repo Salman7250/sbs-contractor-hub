@@ -360,16 +360,34 @@ export default function SetPasswordForm() {
       }
 
       /*
-       * -------------------------------------------------------
-       * B2B CUSTOMER PORTAL
-       * -------------------------------------------------------
-       *
-       * The customer portal relationship was already created
-       * when the administrator sent the invitation.
-       *
-       * No employee activation RPC is required here.
-       */
-      window.location.replace("/b2b-portal");
+ * -------------------------------------------------------
+ * B2B CUSTOMER PORTAL
+ * -------------------------------------------------------
+ *
+ * Activate the customer portal membership immediately
+ * after the customer successfully creates their password.
+ *
+ * The RPC identifies the portal account using auth.uid(),
+ * so the customer cannot activate another user's account.
+ */
+const { error: portalActivationError } = await supabase.rpc(
+  "customer_portal_activate_my_account",
+);
+
+if (portalActivationError) {
+  console.error(
+    "Customer portal activation error:",
+    portalActivationError,
+  );
+
+  setError(
+    "Your password was created, but your customer portal account could not be activated. Please contact your administrator.",
+  );
+
+  return;
+}
+
+window.location.replace("/b2b-portal");
     } catch (err) {
       console.error(
         "Set password error:",

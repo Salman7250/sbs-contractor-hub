@@ -286,6 +286,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -334,6 +335,8 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
   const loadPortal = useCallback(
     async (isRefresh = false) => {
       try {
+        setLoadError(null);
+
         if (isRefresh) {
           setRefreshing(true);
         } else {
@@ -376,27 +379,59 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           return;
         }
 
+        const rawStatus = String(rawPortalUser.status || "active");
+        let activatedAt = rawPortalUser.activated_at ?? null;
+
+        // An invitation becomes an active portal account as soon as the
+        // customer has authenticated successfully. This also self-heals
+        // older invitations that were left in the `invited` state.
+        if (rawStatus === "invited") {
+          const activationTime = new Date().toISOString();
+
+          const { error: activationError } = await supabase
+            .from("customer_portal_users")
+            .update({
+              status: "active",
+              activated_at: activationTime,
+              last_login_at: activationTime,
+            })
+            .eq("id", rawPortalUser.id)
+            .eq("user_id", user.id);
+
+          if (activationError) {
+            console.warn(
+              "Customer portal auto-activation failed:",
+              activationError,
+            );
+          } else {
+            activatedAt = activationTime;
+          }
+        }
+
         const normalizedPortalUser: PortalUser = {
           id: String(rawPortalUser.id),
           company_id: String(rawPortalUser.company_id),
           customer_id: String(rawPortalUser.customer_id),
           role: String(rawPortalUser.role || "viewer"),
-          status: String(rawPortalUser.status || "active"),
+          status: rawStatus === "invited" ? "active" : rawStatus,
           invited_at: rawPortalUser.invited_at ?? null,
-          activated_at: rawPortalUser.activated_at ?? null,
+          activated_at: activatedAt,
           last_login_at: rawPortalUser.last_login_at ?? null,
         };
 
-        if (
-          ["suspended", "revoked", "invited"].includes(
-            normalizedPortalUser.status,
-          )
-        ) {
+        if (["suspended", "revoked"].includes(normalizedPortalUser.status)) {
           router.replace("/portal/login");
           return;
         }
 
         setPortalUser(normalizedPortalUser);
+
+        // Keep the portal account's last-login timestamp current.
+        void supabase
+          .from("customer_portal_users")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("id", normalizedPortalUser.id)
+          .eq("user_id", user.id);
 
         const companyId = normalizedPortalUser.company_id;
         const customerId = normalizedPortalUser.customer_id;
@@ -635,23 +670,33 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             .order("created_at", { ascending: false }),
         ]);
 
-        const firstError =
-          settingsResponse.error ||
-          customerResponse.error ||
-          invoicesResponse.error ||
-          quotesResponse.error ||
-          ordersResponse.error ||
-          jobsResponse.error ||
-          warrantiesResponse.error ||
-          rmasResponse.error ||
-          repairsResponse.error ||
-          requestsResponse.error ||
-          messagesResponse.error ||
-          ledgerResponse.error ||
-          documentSharesResponse.error;
+        const queryErrors = [
+          ["portal settings", settingsResponse.error],
+          ["customer", customerResponse.error],
+          ["invoices", invoicesResponse.error],
+          ["quotes", quotesResponse.error],
+          ["orders", ordersResponse.error],
+          ["jobs", jobsResponse.error],
+          ["warranties", warrantiesResponse.error],
+          ["RMAs", rmasResponse.error],
+          ["repairs", repairsResponse.error],
+          ["requests", requestsResponse.error],
+          ["messages", messagesResponse.error],
+          ["ledger", ledgerResponse.error],
+          ["documents", documentSharesResponse.error],
+        ].filter(([, error]) => Boolean(error));
 
-        if (firstError) {
-          throw new Error(firstError.message);
+        if (queryErrors.length > 0) {
+          console.warn(
+            "Some customer portal data could not be loaded:",
+            queryErrors,
+          );
+        }
+
+        if (customerResponse.error) {
+          throw new Error(
+            `Unable to load your customer account: ${customerResponse.error.message}`,
+          );
         }
 
         if (settingsResponse.data) {
@@ -888,6 +933,8 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             ? error.message
             : "Unable to load the customer portal.";
 
+        console.error("Customer portal load error:", error);
+        setLoadError(message);
         notify("error", message);
       } finally {
         setLoading(false);
@@ -1220,8 +1267,104 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
     );
   }
 
-  if (!portalUser || !customer) {
-    return null;
+  if (loadError || !portalUser || !customer) {
+    return (
+      <>
+        <div className="portal-error-screen">
+          <div className="portal-error-card">
+            <div className="portal-error-icon">!</div>
+            <h2>We could not load your portal</h2>
+            <p>
+              {loadError ||
+                "Your customer portal account could not be loaded. Please refresh the page or contact your administrator."}
+            </p>
+            <div className="portal-error-actions">
+              <button
+                type="button"
+                onClick={() => void loadPortal()}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                className="portal-error-secondary"
+                onClick={() => void handleLogout()}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <style jsx>{`
+          .portal-error-screen {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #f5f7fb;
+          }
+
+          .portal-error-card {
+            width: min(100%, 520px);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            padding: 36px;
+            text-align: center;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+          }
+
+          .portal-error-icon {
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 18px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #fef2f2;
+            color: #dc2626;
+            font-weight: 800;
+            font-size: 22px;
+          }
+
+          .portal-error-card h2 {
+            margin: 0;
+            color: #111827;
+            font-size: 22px;
+          }
+
+          .portal-error-card p {
+            margin: 10px 0 24px;
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+
+          .portal-error-actions {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+          }
+
+          .portal-error-actions button {
+            border: 0;
+            border-radius: 10px;
+            padding: 11px 16px;
+            background: #111827;
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+          }
+
+          .portal-error-actions .portal-error-secondary {
+            background: #f3f4f6;
+            color: #374151;
+          }
+        `}</style>
+      </>
+    );
   }
 
   return (
