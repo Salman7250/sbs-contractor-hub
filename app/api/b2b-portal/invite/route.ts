@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("origin") ||
       request.nextUrl.origin;
 
-    const redirectTo = `${origin}/portal`;
+    const redirectTo = `${origin}/set-password`;
 
     // ---------------------------------------------------------
     // Call Supabase Edge Function
