@@ -5,9 +5,21 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Copy,
+  FileText,
+  Image as ImageIcon,
+  MoreVertical,
+  Paperclip,
+  Reply,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type PortalTab =
@@ -143,10 +155,52 @@ type PortalRequest = {
 type PortalMessage = {
   id: string;
   request_id: string | null;
+  sender_user_id: string | null;
   sender_type: "client" | "company";
   message: string;
   created_at: string;
 };
+
+type MessageAttachment = {
+  name: string;
+  mime: string;
+  url: string;
+};
+
+const MESSAGE_ATTACHMENT_BUCKET = "customer-portal-attachments";
+const ATTACHMENT_START = "[[SBS_ATTACHMENT]]";
+const ATTACHMENT_END = "[[/SBS_ATTACHMENT]]";
+
+function parseMessageContent(rawMessage: string) {
+  const match = rawMessage.match(
+    new RegExp(`${ATTACHMENT_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\s\\S]*?)${ATTACHMENT_END.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`),
+  );
+
+  if (!match) {
+    return { text: rawMessage, attachment: null as MessageAttachment | null };
+  }
+
+  let attachment: MessageAttachment | null = null;
+
+  try {
+    const parsed = JSON.parse(match[1]) as Partial<MessageAttachment>;
+    if (parsed.name && parsed.mime && parsed.url) {
+      attachment = {
+        name: String(parsed.name),
+        mime: String(parsed.mime),
+        url: String(parsed.url),
+      };
+    }
+  } catch {
+    attachment = null;
+  }
+
+  return {
+    text: rawMessage.replace(match[0], "").trim(),
+    attachment,
+  };
+}
+
 
 type PortalDocument = {
   id: string;
@@ -205,6 +259,18 @@ const dateFormat = (value: string | null | undefined) => {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+};
+
+const dateTimeFormat = (value: string | null | undefined) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 };
 
@@ -307,8 +373,6 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
   const [ledgerEntries, setLedgerEntries] = useState<CustomerLedgerEntry[]>([]);
 
   const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [messageModalOpen, setMessageModalOpen] = useState(false);
-
   const [requestForm, setRequestForm] = useState({
     request_type: "general",
     subject: "",
@@ -323,7 +387,12 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
 
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [submittingMessage, setSubmittingMessage] = useState(false);
-
+  const [messageMenuId, setMessageMenuId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<PortalMessage | null>(null);
+  const [messageAttachment, setMessageAttachment] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const messageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const messageComposerRef = useRef<HTMLTextAreaElement | null>(null);
   const notify = useCallback((type: "success" | "error", message: string) => {
     setToast({ type, message });
 
@@ -590,7 +659,6 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
                 id,
                 repair_number,
                 status,
-                device_description,
                 created_at,
                 customer_id
               `,
@@ -623,6 +691,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
               `
                 id,
                 request_id,
+                sender_user_id,
                 sender_type,
                 message,
                 created_at
@@ -635,7 +704,6 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             .from("customer_ledger_entries")
             .select(
               `
-                id,
                 transaction_at,
                 transaction_type,
                 reference,
@@ -822,7 +890,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             id: String(row.id),
             repair_number: row.repair_number ?? null,
             status: row.status ?? null,
-            device_description: row.device_description ?? null,
+            device_description: null,
             created_at: row.created_at ?? null,
             customer_id: String(row.customer_id),
           })),
@@ -846,6 +914,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           ((messagesResponse.data || []) as any[]).map((row) => ({
             id: String(row.id),
             request_id: row.request_id ? String(row.request_id) : null,
+            sender_user_id: row.sender_user_id ? String(row.sender_user_id) : null,
             sender_type:
               row.sender_type === "company" ? "company" : "client",
             message: String(row.message || ""),
@@ -855,7 +924,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
 
         setLedgerEntries(
           ((ledgerResponse.data || []) as any[]).map((row) => ({
-            id: String(row.id),
+            id: `${row.transaction_at || "transaction"}-${row.reference || "entry"}-${Math.random()}`,
             transaction_at: row.transaction_at ?? null,
             transaction_type: row.transaction_type ?? null,
             reference: row.reference ?? null,
@@ -1036,9 +1105,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
     }
   };
 
-  const handleMessageSubmit = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
+  const handleMessageSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!portalUser || !customer) {
@@ -1046,18 +1113,122 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
       return;
     }
 
-    if (!messageForm.message.trim()) {
-      notify("error", "Please enter a message.");
+    if (!messageForm.message.trim() && !messageAttachment) {
+      notify("error", "Write a message or attach a file first.");
       return;
     }
 
     try {
       setSubmittingMessage(true);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace("/portal/login");
+        return;
+      }
 
+      let attachmentMarker = "";
+
+      if (messageAttachment) {
+        if (messageAttachment.size > 10 * 1024 * 1024) {
+          throw new Error("Attachments must be 10 MB or smaller.");
+        }
+
+        setUploadingAttachment(true);
+        const safeName = messageAttachment.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
+        const path = `${portalUser.company_id}/${customer.id}/${crypto.randomUUID()}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(MESSAGE_ATTACHMENT_BUCKET)
+          .upload(path, messageAttachment, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: messageAttachment.type || undefined,
+          });
+
+        if (uploadError) {
+          throw new Error(
+            `${uploadError.message}. Create the \"${MESSAGE_ATTACHMENT_BUCKET}\" Supabase Storage bucket if it does not exist.`,
+          );
+        }
+
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from(MESSAGE_ATTACHMENT_BUCKET)
+          .createSignedUrl(path, 60 * 60 * 24 * 7);
+
+        if (signedError || !signedData?.signedUrl) {
+          throw new Error(signedError?.message || "Could not create the attachment link.");
+        }
+
+        attachmentMarker = `${ATTACHMENT_START}${JSON.stringify({
+          name: messageAttachment.name,
+          mime: messageAttachment.type || "application/octet-stream",
+          url: signedData.signedUrl,
+        })}${ATTACHMENT_END}`;
+      }
+
+      const body = messageForm.message.trim();
+      const replyPrefix = replyingTo
+        ? `Replying to ${replyingTo.sender_type === "client" ? "your message" : "the account team"}\n\n`
+        : "";
+      const storedMessage = [attachmentMarker, replyPrefix, body].filter(Boolean).join("\n");
+
+      const { error } = await supabase
+        .from("customer_portal_messages")
+        .insert({
+          company_id: portalUser.company_id,
+          customer_id: customer.id,
+          request_id: messageForm.request_id || replyingTo?.request_id || null,
+          sender_user_id: user.id,
+          sender_type: "client",
+          message: storedMessage,
+        });
+
+      if (error) throw new Error(error.message);
+
+      setMessageForm((current) => ({ ...current, message: "", request_id: "" }));
+      setMessageAttachment(null);
+      setReplyingTo(null);
+      setMessageMenuId(null);
+      notify("success", "Message sent.");
+      await loadPortal(true);
+    } catch (error) {
+      notify(
+        "error",
+        error instanceof Error ? error.message : "Unable to send your message.",
+      );
+    } finally {
+      setUploadingAttachment(false);
+      setSubmittingMessage(false);
+    }
+  };
+
+  const handleCopyMessage = async (message: PortalMessage) => {
+    try {
+      const content = parseMessageContent(message.message);
+      await navigator.clipboard.writeText(content.text || message.message);
+      notify("success", "Message copied.");
+    } catch {
+      notify("error", "Could not copy this message.");
+    } finally {
+      setMessageMenuId(null);
+    }
+  };
+
+  const handleReplyMessage = (message: PortalMessage) => {
+    setReplyingTo(message);
+    setMessageMenuId(null);
+    updateTab("messages");
+    window.setTimeout(() => messageComposerRef.current?.focus(), 0);
+  };
+
+  const handleDeleteMessage = async (message: PortalMessage) => {
+    if (message.sender_type !== "client") return;
+    if (!customer) return;
+    if (!window.confirm("Delete this message? This cannot be undone.")) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.replace("/portal/login");
         return;
@@ -1065,39 +1236,34 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
 
       const { error } = await supabase
         .from("customer_portal_messages")
-        .insert({
-          company_id: portalUser.company_id,
-          customer_id: customer.id,
-          request_id: messageForm.request_id || null,
-          sender_user_id: user.id,
-          sender_type: "client",
-          message: messageForm.message.trim(),
-        });
+        .delete()
+        .eq("id", message.id)
+        .eq("customer_id", customer.id)
+        .eq("sender_user_id", user.id);
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      if (error) throw new Error(error.message);
 
-      setMessageForm({
-        request_id: "",
-        message: "",
-      });
-
-      setMessageModalOpen(false);
-
-      notify("success", "Message sent.");
-
-      await loadPortal(true);
+      setMessages((current) => current.filter((item) => item.id !== message.id));
+      setMessageMenuId(null);
+      notify("success", "Message deleted.");
     } catch (error) {
       notify(
         "error",
-        error instanceof Error
-          ? error.message
-          : "Unable to send your message.",
+        error instanceof Error ? error.message : "Unable to delete the message.",
       );
-    } finally {
-      setSubmittingMessage(false);
     }
+  };
+
+  const handleAttachmentChange = (file: File | null) => {
+    if (!file) {
+      setMessageAttachment(null);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      notify("error", "Attachments must be 10 MB or smaller.");
+      return;
+    }
+    setMessageAttachment(file);
   };
 
   const downloadDocument = async (document: PortalDocument) => {
@@ -1509,7 +1675,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
                     <button
                       type="button"
                       className="secondary-button"
-                      onClick={() => setMessageModalOpen(true)}
+                      onClick={() => updateTab("messages")}
                     >
                       Message Us
                     </button>
@@ -2284,58 +2450,114 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           ) : null}
 
           {activeTab === "messages" ? (
-            <section className="card">
-              <div className="card-header">
-                <div>
-                  <h3>Messages</h3>
-                  <p>
-                    Communicate directly with your account team.
-                  </p>
+            <section className="messenger-card">
+              <div className="messenger-header">
+                <div className="messenger-heading">
+                  <div className="messenger-avatar">
+                    {(customer.company_name || customer.name || "A").charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="messenger-title-row">
+                      <h3>Messages</h3>
+                    </div>
+                    <p>Direct conversation with your account team{customer.company_name ? ` · ${customer.company_name}` : ""}</p>
+                  </div>
                 </div>
-
-                {settings?.allow_client_messages !== false ? (
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => setMessageModalOpen(true)}
-                  >
-                    New Message
-                  </button>
-                ) : null}
+                <span className="secure-label">Secure business conversation</span>
               </div>
 
-              {messages.length === 0 ? (
-                <EmptyState
-                  title="No messages"
-                  text="Messages between you and the company will appear here."
-                />
-              ) : (
-                <div className="messages">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={
-                        message.sender_type === "client"
-                          ? "message-row client"
-                          : "message-row company"
-                      }
-                    >
-                      <div className="message-bubble">
-                        <div className="message-author">
-                          {message.sender_type === "client"
-                            ? "You"
-                            : "Company"}
+              <div className="conversation-area">
+                {messages.length === 0 ? (
+                  <div className="conversation-empty">
+                    <div className="conversation-empty-icon"><Send size={20} /></div>
+                    <strong>Start a conversation</strong>
+                    <span>Send a message to your account team. You can also attach documents, images, invoices, or other files.</span>
+                  </div>
+                ) : (
+                  <div className="message-thread">
+                    <div className="thread-day"><span>Conversation</span></div>
+                    {messages.map((message) => {
+                      const parsed = parseMessageContent(message.message);
+                      const isClient = message.sender_type === "client";
+                      return (
+                        <div key={message.id} className={isClient ? "messenger-message-row client" : "messenger-message-row company"}>
+                          {!isClient ? <div className="thread-avatar">{(customer.company_name || "A").charAt(0).toUpperCase()}</div> : null}
+                          <div className="message-stack">
+                            <div className="message-meta-line">
+                              <span>{isClient ? "You" : "Account Team"}</span>
+                              <span>{dateTimeFormat(message.created_at)}</span>
+                            </div>
+                            <div className="message-bubble-wrap">
+                              <div className="messenger-bubble">
+                                {parsed.attachment ? (
+                                  <a href={parsed.attachment.url} target="_blank" rel="noreferrer" className="attachment-card">
+                                    <span className="attachment-icon">{parsed.attachment.mime.startsWith("image/") ? <ImageIcon size={17} /> : <FileText size={17} />}</span>
+                                    <span className="attachment-copy"><strong>{parsed.attachment.name}</strong><small>{parsed.attachment.mime || "Attachment"}</small></span>
+                                    <span className="attachment-open">Open</span>
+                                  </a>
+                                ) : null}
+                                {parsed.text ? <p>{parsed.text}</p> : null}
+                              </div>
+                              <div className="message-menu-wrap">
+                                <button type="button" className="message-menu-button" aria-label="Message actions" onClick={() => setMessageMenuId((current) => current === message.id ? null : message.id)}><MoreVertical size={16} /></button>
+                                {messageMenuId === message.id ? (
+                                  <div className="message-menu">
+                                    <button type="button" onClick={() => void handleCopyMessage(message)}><Copy size={14} />Copy</button>
+                                    <button type="button" onClick={() => handleReplyMessage(message)}><Reply size={14} />Reply</button>
+                                    {isClient ? <button type="button" className="danger-menu-item" onClick={() => void handleDeleteMessage(message)}><Trash2 size={14} />Delete</button> : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-                        <p>{message.message}</p>
-
-                        <span>
-                          {dateFormat(message.created_at)}
-                        </span>
+              {settings?.allow_client_messages !== false ? (
+                <div className="composer-shell">
+                  {replyingTo ? (
+                    <div className="reply-banner">
+                      <div>
+                        <span>Replying to {replyingTo.sender_type === "client" ? "your message" : "the account team"}</span>
+                        <strong>{parseMessageContent(replyingTo.message).text.slice(0, 120) || "Attachment"}</strong>
                       </div>
+                      <button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><X size={16} /></button>
                     </div>
-                  ))}
+                  ) : null}
+
+                  {messageAttachment ? (
+                    <div className="attachment-preview">
+                      <div className="attachment-preview-icon">{messageAttachment.type.startsWith("image/") ? <ImageIcon size={17} /> : <FileText size={17} />}</div>
+                      <div><strong>{messageAttachment.name}</strong><span>{(messageAttachment.size / 1024 / 1024).toFixed(2)} MB</span></div>
+                      <button type="button" onClick={() => setMessageAttachment(null)} aria-label="Remove attachment"><X size={15} /></button>
+                    </div>
+                  ) : null}
+
+                  <form className="messenger-composer" onSubmit={handleMessageSubmit}>
+                    <input ref={messageFileInputRef} type="file" hidden onChange={(event) => { handleAttachmentChange(event.target.files?.[0] || null); event.currentTarget.value = ""; }} />
+                    <button type="button" className="composer-icon-button" onClick={() => messageFileInputRef.current?.click()} disabled={submittingMessage || uploadingAttachment} aria-label="Attach a file"><Paperclip size={19} /></button>
+                    <textarea
+                      ref={messageComposerRef}
+                      value={messageForm.message}
+                      onChange={(event) => setMessageForm((current) => ({ ...current, message: event.target.value }))}
+                      onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
+                      placeholder="Write a message..."
+                      rows={1}
+                      disabled={submittingMessage}
+                    />
+                    <button type="submit" className="send-message-button" disabled={submittingMessage || uploadingAttachment || (!messageForm.message.trim() && !messageAttachment)}>
+                      {submittingMessage ? <span className="send-spinner" /> : <Send size={17} />}
+                      <span>{uploadingAttachment ? "Uploading..." : submittingMessage ? "Sending..." : "Send"}</span>
+                    </button>
+                  </form>
+                  <div className="composer-hint"><span>Press Enter to send · Shift + Enter for a new line</span><span>Max attachment size: 10 MB</span></div>
                 </div>
+              ) : (
+                <div className="messaging-disabled">Messaging is currently disabled for this customer portal.</div>
               )}
             </section>
           ) : null}
@@ -2596,104 +2818,6 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
                   {submittingRequest
                     ? "Submitting..."
                     : "Submit Request"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {messageModalOpen ? (
-        <div
-          className="modal-overlay"
-          onMouseDown={() => setMessageModalOpen(false)}
-        >
-          <div
-            className="modal"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <h3>New Message</h3>
-                <p>Send a message to your account team.</p>
-              </div>
-
-              <button
-                type="button"
-                className="close-button"
-                onClick={() => setMessageModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              className="form"
-              onSubmit={handleMessageSubmit}
-            >
-              <div className="field">
-                <label>Related Request</label>
-                <select
-                  value={messageForm.request_id}
-                  onChange={(event) =>
-                    setMessageForm((current) => ({
-                      ...current,
-                      request_id: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">No specific request</option>
-
-                  {requests
-                    .filter(
-                      (request) =>
-                        !["resolved", "closed", "cancelled"].includes(
-                          request.status.toLowerCase(),
-                        ),
-                    )
-                    .map((request) => (
-                      <option
-                        key={request.id}
-                        value={request.id}
-                      >
-                        {request.subject}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="field">
-                <label>Message</label>
-                <textarea
-                  value={messageForm.message}
-                  onChange={(event) =>
-                    setMessageForm((current) => ({
-                      ...current,
-                      message: event.target.value,
-                    }))
-                  }
-                  placeholder="Write your message..."
-                  rows={7}
-                />
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setMessageModalOpen(false)}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={submittingMessage}
-                >
-                  {submittingMessage
-                    ? "Sending..."
-                    : "Send Message"}
                 </button>
               </div>
             </form>
@@ -3567,52 +3691,73 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           color: #9ca3af;
         }
 
-        .messages {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .message-row {
-          display: flex;
-        }
-
-        .message-row.client {
-          justify-content: flex-end;
-        }
-
-        .message-bubble {
-          max-width: min(720px, 80%);
-          padding: 12px 14px;
-          border-radius: 12px;
-          border: 1px solid #e8eaee;
-          background: #fbfcfe;
-        }
-
-        .message-row.client .message-bubble {
-          background: #111827;
-          color: #ffffff;
-          border-color: #111827;
-        }
-
-        .message-author {
-          font-size: 10px;
-          font-weight: 750;
-          opacity: 0.75;
-        }
-
-        .message-bubble p {
-          margin: 6px 0;
-          font-size: 12px;
-          line-height: 1.6;
-          white-space: pre-wrap;
-        }
-
-        .message-bubble > span {
-          display: block;
-          font-size: 9px;
-          opacity: 0.55;
-        }
+        .messenger-card { display: flex; flex-direction: column; height: calc(100vh - 140px); min-height: 620px; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,.025); }
+        .messenger-header { min-height: 76px; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 20px; border-bottom:1px solid #edf0f3; }
+        .messenger-heading { display:flex; align-items:center; gap:12px; min-width:0; }
+        .messenger-avatar,.thread-avatar { flex:0 0 auto; display:grid; place-items:center; border-radius:50%; background:#111827; color:#fff; font-weight:750; }
+        .messenger-avatar { width:42px; height:42px; font-size:13px; }
+        .thread-avatar { width:30px; height:30px; font-size:10px; margin-top:21px; }
+        .messenger-title-row { display:flex; align-items:center; gap:7px; }
+        .messenger-title-row h3 { margin:0; font-size:15px; }
+        .messenger-heading p { margin:4px 0 0; color:#9ca3af; font-size:11px; }
+        .secure-label { padding:6px 9px; border-radius:999px; background:#f8fafc; color:#9ca3af; font-size:9px; font-weight:700; white-space:nowrap; }
+        .conversation-area { flex:1; min-height:0; overflow-y:auto; background:#f8fafc; }
+        .message-thread { max-width:980px; margin:0 auto; padding:24px 24px 30px; display:flex; flex-direction:column; gap:15px; }
+        .thread-day { display:flex; align-items:center; gap:10px; color:#b0b7c3; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; margin-bottom:3px; }
+        .thread-day::before,.thread-day::after { content:""; height:1px; flex:1; background:#e8ebef; }
+        .messenger-message-row { display:flex; align-items:flex-start; gap:9px; }
+        .messenger-message-row.client { justify-content:flex-end; }
+        .message-stack { max-width:min(720px,78%); min-width:0; }
+        .message-meta-line { display:flex; align-items:center; gap:8px; margin:0 3px 5px; color:#a1a8b3; font-size:9px; }
+        .messenger-message-row.client .message-meta-line { justify-content:flex-end; }
+        .message-bubble-wrap { display:flex; align-items:center; gap:5px; }
+        .messenger-message-row.client .message-bubble-wrap { flex-direction:row-reverse; }
+        .messenger-bubble { min-width:80px; padding:11px 13px; border:1px solid #e5e7eb; border-radius:14px; background:#fff; color:#374151; box-shadow:0 1px 2px rgba(15,23,42,.025); }
+        .messenger-message-row.client .messenger-bubble { border-color:#111827; background:#111827; color:#fff; border-bottom-right-radius:5px; }
+        .messenger-message-row.company .messenger-bubble { border-bottom-left-radius:5px; }
+        .messenger-bubble p { margin:0; font-size:12px; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+        .message-menu-wrap { position:relative; flex:0 0 auto; }
+        .message-menu-button { width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:8px; background:transparent; color:#a1a8b3; cursor:pointer; }
+        .message-menu-button:hover { background:#eef1f4; color:#374151; }
+        .message-menu { position:absolute; right:0; top:32px; z-index:40; min-width:135px; padding:5px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; box-shadow:0 14px 30px rgba(15,23,42,.12); }
+        .message-menu button { width:100%; height:34px; display:flex; align-items:center; gap:8px; padding:0 9px; border:0; border-radius:7px; background:transparent; color:#4b5563; font-size:11px; cursor:pointer; text-align:left; }
+        .message-menu button:hover { background:#f5f7fa; color:#111827; }
+        .message-menu .danger-menu-item { color:#dc2626; }
+        .attachment-card { display:flex; align-items:center; gap:9px; min-width:240px; max-width:390px; padding:8px; margin-bottom:8px; border:1px solid #e6e9ee; border-radius:9px; background:#f8fafc; color:inherit; text-decoration:none; }
+        .messenger-message-row.client .attachment-card { border-color:rgba(255,255,255,.16); background:rgba(255,255,255,.09); }
+        .attachment-icon { width:32px; height:32px; display:grid; place-items:center; flex:0 0 auto; border-radius:8px; background:#fff; color:#4b5563; }
+        .attachment-copy { min-width:0; flex:1; }
+        .attachment-copy strong,.attachment-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .attachment-copy strong { font-size:10px; }
+        .attachment-copy small { margin-top:2px; opacity:.6; font-size:9px; }
+        .attachment-open { flex:0 0 auto; font-size:9px; font-weight:700; opacity:.65; }
+        .conversation-empty { width:min(420px,calc(100% - 40px)); min-height:360px; margin:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+        .conversation-empty-icon { width:48px; height:48px; display:grid; place-items:center; border-radius:14px; background:#111827; color:#fff; margin-bottom:12px; }
+        .conversation-empty strong { color:#111827; font-size:14px; }
+        .conversation-empty span { margin-top:6px; color:#9ca3af; font-size:11px; line-height:1.6; }
+        .composer-shell { padding:12px 16px 10px; border-top:1px solid #e5e7eb; background:#fff; }
+        .reply-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:9px; padding:9px 11px; border:1px solid #e5e7eb; border-left:3px solid #111827; border-radius:9px; background:#f8fafc; }
+        .reply-banner div { min-width:0; }
+        .reply-banner span,.reply-banner strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .reply-banner span { color:#9ca3af; font-size:9px; font-weight:700; text-transform:uppercase; }
+        .reply-banner strong { margin-top:3px; color:#374151; font-size:11px; }
+        .reply-banner button,.attachment-preview button { width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:7px; background:#eef1f4; color:#6b7280; cursor:pointer; }
+        .attachment-preview { display:flex; align-items:center; gap:9px; margin-bottom:9px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:9px; background:#f8fafc; }
+        .attachment-preview-icon { width:30px; height:30px; display:grid; place-items:center; border-radius:7px; background:#fff; color:#4b5563; }
+        .attachment-preview > div:nth-child(2) { flex:1; min-width:0; }
+        .attachment-preview strong,.attachment-preview span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .attachment-preview strong { color:#374151; font-size:10px; }
+        .attachment-preview span { margin-top:2px; color:#9ca3af; font-size:9px; }
+        .messenger-composer { display:flex; align-items:flex-end; gap:8px; max-width:980px; margin:0 auto; padding:7px; border:1px solid #dfe3e8; border-radius:12px; background:#fff; box-shadow:0 2px 8px rgba(15,23,42,.035); }
+        .composer-icon-button { width:38px; height:38px; flex:0 0 auto; display:grid; place-items:center; border:0; border-radius:9px; background:#f3f4f6; color:#4b5563; cursor:pointer; }
+        .composer-icon-button:hover { background:#e9edf1; }
+        .messenger-composer textarea { flex:1; min-width:0; min-height:38px; max-height:130px; padding:9px 3px; border:0; outline:none; resize:none; background:transparent; color:#111827; font-family:inherit; font-size:12px; line-height:1.5; }
+        .send-message-button { min-width:76px; height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px; flex:0 0 auto; border:1px solid #111827; border-radius:9px; background:#111827; color:#fff; font-size:11px; font-weight:700; cursor:pointer; }
+        .send-message-button:hover:not(:disabled) { background:#1f2937; }
+        .send-message-button:disabled { opacity:.5; cursor:not-allowed; }
+        .send-spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; }
+        .composer-hint { max-width:980px; margin:6px auto 0; display:flex; align-items:center; justify-content:space-between; gap:10px; color:#b0b7c3; font-size:8px; }
+        .messaging-disabled { padding:16px; border-top:1px solid #e5e7eb; text-align:center; color:#9ca3af; font-size:11px; }
 
         .toast {
           position: fixed;
@@ -3854,6 +3999,16 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           .form-grid {
             grid-template-columns: 1fr;
           }
+        }
+
+        @media (max-width: 760px) {
+          .messenger-card { height: calc(100vh - 185px); min-height: 560px; }
+          .messenger-header { padding:12px 14px; }
+          .secure-label { display:none; }
+          .message-thread { padding:18px 12px 24px; }
+          .message-stack { max-width:88%; }
+          .composer-shell { padding:10px; }
+          .composer-hint span:last-child { display:none; }
         }
 
         @media (max-width: 520px) {
