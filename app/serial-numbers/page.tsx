@@ -4,7 +4,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
@@ -217,6 +219,15 @@ export default function SerialNumbersPage() {
     useState<WarrantyFilter>("all");
 
   const [page, setPage] = useState(1);
+
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerInput, setScannerInput] = useState("");
+  const [scannerMessage, setScannerMessage] = useState("");
+  const [scannerBusy, setScannerBusy] = useState(false);
+
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerTimerRef = useRef<number | null>(null);
 
   const PAGE_SIZE = 20;
 
@@ -653,6 +664,259 @@ export default function SerialNumbersPage() {
     warrantyFilter,
   ]);
 
+  const stopSerialScanner = useCallback(() => {
+    if (scannerTimerRef.current !== null) {
+      window.clearTimeout(scannerTimerRef.current);
+      scannerTimerRef.current = null;
+    }
+
+    scannerStreamRef.current?.getTracks().forEach((track) => {
+      track.stop();
+    });
+
+    scannerStreamRef.current = null;
+    setScannerBusy(false);
+    setScannerOpen(false);
+  }, []);
+
+  const openSerialDetail = useCallback(
+    async (value: string) => {
+      const scannedValue = value.trim();
+
+      if (!scannedValue) return;
+
+      const normalizedValue = normalize(scannedValue);
+
+      const localMatch = serializedUnits.find(
+        (unit) =>
+          normalize(unit.serial_number) === normalizedValue ||
+          normalize(unit.barcode) === normalizedValue,
+      );
+
+      if (localMatch) {
+        stopSerialScanner();
+        router.push(`/serial-numbers/${localMatch.id}`);
+        return;
+      }
+
+      setScannerMessage("Searching serial number...");
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          throw new Error(userError.message);
+        }
+
+        if (!user) {
+          throw new Error("You must be signed in.");
+        }
+
+        const { data: membership, error: membershipError } =
+          await supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError) {
+          throw new Error(membershipError.message);
+        }
+
+        if (!membership?.company_id) {
+          throw new Error("No company membership found.");
+        }
+
+        const companyId = membership.company_id;
+
+        const { data: serialMatch, error: serialError } =
+          await supabase
+            .from("serialized_units")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("serial_number", scannedValue)
+            .limit(1)
+            .maybeSingle();
+
+        if (serialError) {
+          throw new Error(serialError.message);
+        }
+
+        if (serialMatch?.id) {
+          stopSerialScanner();
+          router.push(`/serial-numbers/${serialMatch.id}`);
+          return;
+        }
+
+        const { data: barcodeMatch, error: barcodeError } =
+          await supabase
+            .from("serialized_units")
+            .select("id")
+            .eq("company_id", companyId)
+            .eq("barcode", scannedValue)
+            .limit(1)
+            .maybeSingle();
+
+        if (barcodeError) {
+          throw new Error(barcodeError.message);
+        }
+
+        if (barcodeMatch?.id) {
+          stopSerialScanner();
+          router.push(`/serial-numbers/${barcodeMatch.id}`);
+          return;
+        }
+
+        setScannerMessage(`Serial or barcode "${scannedValue}" was not found.`);
+      } catch (error) {
+        console.error(error);
+
+        setScannerMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to find this serial number.",
+        );
+      }
+    },
+    [router, serializedUnits, stopSerialScanner, supabase],
+  );
+
+  const startSerialScanner = async () => {
+    setScannerMessage("");
+    setScannerInput("");
+    setScannerOpen(true);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScannerMessage(
+        "Camera scanning is unavailable in this browser. Use the scanner input below.",
+      );
+      return;
+    }
+
+    try {
+      setScannerBusy(true);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+        audio: false,
+      });
+
+      scannerStreamRef.current = stream;
+
+      if (scannerVideoRef.current) {
+        scannerVideoRef.current.srcObject = stream;
+        await scannerVideoRef.current.play();
+      }
+
+      const BarcodeDetectorClass = (
+        window as Window & {
+          BarcodeDetector?: new (options?: {
+            formats?: string[];
+          }) => {
+            detect: (
+              source: HTMLVideoElement,
+            ) => Promise<Array<{ rawValue?: string }>>;
+          };
+        }
+      ).BarcodeDetector;
+
+      if (!BarcodeDetectorClass) {
+        setScannerBusy(false);
+        setScannerMessage(
+          "Automatic camera barcode detection is not supported in this browser. Use the scanner input below.",
+        );
+        return;
+      }
+
+      const detector = new BarcodeDetectorClass({
+        formats: [
+          "code_128",
+          "code_39",
+          "code_93",
+          "codabar",
+          "data_matrix",
+          "qr_code",
+          "ean_13",
+          "ean_8",
+          "upc_a",
+          "upc_e",
+        ],
+      });
+
+      const scan = async () => {
+        if (!scannerVideoRef.current || !scannerStreamRef.current) {
+          return;
+        }
+
+        try {
+          const detections = await detector.detect(
+            scannerVideoRef.current,
+          );
+
+          const value = detections[0]?.rawValue?.trim();
+
+          if (value) {
+            await openSerialDetail(value);
+            return;
+          }
+        } catch (error) {
+          console.error(error);
+        }
+
+        scannerTimerRef.current = window.setTimeout(() => {
+          void scan();
+        }, 250);
+      };
+
+      void scan();
+    } catch (error) {
+      console.error(error);
+
+      setScannerBusy(false);
+
+      setScannerMessage(
+        error instanceof DOMException && error.name === "NotAllowedError"
+          ? "Camera permission was denied. Use the scanner input below."
+          : "Unable to start the camera. Use the scanner input below.",
+      );
+    }
+  };
+
+  const submitSerialScannerInput = async () => {
+    const value = scannerInput.trim();
+
+    if (!value) return;
+
+    await openSerialDetail(value);
+  };
+
+  const handleSerialScannerKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void submitSerialScannerInput();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scannerTimerRef.current !== null) {
+        window.clearTimeout(scannerTimerRef.current);
+      }
+
+      scannerStreamRef.current?.getTracks().forEach((track) => {
+        track.stop();
+      });
+    };
+  }, []);
+
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
@@ -684,6 +948,15 @@ export default function SerialNumbersPage() {
           </div>
 
           <div className="header-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void startSerialScanner()}
+            >
+              <span className="scan-button-icon">⌁</span>
+              Scan Serial
+            </button>
+
             <button
               type="button"
               className="secondary-button"
@@ -1355,6 +1628,106 @@ export default function SerialNumbersPage() {
         </div>
       </div>
 
+      {scannerOpen && (
+        <div
+          className="scanner-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Scan serial number"
+        >
+          <div className="scanner-dialog">
+            <div className="scanner-header">
+              <div>
+                <div className="scanner-eyebrow">
+                  SERIAL NUMBER
+                </div>
+
+                <h2>Scan Serial Number</h2>
+
+                <p>
+                  Scan the laptop barcode or serial number.
+                  When found, the matching asset details will
+                  open automatically.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button scanner-close"
+                onClick={stopSerialScanner}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="scanner-camera">
+              <video
+                ref={scannerVideoRef}
+                muted
+                playsInline
+                autoPlay
+              />
+
+              <div className="scanner-frame">
+                <span />
+              </div>
+
+              {!scannerBusy && !scannerMessage && (
+                <div className="scanner-camera-hint">
+                  Camera ready
+                </div>
+              )}
+            </div>
+
+            <div className="scanner-fallback">
+              <strong>
+                USB / Bluetooth Scanner
+              </strong>
+
+              <span>
+                You can also scan directly into this field.
+                Most barcode scanners behave like a keyboard
+                and finish with Enter.
+              </span>
+
+              <div className="scanner-input-row">
+                <input
+                  autoFocus
+                  value={scannerInput}
+                  onChange={(event) =>
+                    setScannerInput(event.target.value)
+                  }
+                  onKeyDown={handleSerialScannerKeyDown}
+                  placeholder="Scan or enter serial number..."
+                />
+
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() =>
+                    void submitSerialScannerInput()
+                  }
+                >
+                  Open Asset
+                </button>
+              </div>
+            </div>
+
+            {scannerMessage && (
+              <div className="scanner-message">
+                {scannerMessage}
+              </div>
+            )}
+
+            {scannerBusy && !scannerMessage && (
+              <div className="scanner-status">
+                Point the camera at the barcode...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         .serial-page {
           padding-bottom: 40px;
@@ -1439,6 +1812,218 @@ export default function SerialNumbersPage() {
         .secondary-button:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+
+        .primary-button {
+          border: 1px solid #166534;
+          background: #166534;
+          color: white;
+          box-shadow: 0 1px 2px rgba(22, 101, 52, 0.12);
+        }
+
+        .primary-button:hover {
+          background: #14532d;
+          border-color: #14532d;
+        }
+
+        .scan-button-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          border-radius: 5px;
+          font-size: 13px;
+          line-height: 1;
+        }
+
+        .scanner-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(15, 23, 42, 0.68);
+          backdrop-filter: blur(5px);
+        }
+
+        .scanner-dialog {
+          width: min(620px, 100%);
+          max-height: calc(100vh - 40px);
+          overflow-y: auto;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          background: white;
+          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+        }
+
+        .scanner-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 20px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .scanner-eyebrow {
+          margin-bottom: 5px;
+          color: #166534;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+        }
+
+        .scanner-header h2 {
+          margin: 0;
+          color: #0f172a;
+          font-size: 19px;
+          font-weight: 750;
+        }
+
+        .scanner-header p {
+          max-width: 440px;
+          margin: 6px 0 0;
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .scanner-close {
+          flex-shrink: 0;
+        }
+
+        .scanner-camera {
+          position: relative;
+          margin: 20px;
+          overflow: hidden;
+          aspect-ratio: 16 / 10;
+          border-radius: 12px;
+          background: #020617;
+        }
+
+        .scanner-camera video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .scanner-frame {
+          position: absolute;
+          inset: 18% 10%;
+          border: 2px solid rgba(255, 255, 255, 0.9);
+          border-radius: 10px;
+          pointer-events: none;
+        }
+
+        .scanner-frame::before,
+        .scanner-frame::after,
+        .scanner-frame span::before,
+        .scanner-frame span::after {
+          position: absolute;
+          width: 25px;
+          height: 25px;
+          content: "";
+        }
+
+        .scanner-frame::before {
+          top: -2px;
+          left: -2px;
+          border-top: 3px solid #22c55e;
+          border-left: 3px solid #22c55e;
+        }
+
+        .scanner-frame::after {
+          top: -2px;
+          right: -2px;
+          border-top: 3px solid #22c55e;
+          border-right: 3px solid #22c55e;
+        }
+
+        .scanner-frame span::before {
+          bottom: -2px;
+          left: -2px;
+          border-bottom: 3px solid #22c55e;
+          border-left: 3px solid #22c55e;
+        }
+
+        .scanner-frame span::after {
+          right: -2px;
+          bottom: -2px;
+          border-right: 3px solid #22c55e;
+          border-bottom: 3px solid #22c55e;
+        }
+
+        .scanner-camera-hint {
+          position: absolute;
+          left: 50%;
+          bottom: 13px;
+          transform: translateX(-50%);
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(2, 6, 23, 0.72);
+          color: white;
+          font-size: 10px;
+        }
+
+        .scanner-fallback {
+          margin: 0 20px 20px;
+          padding: 15px;
+          border: 1px solid #e5e7eb;
+          border-radius: 11px;
+          background: #f8fafc;
+        }
+
+        .scanner-fallback strong {
+          display: block;
+          color: #334155;
+          font-size: 12px;
+        }
+
+        .scanner-fallback > span {
+          display: block;
+          margin-top: 4px;
+          color: #94a3b8;
+          font-size: 11px;
+          line-height: 1.5;
+        }
+
+        .scanner-input-row {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .scanner-input-row input {
+          min-width: 0;
+          flex: 1;
+          height: 40px;
+          padding: 0 12px;
+          border: 1px solid #dbe1e8;
+          border-radius: 9px;
+          outline: none;
+          background: white;
+          color: #334155;
+          font-size: 13px;
+        }
+
+        .scanner-input-row input:focus {
+          border-color: #86a98f;
+          box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.08);
+        }
+
+        .scanner-message,
+        .scanner-status {
+          margin: 0 20px 20px;
+          padding: 11px 13px;
+          border-radius: 9px;
+          background: #f0fdf4;
+          color: #166534;
+          font-size: 11px;
+          line-height: 1.5;
         }
 
         .error-card {
@@ -2066,6 +2651,38 @@ export default function SerialNumbersPage() {
         @keyframes spin {
           to {
             transform: rotate(360deg);
+          }
+        }
+
+        @media (max-width: 600px) {
+          .scanner-overlay {
+            align-items: flex-end;
+            padding: 0;
+          }
+
+          .scanner-dialog {
+            max-height: 94vh;
+            border-radius: 18px 18px 0 0;
+          }
+
+          .scanner-header {
+            padding: 17px;
+          }
+
+          .scanner-camera {
+            margin: 15px;
+          }
+
+          .scanner-fallback {
+            margin: 0 15px 15px;
+          }
+
+          .scanner-input-row {
+            flex-direction: column;
+          }
+
+          .scanner-input-row button {
+            width: 100%;
           }
         }
 

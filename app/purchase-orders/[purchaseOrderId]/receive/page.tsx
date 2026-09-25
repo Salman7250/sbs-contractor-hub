@@ -229,6 +229,12 @@ export default function ReceivePurchaseOrderPage() {
   const [scannerMessage, setScannerMessage] = useState("");
   const [scannerInput, setScannerInput] = useState("");
   const [labelsReady, setLabelsReady] = useState(false);
+  const [printLabels, setPrintLabels] = useState<
+  Array<{
+    item: PurchaseOrderItem;
+    serial: string;
+  }>
+>([]);
   const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
   const scannerStreamRef = useRef<MediaStream | null>(null);
   const scannerTimerRef = useRef<number | null>(null);
@@ -799,8 +805,222 @@ export default function ReceivePurchaseOrderPage() {
   };
 
   const prepareLabels = () => {
-    setLabelsReady(true);
-    window.setTimeout(() => window.print(), 150);
+    if (!printLabels.length) return;
+
+    const buildBarcodeSvg = (value: string) => {
+      const svg = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg"
+      );
+
+      JsBarcode(svg, value, {
+        format: "CODE128",
+        displayValue: false,
+        height: 34,
+        margin: 0,
+        width: 1.35,
+      });
+
+      svg.setAttribute("class", "label-barcode");
+      svg.setAttribute("aria-label", `Barcode ${value}`);
+      return svg.outerHTML;
+    };
+
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+    const labelsHtml = printLabels
+      .map(({ item, serial }) => {
+        const productName = escapeHtml(item.product_name || "Product");
+        const variantName = item.variant_name
+          ? escapeHtml(item.variant_name)
+          : "";
+        const sku = item.sku ? escapeHtml(item.sku) : "";
+        const batch = escapeHtml(batchNumber);
+        const safeSerial = escapeHtml(serial);
+        const barcodeSvg = buildBarcodeSvg(serial);
+
+        return `
+          <div class="print-label">
+            <div class="label-product">${productName}</div>
+            ${variantName ? `<div class="label-variant">${variantName}</div>` : ""}
+            ${sku ? `<div class="label-sku">SKU: ${sku}</div>` : ""}
+            <div class="label-batch">Batch: ${batch}</div>
+            <div class="label-serial">${safeSerial}</div>
+            ${barcodeSvg}
+          </div>
+        `;
+      })
+      .join("");
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.left = "-10000px";
+    iframe.style.top = "-10000px";
+
+    document.body.appendChild(iframe);
+
+    const cleanup = () => {
+      window.setTimeout(() => iframe.remove(), 1000);
+    };
+
+    const printFrame = () => {
+      const frameWindow = iframe.contentWindow;
+
+      if (!frameWindow) {
+        cleanup();
+        window.alert("Unable to prepare the label printer.");
+        return;
+      }
+
+      frameWindow.focus();
+      frameWindow.print();
+      cleanup();
+    };
+
+    const frameDocument = iframe.contentDocument;
+
+    if (!frameDocument) {
+      cleanup();
+      window.alert("Unable to prepare the label printer.");
+      return;
+    }
+
+    frameDocument.open();
+    frameDocument.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title></title>
+          <style>
+            @page {
+              size: 3.2in 1.25in;
+              margin: 0;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            html,
+            body {
+              width: 3.2in;
+              height: 1.25in;
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+            }
+
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+            }
+
+            .print-label {
+              display: flex;
+              box-sizing: border-box;
+              width: 3.2in;
+              height: 1.25in;
+              min-height: 1.25in;
+              max-height: 1.25in;
+              margin: 0;
+              padding: 0.07in 0.10in;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 2px;
+              overflow: hidden;
+              background: #ffffff;
+              color: #111827;
+              text-align: center;
+              border: 0;
+              break-after: page;
+              page-break-after: always;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .print-label:last-child {
+              break-after: auto;
+              page-break-after: auto;
+            }
+
+            .label-product {
+              width: 100%;
+              overflow: hidden;
+              color: #111827;
+              font-size: 8.5pt;
+              font-weight: 800;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-variant,
+            .label-sku,
+            .label-batch {
+              width: 100%;
+              overflow: hidden;
+              color: #374151;
+              font-size: 6.5pt;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-serial {
+              width: 100%;
+              overflow: hidden;
+              color: #111827;
+              font-size: 7.5pt;
+              font-weight: 800;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-barcode {
+              display: block;
+              width: 2.65in;
+              height: 0.34in;
+              max-width: 100%;
+              margin: 2px auto 0;
+            }
+
+            @media print {
+              html,
+              body {
+                width: 3.2in !important;
+                height: 1.25in !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+
+              .print-label {
+                width: 3.2in !important;
+                height: 1.25in !important;
+                min-height: 1.25in !important;
+                max-height: 1.25in !important;
+                margin: 0 !important;
+              }
+            }
+          </style>
+        </head>
+        <body>${labelsHtml}</body>
+      </html>
+    `);
+    frameDocument.close();
+
+    window.setTimeout(printFrame, 350);
   };
 
   useEffect(() => {
@@ -1833,10 +2053,29 @@ export default function ReceivePurchaseOrderPage() {
         }
       }
 
-      setSuccessMessage(
-        "Purchase order received successfully."
-      );
-      setLabelsReady(true);
+      const generatedLabels = itemsToReceive.flatMap((receivedItem) => {
+  const sourceItem = items.find(
+    (item) =>
+      item.id === receivedItem?.purchase_order_item_id
+  );
+
+  if (!sourceItem) {
+    return [];
+  }
+
+  return (receivedItem?.serial_numbers || []).map((serial) => ({
+    item: sourceItem,
+    serial,
+  }));
+});
+
+setPrintLabels(generatedLabels);
+
+setSuccessMessage(
+  "Purchase order received successfully."
+);
+
+setLabelsReady(generatedLabels.length > 0);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -3086,29 +3325,54 @@ export default function ReceivePurchaseOrderPage() {
           </div>
         )}
 
-        <div className="print-label-sheet" aria-hidden="true">
-          {activeItems.flatMap((item) => {
-            const line = receiveLines[item.id];
-            if (!line) return [];
-            return parseSerialText(line.serialText).map((serial) => (
-              <div className="print-label" key={`${item.id}-${serial}`}>
-                <strong>SHARIF BUSINESS SOLUTIONS</strong>
-                <span>{item.product_name}</span>
-                <span>{item.variant_name || ""}</span>
-                {item.sku ? <span>SKU: {item.sku}</span> : null}
-                {item.description ? <span>{item.description}</span> : null}
-                <span>Batch: {batchNumber}</span>
-                <b>S/N: {serial}</b>
-                <svg
-                  className="label-barcode"
-                  data-receiving-barcode={serial}
-                  aria-label={`Barcode ${serial}`}
-                />
-                <span>{serial}</span>
-              </div>
-            ));
-          })}
-        </div>
+       <div className="print-label-sheet" aria-hidden="true">
+  {printLabels.map(({ item, serial }) => (
+    <div
+      className="print-label"
+      key={`${item.id}-${serial}`}
+    >
+      <strong>SHARIF BUSINESS SOLUTIONS</strong>
+
+      <span>
+        {item.product_name}
+      </span>
+
+      {item.variant_name ? (
+        <span>{item.variant_name}</span>
+      ) : null}
+
+      {item.sku ? (
+        <span>
+          SKU: {item.sku}
+        </span>
+      ) : null}
+
+      {item.description ? (
+        <span>
+          {item.description}
+        </span>
+      ) : null}
+
+      <span>
+        Batch: {batchNumber}
+      </span>
+
+      <b>
+        S/N: {serial}
+      </b>
+
+      <svg
+        className="label-barcode"
+        data-receiving-barcode={serial}
+        aria-label={`Barcode ${serial}`}
+      />
+
+      <span>
+        {serial}
+      </span>
+    </div>
+  ))}
+</div>
 
         <style jsx>{`
           .page-content {
@@ -4107,24 +4371,8 @@ export default function ReceivePurchaseOrderPage() {
           }
 
           @media print {
-            body :global(*) {
-              visibility: hidden;
-            }
-
-            .print-label-sheet,
-            .print-label-sheet * {
-              visibility: visible;
-            }
-
             .print-label-sheet {
-              display: grid;
-              grid-template-columns: repeat(2, 3.2in);
-              gap: 0.2in;
-              padding: 0.2in;
-            }
-
-            .print-label {
-              break-inside: avoid;
+              display: none !important;
             }
           }
         `}</style>
