@@ -1,312 +1,527 @@
 .passwordPage {
-  --green-950: #123d2d;
-  --green-900: #164b36;
-  --green-800: #1b5d42;
-  --green-700: #237653;
-  --green-600: #2d8b62;
-  --green-500: #43a976;
-  --green-100: #e8f5ee;
-  --green-50: #f2faf5;
+  --sbs-green: #168a52;
+  --sbs-green-dark: #0d633b;
+  --sbs-green-deep: #08472c;
+  --sbs-green-light: #e9f7ef;
+  --sbs-text: #12251c;
+  --sbs-muted: #718078;
+  --sbs-border: #e4ebe7;
+  --sbs-bg: #f5f8f6;
 
-  --ink: #17221d;
-  --muted: #6d7872;
-  --border: #dfe6e1;
-  --surface: #ffffff;
-  --page: #f6f8f6;
-
-  min-height: 100vh;
   position: relative;
+  min-height: 100vh;
   overflow: hidden;
   background:
     radial-gradient(
-      circle at 8% 12%,
-      rgba(67, 169, 118, 0.11),
+      circle at 12% 15%,
+      rgba(22, 138, 82, 0.07),
       transparent 28%
     ),
     radial-gradient(
-      circle at 91% 85%,
-      rgba(35, 118, 83, 0.08),
+      circle at 90% 80%,
+      rgba(22, 138, 82, 0.06),
       transparent 30%
     ),
-    var(--page);
-  color: var(--ink);
+    var(--sbs-bg);
+  color: var(--sbs-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
-.backgroundPaper {
+/* =========================================================
+   BACKGROUND
+   ========================================================= */
+
+.passwordBackground {
   position: absolute;
   inset: 0;
-  pointer-events: none;
+  z-index: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
-.backgroundCircle {
+.paper {
   position: absolute;
-  width: 620px;
-  height: 620px;
-  right: -280px;
-  top: -260px;
-  border: 1px solid rgba(35, 118, 83, 0.08);
-  border-radius: 50%;
+  border: 1px solid rgba(22, 138, 82, 0.08);
+  border-radius: 36px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 30px 80px rgba(14, 53, 35, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transform: rotate(-8deg);
 }
 
-.backgroundCircle::after {
-  content: "";
-  position: absolute;
-  inset: 55px;
-  border: 1px solid rgba(35, 118, 83, 0.055);
-  border-radius: 50%;
+.paperOne {
+  width: 460px;
+  height: 560px;
+  top: -250px;
+  left: -210px;
 }
 
-.backgroundDots {
+.paperTwo {
+  width: 360px;
+  height: 430px;
+  top: 110px;
+  right: -180px;
+  transform: rotate(12deg);
+}
+
+.paperThree {
+  width: 300px;
+  height: 360px;
+  bottom: -250px;
+  left: 37%;
+  transform: rotate(18deg);
+}
+
+.circle {
   position: absolute;
-  width: 180px;
-  height: 180px;
-  left: 4%;
-  bottom: 4%;
-  opacity: 0.35;
+  border: 1px solid rgba(22, 138, 82, 0.1);
+  border-radius: 999px;
+  background: rgba(22, 138, 82, 0.025);
+}
+
+.circleOne {
+  width: 420px;
+  height: 420px;
+  right: -210px;
+  bottom: -190px;
+}
+
+.circleTwo {
+  width: 220px;
+  height: 220px;
+  top: -140px;
+  left: 43%;
+}
+
+.dotField {
+  position: absolute;
+  width: 170px;
+  height: 110px;
+  opacity: 0.3;
   background-image: radial-gradient(
-    rgba(35, 118, 83, 0.24) 1px,
+    rgba(22, 138, 82, 0.32) 1px,
     transparent 1px
   );
   background-size: 14px 14px;
-  mask-image: linear-gradient(
-    135deg,
-    black,
-    transparent 75%
-  );
 }
 
-.backgroundCurve {
+.dotFieldOne {
+  bottom: 8%;
+  left: 5%;
+  transform: rotate(-12deg);
+}
+
+.dotFieldTwo {
+  top: 7%;
+  right: 4%;
+  transform: rotate(12deg);
+}
+
+.curve {
   position: absolute;
-  width: 440px;
-  height: 440px;
-  left: -300px;
-  top: 38%;
-  border: 1px solid rgba(35, 118, 83, 0.07);
-  border-radius: 50%;
+  width: 360px;
+  height: 160px;
+  border: 1px solid rgba(22, 138, 82, 0.09);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0 100% 0 0;
+  transform: rotate(-20deg);
 }
 
-.container {
+.curveOne {
+  top: 48%;
+  left: -130px;
+}
+
+.curveTwo {
+  right: -150px;
+  bottom: 30%;
+  transform: rotate(160deg);
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.passwordHeader {
   position: relative;
-  z-index: 1;
+  z-index: 5;
   width: min(1240px, calc(100% - 48px));
-  min-height: 100vh;
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
+  padding: 28px 0;
 }
 
-/* Header */
-
-.header {
-  height: 92px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.logo {
+.brand {
   display: inline-flex;
   align-items: center;
+  gap: 13px;
+  color: inherit;
   text-decoration: none;
 }
 
-.logoImage {
-  width: 148px;
-  height: auto;
+.brandLogo {
   display: block;
+  width: auto;
+  height: 43px;
+  max-width: 190px;
+  object-fit: contain;
 }
 
-.headerLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  color: #748079;
-  font-size: 12px;
-  font-weight: 600;
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brandName {
+  color: #153126;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+}
+
+.brandTagline {
+  color: #829087;
+  font-size: 10px;
+  font-weight: 500;
   letter-spacing: 0.04em;
 }
 
-.headerDot {
+/* =========================================================
+   MAIN
+   ========================================================= */
+
+.passwordContent {
+  position: relative;
+  z-index: 2;
+  width: min(1240px, calc(100% - 48px));
+  min-height: calc(100vh - 165px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(390px, 490px);
+  align-items: center;
+  gap: clamp(60px, 8vw, 125px);
+  padding: 42px 0 70px;
+}
+
+/* =========================================================
+   LEFT SIDE
+   ========================================================= */
+
+.passwordIntro {
+  max-width: 650px;
+}
+
+.welcomePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding: 8px 13px;
+  border: 1px solid rgba(22, 138, 82, 0.13);
+  border-radius: 999px;
+  background: rgba(233, 247, 239, 0.78);
+  color: var(--sbs-green-dark);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 6px 20px rgba(22, 138, 82, 0.05);
+}
+
+.welcomeDot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--green-500);
-  box-shadow: 0 0 0 4px rgba(67, 169, 118, 0.1);
+  background: var(--sbs-green);
+  box-shadow:
+    0 0 0 4px rgba(22, 138, 82, 0.1);
 }
 
-/* Main */
-
-.main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 500px);
-  gap: clamp(60px, 8vw, 130px);
-  align-items: center;
-  padding: 48px 0 72px;
-}
-
-/* Left content */
-
-.intro {
-  max-width: 620px;
-  padding-bottom: 18px;
-}
-
-.introEyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 23px;
-  color: var(--green-700);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.introEyebrowLine {
-  width: 26px;
-  height: 1px;
-  background: var(--green-500);
-}
-
-.introTitle {
-  max-width: 620px;
+.passwordIntro h1 {
   margin: 0;
-  color: var(--ink);
+  color: #10271c;
   font-size: clamp(42px, 5vw, 68px);
-  line-height: 0.99;
+  font-weight: 800;
   letter-spacing: -0.055em;
-  font-weight: 760;
+  line-height: 0.98;
 }
 
-.introTitleAccent {
-  color: var(--green-700);
+.passwordIntro h1 span {
+  color: var(--sbs-green);
 }
 
 .introDescription {
-  max-width: 530px;
-  margin: 26px 0 0;
-  color: var(--muted);
+  max-width: 590px;
+  margin: 27px 0 0;
+  color: #68766f;
   font-size: 16px;
   line-height: 1.75;
 }
 
-/* Steps */
+/* =========================================================
+   SETUP STEPS
+   ========================================================= */
 
-.steps {
+.setupSteps {
   display: grid;
-  gap: 14px;
-  margin-top: 40px;
-  max-width: 520px;
+  gap: 0;
+  max-width: 610px;
+  margin-top: 34px;
 }
 
-.step {
+.setupStep {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 14px;
+  min-height: 48px;
 }
 
-.stepNumber {
-  width: 31px;
-  height: 31px;
+.stepIcon {
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid rgba(35, 118, 83, 0.18);
-  border-radius: 50%;
+  border: 1px solid rgba(20, 53, 37, 0.08);
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.72);
-  color: var(--green-700);
-  font-size: 11px;
-  font-weight: 800;
+  color: #8a9790;
+}
+
+.stepIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.stepIconActive {
+  border-color: rgba(22, 138, 82, 0.14);
+  background: var(--sbs-green-light);
+  color: var(--sbs-green-dark);
+}
+
+.stepIconCurrent {
+  border-color: rgba(22, 138, 82, 0.18);
+  background: rgba(233, 247, 239, 0.9);
+  color: var(--sbs-green);
+  box-shadow:
+    0 0 0 4px rgba(22, 138, 82, 0.05);
 }
 
 .stepText {
-  color: #526059;
-  font-size: 13px;
-  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.quote {
-  margin: 40px 0 0;
-  padding-left: 17px;
-  border-left: 2px solid rgba(67, 169, 118, 0.45);
-  color: #7b857f;
+.stepText strong {
+  color: #21362c;
   font-size: 12px;
-  line-height: 1.65;
+  font-weight: 750;
 }
 
-/* Card */
+.stepText span {
+  color: #87928c;
+  font-size: 10px;
+  line-height: 1.4;
+}
 
-.card {
+.setupLine {
+  width: 1px;
+  height: 17px;
+  margin-left: 19px;
+  background: rgba(22, 138, 82, 0.14);
+}
+
+/* =========================================================
+   QUOTE
+   ========================================================= */
+
+.loginQuote {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 550px;
+  margin-top: 38px;
+  padding-left: 3px;
+}
+
+.quoteMark {
+  margin-top: -4px;
+  color: rgba(22, 138, 82, 0.55);
+  font-family: Georgia, serif;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.loginQuote p {
+  margin: 0;
+  color: #5f6e66;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.6;
+}
+
+.loginQuote span {
+  display: block;
+  margin-top: 7px;
+  color: #9aa49f;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* =========================================================
+   PASSWORD CARD
+   ========================================================= */
+
+.passwordCard {
+  position: relative;
   width: 100%;
-  padding: 38px;
-  border: 1px solid rgba(214, 224, 218, 0.9);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.94);
+  overflow: hidden;
+  border: 1px solid rgba(19, 51, 35, 0.08);
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.91);
   box-shadow:
-    0 28px 70px rgba(25, 52, 39, 0.09),
-    0 8px 25px rgba(25, 52, 39, 0.045);
-  backdrop-filter: blur(16px);
+    0 35px 90px rgba(15, 45, 31, 0.1),
+    0 8px 25px rgba(15, 45, 31, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
-.cardHeader {
-  margin-bottom: 30px;
+.cardAccent {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    #0e6c3f,
+    #1ba561,
+    #65c88f
+  );
+}
+
+.passwordCardContent {
+  padding: 42px 42px 35px;
+}
+
+.cardBrand {
+  display: flex;
+  align-items: center;
+  min-height: 47px;
+  margin-bottom: 20px;
 }
 
 .cardLogo {
-  width: 122px;
-  height: auto;
   display: block;
+  width: auto;
+  height: 48px;
+  max-width: 190px;
+  object-fit: contain;
+}
+
+/* =========================================================
+   PASSWORD ICON
+   ========================================================= */
+
+.passwordIconArea {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 17px;
+}
+
+.passwordIconRing {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(22, 138, 82, 0.13);
+  border-radius: 14px;
+  background: var(--sbs-green-light);
+}
+
+.passwordIcon {
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sbs-green-dark);
+}
+
+.passwordIcon svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* =========================================================
+   CARD HEADING
+   ========================================================= */
+
+.passwordHeading {
   margin-bottom: 27px;
 }
 
-.cardEyebrow {
-  margin-bottom: 9px;
-  color: var(--green-700);
+.passwordEyebrow {
+  margin-bottom: 7px;
+  color: var(--sbs-green-dark);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
-.cardTitle {
+.passwordHeading h2 {
   margin: 0;
-  color: var(--ink);
+  color: #142a20;
   font-size: 29px;
-  line-height: 1.12;
+  font-weight: 800;
   letter-spacing: -0.035em;
-  font-weight: 740;
+  line-height: 1.15;
 }
 
-.cardDescription {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
+.passwordHeading p {
+  max-width: 360px;
+  margin: 9px 0 0;
+  color: #85918b;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
-/* Form */
+/* =========================================================
+   FORM
+   ========================================================= */
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 21px;
+  gap: 19px;
 }
 
 .fieldGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin: 0;
 }
 
 .label {
-  color: #334039;
-  font-size: 12px;
-  font-weight: 700;
+  display: block;
+  margin-bottom: 8px;
+  color: #304238;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .inputWrapper {
@@ -317,14 +532,14 @@
 
 .inputIcon {
   position: absolute;
-  left: 15px;
+  left: 14px;
   z-index: 1;
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #839089;
+  color: #8b9891;
   pointer-events: none;
 }
 
@@ -335,15 +550,16 @@
 
 .input {
   width: 100%;
-  height: 50px;
-  padding: 0 48px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
+  height: 48px;
+  padding: 0 43px;
+  border: 1px solid #e2e9e5;
+  border-radius: 12px;
   outline: none;
   background: #fbfcfb;
-  color: var(--ink);
+  color: #172b21;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
+  box-sizing: border-box;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -351,53 +567,53 @@
 }
 
 .input::placeholder {
-  color: #a5ada8;
+  color: #aab3ae;
 }
 
 .input:hover:not(:disabled) {
-  border-color: #cbd6cf;
+  border-color: #d3ddd7;
   background: #ffffff;
 }
 
 .input:focus {
-  border-color: rgba(35, 118, 83, 0.62);
+  border-color: rgba(22, 138, 82, 0.65);
   background: #ffffff;
   box-shadow:
-    0 0 0 3px rgba(67, 169, 118, 0.11);
+    0 0 0 3px rgba(22, 138, 82, 0.09),
+    0 6px 18px rgba(22, 138, 82, 0.035);
 }
 
 .input:disabled {
   cursor: not-allowed;
-  opacity: 0.68;
+  opacity: 0.65;
 }
 
 .passwordToggle {
   position: absolute;
-  right: 12px;
-  width: 31px;
-  height: 31px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
-  color: #87928c;
+  color: #8b9891;
   cursor: pointer;
   transition:
-    color 150ms ease,
-    background 150ms ease;
+    background 150ms ease,
+    color 150ms ease;
 }
 
 .passwordToggle:hover:not(:disabled) {
-  color: var(--green-700);
-  background: var(--green-50);
+  background: #edf6f1;
+  color: var(--sbs-green-dark);
 }
 
 .passwordToggle:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .passwordToggle svg {
@@ -405,12 +621,14 @@
   height: 17px;
 }
 
-/* Requirements */
+/* =========================================================
+   PASSWORD REQUIREMENTS
+   ========================================================= */
 
 .requirements {
   display: flex;
   gap: 18px;
-  margin-top: 1px;
+  margin-top: 8px;
 }
 
 .requirement {
@@ -418,13 +636,13 @@
   align-items: center;
   gap: 6px;
   color: #929c96;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.3;
   transition: color 150ms ease;
 }
 
 .requirementValid {
-  color: var(--green-700);
+  color: var(--sbs-green-dark);
 }
 
 .requirementIcon {
@@ -438,7 +656,9 @@
   font-weight: 800;
 }
 
-/* Error */
+/* =========================================================
+   ERROR
+   ========================================================= */
 
 .error {
   display: flex;
@@ -449,7 +669,7 @@
   border-radius: 10px;
   background: #fff7f5;
   color: #a34d42;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -467,31 +687,33 @@
   font-weight: 800;
 }
 
-/* Submit */
+/* =========================================================
+   SUBMIT BUTTON
+   ========================================================= */
 
 .submitButton {
   width: 100%;
-  min-height: 51px;
+  min-height: 49px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-top: 2px;
+  margin-top: 1px;
   padding: 0 18px;
   border: 0;
   border-radius: 11px;
   background: linear-gradient(
     135deg,
-    var(--green-700),
-    var(--green-600)
+    #0e6c3f,
+    #1ba561
   );
   color: #ffffff;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: -0.005em;
   box-shadow:
-    0 10px 24px rgba(35, 118, 83, 0.19);
+    0 10px 24px rgba(22, 138, 82, 0.19);
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -502,7 +724,7 @@
 .submitButton:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow:
-    0 14px 30px rgba(35, 118, 83, 0.24);
+    0 14px 30px rgba(22, 138, 82, 0.24);
 }
 
 .submitButton:active:not(:disabled) {
@@ -529,41 +751,52 @@
   animation: spin 700ms linear infinite;
 }
 
-/* Trust area */
+/* =========================================================
+   TRUST AREA
+   ========================================================= */
 
-.trust {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 23px;
-  padding-top: 20px;
-  border-top: 1px solid #edf0ee;
-  color: #8b958f;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.trustIcon {
-  width: 25px;
-  height: 25px;
+.trustArea {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  border-radius: 7px;
-  background: var(--green-50);
-  color: var(--green-700);
+  gap: 13px;
+  margin-top: 23px;
+  padding-top: 20px;
+  border-top: 1px solid #edf0ee;
 }
 
-.trustIcon svg {
+.trustItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8b958f;
+  font-size: 9px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.trustItem svg {
   width: 14px;
   height: 14px;
+  color: var(--sbs-green-dark);
 }
 
-/* Footer */
+.trustDivider {
+  width: 1px;
+  height: 15px;
+  background: #e5ebe7;
+}
 
-.footer {
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.passwordFooter {
+  position: relative;
+  z-index: 2;
   min-height: 70px;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -573,16 +806,29 @@
   font-size: 10px;
 }
 
-.footerBrand {
+.footerLinks {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.footerLinks a {
   color: #68746d;
-  font-weight: 700;
+  text-decoration: none;
+  transition: color 150ms ease;
 }
 
-.footerText {
-  text-align: right;
+.footerLinks a:hover {
+  color: var(--sbs-green-dark);
 }
 
-/* Animation */
+.footerLinks span {
+  color: #b2bbb6;
+}
+
+/* =========================================================
+   ANIMATION
+   ========================================================= */
 
 @keyframes spin {
   to {
@@ -590,133 +836,172 @@
   }
 }
 
-/* Tablet */
+/* =========================================================
+   TABLET
+   ========================================================= */
 
-@media (max-width: 980px) {
-  .container {
-    width: min(760px, calc(100% - 40px));
-  }
-
-  .main {
-    grid-template-columns: 1fr;
-    gap: 52px;
-    padding-top: 40px;
-  }
-
-  .intro {
-    max-width: 680px;
-  }
-
-  .introTitle {
-    max-width: 680px;
-  }
-
-  .card {
-    max-width: 540px;
+@media (max-width: 1050px) {
+  .passwordContent {
+    gap: 55px;
   }
 }
 
-/* Mobile */
-
-@media (max-width: 640px) {
-  .container {
-    width: calc(100% - 28px);
+@media (max-width: 900px) {
+  .passwordContent {
+    grid-template-columns: 1fr;
+    gap: 45px;
+    padding-top: 30px;
   }
 
-  .header {
-    height: 76px;
+  .passwordIntro {
+    max-width: 700px;
   }
 
-  .logoImage {
-    width: 125px;
+  .passwordCard {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .passwordHeader {
+    width: min(100% - 32px, 600px);
+    padding: 20px 0;
   }
 
-  .headerLabel {
-    font-size: 10px;
+  .brand {
+    gap: 10px;
   }
 
-  .main {
-    gap: 38px;
-    padding: 30px 0 48px;
+  .brandLogo {
+    height: 36px;
+    max-width: 155px;
   }
 
-  .intro {
-    padding-bottom: 0;
+  .brandText {
+    display: none;
   }
 
-  .introEyebrow {
-    margin-bottom: 18px;
+  .passwordContent {
+    width: min(100% - 32px, 600px);
+    min-height: auto;
+    padding: 30px 0 45px;
   }
 
-  .introTitle {
-    font-size: clamp(38px, 12vw, 52px);
+  .passwordIntro {
+    padding: 0;
+  }
+
+  .passwordIntro h1 {
+    font-size: clamp(38px, 11vw, 52px);
   }
 
   .introDescription {
     margin-top: 20px;
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.65;
   }
 
-  .steps {
-    margin-top: 29px;
-  }
-
-  .quote {
+  .setupSteps {
     margin-top: 28px;
   }
 
-  .card {
-    padding: 28px 22px;
-    border-radius: 19px;
+  .loginQuote {
+    margin-top: 30px;
   }
 
-  .cardLogo {
-    width: 108px;
-    margin-bottom: 22px;
+  .passwordCard {
+    border-radius: 20px;
   }
 
-  .cardTitle {
-    font-size: 26px;
+  .passwordCardContent {
+    padding: 32px 24px 28px;
   }
 
-  .cardDescription {
-    font-size: 12px;
+  .passwordHeading h2 {
+    font-size: 25px;
+  }
+
+  .passwordHeading p {
+    font-size: 11px;
   }
 
   .requirements {
     flex-direction: column;
-    gap: 7px;
+    gap: 6px;
   }
 
-  .footer {
-    min-height: 62px;
-    flex-direction: column;
+  .trustArea {
+    gap: 9px;
+  }
+
+  .trustItem {
+    font-size: 8.5px;
+  }
+
+  .passwordFooter {
+    width: min(100% - 32px, 600px);
+    min-height: 65px;
     align-items: flex-start;
+    flex-direction: column;
     justify-content: center;
-    gap: 4px;
+    gap: 7px;
+    padding: 15px 0;
   }
 
-  .footerText {
-    text-align: left;
-  }
-
-  .backgroundCircle {
-    width: 420px;
-    height: 420px;
-    right: -270px;
-    top: -190px;
+  .footerLinks {
+    gap: 7px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .submitButton,
-  .input,
-  .passwordToggle {
-    transition: none;
+/* =========================================================
+   SMALL MOBILE
+   ========================================================= */
+
+@media (max-width: 420px) {
+  .passwordContent {
+    width: calc(100% - 24px);
   }
 
-  .spinner {
-    animation: none;
+  .passwordHeader {
+    width: calc(100% - 24px);
+  }
+
+  .passwordFooter {
+    width: calc(100% - 24px);
+  }
+
+  .passwordCardContent {
+    padding: 28px 19px 24px;
+  }
+
+  .passwordIntro h1 {
+    font-size: 37px;
+  }
+
+  .welcomePill {
+    margin-bottom: 18px;
+  }
+
+  .setupStep {
+    gap: 11px;
+  }
+
+  .stepIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .setupLine {
+    margin-left: 17px;
+  }
+
+  .trustArea {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
