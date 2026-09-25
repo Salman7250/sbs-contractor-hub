@@ -13,8 +13,8 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock3,
-  FileText,
   FileUp,
+  FileText,
   HardDrive,
   Landmark,
   Layers3,
@@ -188,6 +188,13 @@ export default function EntitlementManagement({
         activeSubscription?.plan_id
     );
 
+  const portalModule =
+    modules.find(
+      (module) =>
+        module.slug ===
+        "b2b-client-portal"
+    );
+
   const categories = useMemo(() => {
     const values = new Set<string>();
 
@@ -304,6 +311,19 @@ export default function EntitlementManagement({
     };
   };
 
+  const portalAccess =
+    portalModule
+      ? getEffectiveAccess(
+          portalModule
+        )
+      : {
+          access: "unavailable",
+          source: "none",
+          expiresAt: null,
+          reason: null,
+          entitlementId: null,
+        };
+
   const filteredModules =
     modules.filter((module) => {
       const normalizedSearch =
@@ -419,6 +439,93 @@ export default function EntitlementManagement({
     });
   }
 
+  function enableClientPortal() {
+    if (!selectedCompanyId) {
+      window.alert(
+        "Please select a company first."
+      );
+      return;
+    }
+
+    const formData =
+      new FormData();
+
+    formData.set(
+      "companyId",
+      selectedCompanyId
+    );
+
+    formData.set(
+      "moduleSlug",
+      "b2b-client-portal"
+    );
+
+    formData.set(
+      "mode",
+      "free"
+    );
+
+    formData.set(
+      "reason",
+      "Client Portal enabled by platform administrator."
+    );
+
+    startTransition(async () => {
+      try {
+        await saveEntitlement(
+          formData
+        );
+      } catch (error) {
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "Unable to enable Client Portal."
+        );
+      }
+    });
+  }
+
+  function disableClientPortal() {
+    if (!selectedCompanyId) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Disable Client Portal access for this company?"
+      )
+    ) {
+      return;
+    }
+
+    const formData =
+      new FormData();
+
+    formData.set(
+      "companyId",
+      selectedCompanyId
+    );
+
+    formData.set(
+      "moduleSlug",
+      "b2b-client-portal"
+    );
+
+    startTransition(async () => {
+      try {
+        await removeEntitlementOverride(
+          formData
+        );
+      } catch (error) {
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "Unable to disable Client Portal."
+        );
+      }
+    });
+  }
+
   return (
     <div className="space-y-8">
       {/* HEADER */}
@@ -522,6 +629,171 @@ export default function EntitlementManagement({
           )}
         </div>
       </section>
+
+      {/* CLIENT PORTAL ACCESS */}
+
+      {selectedCompany && (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/70 via-white to-white px-6 py-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                    portalAccess.access ===
+                    "enabled"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  <Users className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-base font-semibold text-slate-900">
+                      Client Portal Access
+                    </h2>
+
+                    <StatusPill
+                      label={
+                        portalAccess.access ===
+                        "enabled"
+                          ? "Enabled"
+                          : portalAccess.access ===
+                              "disabled"
+                            ? "Disabled"
+                            : "Not Enabled"
+                      }
+                      tone={
+                        portalAccess.access ===
+                        "enabled"
+                          ? "green"
+                          : portalAccess.access ===
+                              "disabled"
+                            ? "red"
+                            : "slate"
+                      }
+                    />
+                  </div>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    B2B Client Portal for{" "}
+                    <span className="font-medium text-slate-700">
+                      {selectedCompany.name}
+                    </span>
+                    .
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                {portalAccess.access ===
+                  "enabled" && (
+                  <button
+                    type="button"
+                    disabled={
+                      isPending
+                    }
+                    onClick={
+                      disableClientPortal
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CircleOff className="h-3.5 w-3.5" />
+
+                    Disable Portal
+                  </button>
+                )}
+
+                {portalAccess.access !==
+                  "enabled" && (
+                  <button
+                    type="button"
+                    disabled={
+                      isPending ||
+                      !portalModule
+                    }
+                    onClick={
+                      enableClientPortal
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+
+                    {isPending
+                      ? "Enabling..."
+                      : "Enable Client Portal"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
+            <PortalInfo
+              label="Module"
+              value={
+                portalModule?.name ??
+                "B2B Client Portal"
+              }
+            />
+
+            <PortalInfo
+              label="Access Type"
+              value={
+                portalAccess.source ===
+                "free"
+                  ? "Free Grant"
+                  : portalAccess.source ===
+                      "override"
+                    ? "Company Override"
+                    : portalAccess.source ===
+                        "plan"
+                      ? "Subscription Plan"
+                      : "Not Enabled"
+              }
+            />
+
+            <PortalInfo
+              label="Expiration"
+              value={
+                portalAccess.expiresAt
+                  ? formatDate(
+                      portalAccess.expiresAt
+                    )
+                  : portalAccess.access ===
+                      "enabled"
+                    ? "No expiration"
+                    : "—"
+              }
+            />
+          </div>
+
+          {portalAccess.reason && (
+            <div className="border-t border-slate-100 px-6 py-4">
+              <p className="text-xs text-slate-500">
+                <span className="font-semibold text-slate-700">
+                  Reason:
+                </span>{" "}
+                {portalAccess.reason}
+              </p>
+            </div>
+          )}
+
+          <div className="border-t border-slate-100 bg-slate-50/70 px-6 py-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+
+              <p className="text-xs leading-5 text-slate-500">
+                Enabling this gives the company
+                access to the B2B Client Portal.
+                It does not change the company&apos;s
+                subscription plan or billing price.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* STATS */}
 
@@ -722,6 +994,30 @@ export default function EntitlementManagement({
           }
         />
       )}
+    </div>
+  );
+}
+
+/* ============================================================
+   PORTAL INFO
+============================================================ */
+
+function PortalInfo({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        {label}
+      </div>
+
+      <div className="mt-1 text-sm font-semibold text-slate-800">
+        {value}
+      </div>
     </div>
   );
 }
