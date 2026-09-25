@@ -17,7 +17,6 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SBS",
   description: "Sharif Business Solutions",
 };
 
