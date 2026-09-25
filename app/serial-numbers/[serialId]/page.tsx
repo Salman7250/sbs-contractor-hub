@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import JsBarcode from "jsbarcode";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
@@ -619,6 +620,214 @@ export default function SerialDetailPage() {
       )
     : "none";
 
+  const printLabel = useCallback(() => {
+    if (!unit) return;
+
+    const buildBarcodeSvg = (value: string) => {
+      const svg = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg",
+      );
+
+      JsBarcode(svg, value, {
+        format: "CODE128",
+        displayValue: false,
+        height: 34,
+        margin: 0,
+        width: 1.35,
+      });
+
+      svg.setAttribute("class", "label-barcode");
+      svg.setAttribute("aria-label", `Barcode ${value}`);
+      return svg.outerHTML;
+    };
+
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+    const productName = escapeHtml(product?.name || "Product");
+    const variantName = variant?.name
+      ? escapeHtml(variant.name)
+      : "";
+    const sku = variant?.sku ? escapeHtml(variant.sku) : "";
+    const batchNumber = escapeHtml(batch?.lot_number || "—");
+    const serialNumber = escapeHtml(unit.serial_number);
+    const barcodeSvg = buildBarcodeSvg(unit.serial_number);
+
+    const labelHtml = `
+      <div class="print-label">
+        <div class="label-product">${productName}</div>
+        ${variantName ? `<div class="label-variant">${variantName}</div>` : ""}
+        ${sku ? `<div class="label-sku">SKU: ${sku}</div>` : ""}
+        <div class="label-batch">Batch: ${batchNumber}</div>
+        <div class="label-serial">${serialNumber}</div>
+        ${barcodeSvg}
+      </div>
+    `;
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.left = "-10000px";
+    iframe.style.top = "-10000px";
+
+    document.body.appendChild(iframe);
+
+    const cleanup = () => {
+      window.setTimeout(() => iframe.remove(), 1000);
+    };
+
+    const printFrame = () => {
+      const frameWindow = iframe.contentWindow;
+
+      if (!frameWindow) {
+        cleanup();
+        window.alert("Unable to prepare the label printer.");
+        return;
+      }
+
+      frameWindow.focus();
+      frameWindow.print();
+      cleanup();
+    };
+
+    const frameDocument = iframe.contentDocument;
+
+    if (!frameDocument) {
+      cleanup();
+      window.alert("Unable to prepare the label printer.");
+      return;
+    }
+
+    frameDocument.open();
+    frameDocument.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title></title>
+          <style>
+            @page {
+              size: 3.2in 1.25in;
+              margin: 0;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            html,
+            body {
+              width: 3.2in;
+              height: 1.25in;
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+            }
+
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+            }
+
+            .print-label {
+              display: flex;
+              box-sizing: border-box;
+              width: 3.2in;
+              height: 1.25in;
+              min-height: 1.25in;
+              max-height: 1.25in;
+              margin: 0;
+              padding: 0.07in 0.10in;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 2px;
+              overflow: hidden;
+              background: #ffffff;
+              color: #111827;
+              text-align: center;
+              border: 0;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .label-product {
+              width: 100%;
+              overflow: hidden;
+              color: #111827;
+              font-size: 8.5pt;
+              font-weight: 800;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-variant,
+            .label-sku,
+            .label-batch {
+              width: 100%;
+              overflow: hidden;
+              color: #374151;
+              font-size: 6.5pt;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-serial {
+              width: 100%;
+              overflow: hidden;
+              color: #111827;
+              font-size: 7.5pt;
+              font-weight: 800;
+              line-height: 1.05;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .label-barcode {
+              display: block;
+              width: 2.65in;
+              height: 0.34in;
+              max-width: 100%;
+              margin: 2px auto 0;
+            }
+
+            @media print {
+              html,
+              body {
+                width: 3.2in !important;
+                height: 1.25in !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+
+              .print-label {
+                width: 3.2in !important;
+                height: 1.25in !important;
+                min-height: 1.25in !important;
+                max-height: 1.25in !important;
+                margin: 0 !important;
+              }
+            }
+          </style>
+        </head>
+        <body>${labelHtml}</body>
+      </html>
+    `);
+    frameDocument.close();
+
+    window.setTimeout(printFrame, 350);
+  }, [batch?.lot_number, product?.name, unit, variant?.name, variant?.sku]);
+
   const totalCost = useMemo(() => {
     if (!unit) return null;
 
@@ -643,16 +852,28 @@ export default function SerialDetailPage() {
             ← Back to Serial Numbers
           </button>
 
-          <button
-            type="button"
-            className="refresh-button"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-          >
-            {refreshing
-              ? "Refreshing..."
-              : "Refresh"}
-          </button>
+          <div className="top-actions">
+            {unit && (
+              <button
+                type="button"
+                className="print-label-button"
+                onClick={printLabel}
+              >
+                🖨 Print Label
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="refresh-button"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+            >
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -1544,6 +1765,30 @@ export default function SerialDetailPage() {
           margin-bottom: 18px;
         }
 
+        .top-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .print-label-button {
+          height: 38px;
+          padding: 0 13px;
+          border: 1px solid #166534;
+          border-radius: 9px;
+          background: #166534;
+          color: white;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: background 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .print-label-button:hover {
+          background: #14532d;
+          box-shadow: 0 2px 6px rgba(22, 101, 52, 0.16);
+        }
+
         .back-button,
         .refresh-button {
           height: 38px;
@@ -2377,6 +2622,15 @@ export default function SerialDetailPage() {
           .top-bar {
             align-items: stretch;
             flex-direction: column;
+          }
+
+          .top-actions {
+            width: 100%;
+            flex-wrap: wrap;
+          }
+
+          .top-actions button {
+            flex: 1;
           }
         }
       `}</style>
