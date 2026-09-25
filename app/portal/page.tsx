@@ -388,15 +388,9 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
         if (rawStatus === "invited") {
           const activationTime = new Date().toISOString();
 
-          const { error: activationError } = await supabase
-            .from("customer_portal_users")
-            .update({
-              status: "active",
-              activated_at: activationTime,
-              last_login_at: activationTime,
-            })
-            .eq("id", rawPortalUser.id)
-            .eq("user_id", user.id);
+          const { error: activationError } = await supabase.rpc(
+            "customer_portal_activate_my_account",
+          );
 
           if (activationError) {
             console.warn(
@@ -439,6 +433,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
         const [
           settingsResponse,
           customerResponse,
+          companyResponse,
           invoicesResponse,
           quotesResponse,
           ordersResponse,
@@ -481,8 +476,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
                 name,
                 email,
                 phone,
-                company_name,
-                address,
+                address_line1,
                 city,
                 state,
                 country
@@ -492,12 +486,18 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             .maybeSingle(),
 
           supabase
+            .from("companies")
+            .select("name")
+            .eq("id", companyId)
+            .maybeSingle(),
+
+          supabase
             .from("invoices")
             .select(
               `
                 id,
                 invoice_number,
-                invoice_date,
+                issue_date,
                 due_date,
                 total,
                 amount_paid,
@@ -506,7 +506,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
               `,
             )
             .eq("customer_id", customerId)
-            .order("invoice_date", { ascending: false }),
+            .order("issue_date", { ascending: false }),
 
           supabase
             .from("estimates")
@@ -514,29 +514,29 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
               `
                 id,
                 estimate_number,
-                estimate_date,
+                created_at,
                 total,
                 status,
                 customer_id
               `,
             )
             .eq("customer_id", customerId)
-            .order("estimate_date", { ascending: false }),
+            .order("created_at", { ascending: false }),
 
           supabase
-            .from("orders")
+             .from("orders")
             .select(
               `
                 id,
                 order_number,
-                order_date,
-                total,
+                created_at,
+                total_amount,
                 status,
                 customer_id
               `,
             )
             .eq("customer_id", customerId)
-            .order("order_date", { ascending: false }),
+            .order("created_at", { ascending: false }),
 
           supabase
             .from("jobs")
@@ -673,6 +673,7 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
         const queryErrors = [
           ["portal settings", settingsResponse.error],
           ["customer", customerResponse.error],
+          ["company", companyResponse.error],
           ["invoices", invoicesResponse.error],
           ["quotes", quotesResponse.error],
           ["orders", ordersResponse.error],
@@ -740,8 +741,8 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
             name: customerResponse.data.name ?? null,
             email: customerResponse.data.email ?? null,
             phone: customerResponse.data.phone ?? null,
-            company_name: customerResponse.data.company_name ?? null,
-            address: customerResponse.data.address ?? null,
+            company_name: companyResponse.data?.name ?? null,
+            address: customerResponse.data.address_line1 ?? null,
             city: customerResponse.data.city ?? null,
             state: customerResponse.data.state ?? null,
             country: customerResponse.data.country ?? null,
@@ -752,9 +753,9 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           ((invoicesResponse.data || []) as any[]).map((row) => ({
             id: String(row.id),
             invoice_number: row.invoice_number ?? null,
-            invoice_date: row.invoice_date ?? null,
+            invoice_date: row.issue_date ?? null,
             due_date: row.due_date ?? null,
-            total: Number(row.total || 0),
+            total: Number(row.total ?? row.total_amount ?? 0),
             amount_paid: Number(row.amount_paid || 0),
             status: row.status ?? null,
             customer_id: String(row.customer_id),
@@ -765,8 +766,8 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           ((quotesResponse.data || []) as any[]).map((row) => ({
             id: String(row.id),
             estimate_number: row.estimate_number ?? null,
-            estimate_date: row.estimate_date ?? null,
-            total: Number(row.total || 0),
+            estimate_date: row.created_at ?? null,
+            total: Number(row.total ?? row.total_amount ?? 0),
             status: row.status ?? null,
             customer_id: String(row.customer_id),
           })),
@@ -776,8 +777,8 @@ const [activeTab, setActiveTab] = useState<PortalTab>(() => {
           ((ordersResponse.data || []) as any[]).map((row) => ({
             id: String(row.id),
             order_number: row.order_number ?? null,
-            order_date: row.order_date ?? null,
-            total: Number(row.total || 0),
+            order_date: row.created_at ?? null,
+            total: Number(row.total ?? row.total_amount ?? 0),
             status: row.status ?? null,
             customer_id: String(row.customer_id),
           })),

@@ -53,16 +53,16 @@ export const DEFAULT_REGIONAL_SETTINGS: RegionalSettings = {
 /**
  * Load the current company's complete regional configuration.
  *
- * This is the central source of truth for:
- * - Currency
- * - Currency symbol
- * - Currency position
- * - Decimal places
- * - Number separators
- * - Timezone
- * - Date format
- * - Time format
- * - Manual exchange rates
+ * Supports both:
+ *
+ * 1. Employee/company users
+ *    company_members -> company_id
+ *
+ * 2. B2B customer portal users
+ *    customer_portal_users -> company_id
+ *
+ * Customer portal users intentionally do not need a
+ * company_members record.
  */
 export async function getRegionalSettings(): Promise<RegionalSettings> {
   const supabase = createClient();
@@ -80,6 +80,17 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
     throw new Error("You must be logged in.");
   }
 
+  /*
+   * -------------------------------------------------------
+   * Resolve the company.
+   * -------------------------------------------------------
+   *
+   * Normal employees are connected through company_members.
+   *
+   * B2B customer portal users are connected through
+   * customer_portal_users instead.
+   */
+
   const {
     data: membership,
     error: membershipError,
@@ -94,13 +105,64 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
     throw membershipError;
   }
 
-  if (!membership?.company_id) {
+  let companyId =
+    membership?.company_id ?? null;
+
+  /*
+   * -------------------------------------------------------
+   * B2B CUSTOMER PORTAL FALLBACK
+   * -------------------------------------------------------
+   *
+   * A customer portal user normally does not have a
+   * company_members row.
+   *
+   * Resolve their company through customer_portal_users.
+   */
+
+  if (!companyId) {
+    const {
+      data: portalUser,
+      error: portalUserError,
+    } = await supabase
+      .from("customer_portal_users")
+      .select("company_id, status")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (portalUserError) {
+      throw portalUserError;
+    }
+
+    if (portalUser) {
+      const status = String(
+        portalUser.status ?? ""
+      ).toLowerCase();
+
+      /*
+       * Suspended/revoked portal users should not receive
+       * company-level regional settings.
+       */
+      if (
+        status !== "suspended" &&
+        status !== "revoked"
+      ) {
+        companyId =
+          portalUser.company_id ?? null;
+      }
+    }
+  }
+
+  if (!companyId) {
     throw new Error(
-      "No company membership was found for this account."
+      "No company was found for this account."
     );
   }
 
-  const companyId = membership.company_id;
+  /*
+   * -------------------------------------------------------
+   * REGIONAL SETTINGS
+   * -------------------------------------------------------
+   */
 
   const {
     data: regionalData,
@@ -129,6 +191,12 @@ export async function getRegionalSettings(): Promise<RegionalSettings> {
   if (regionalError) {
     throw regionalError;
   }
+
+  /*
+   * -------------------------------------------------------
+   * EXCHANGE RATES
+   * -------------------------------------------------------
+   */
 
   const {
     data: exchangeRates,
@@ -213,7 +281,10 @@ export function getExchangeRate(
       item.to_currency.toUpperCase() === from
   );
 
-  if (reverseRate && Number(reverseRate.rate) > 0) {
+  if (
+    reverseRate &&
+    Number(reverseRate.rate) > 0
+  ) {
     return 1 / Number(reverseRate.rate);
   }
 
@@ -235,7 +306,9 @@ export function convertCurrency(
       ? amount
       : Number(amount ?? 0);
 
-  const safeAmount = Number.isFinite(numericAmount)
+  const safeAmount = Number.isFinite(
+    numericAmount
+  )
     ? numericAmount
     : 0;
 
@@ -280,7 +353,9 @@ export function formatMoney(
       ? amount
       : Number(amount ?? 0);
 
-  const safeAmount = Number.isFinite(numericAmount)
+  const safeAmount = Number.isFinite(
+    numericAmount
+  )
     ? numericAmount
     : 0;
 
@@ -309,7 +384,8 @@ export function formatMoney(
       ? `${groupedInteger}${settings.decimal_separator}${decimalPart}`
       : groupedInteger;
 
-  const sign = safeAmount < 0 ? "-" : "";
+  const sign =
+    safeAmount < 0 ? "-" : "";
 
   const symbol =
     settings.currency_symbol ||
@@ -337,7 +413,9 @@ export function formatNumber(
       ? amount
       : Number(amount ?? 0);
 
-  const safeAmount = Number.isFinite(numericAmount)
+  const safeAmount = Number.isFinite(
+    numericAmount
+  )
     ? numericAmount
     : 0;
 
