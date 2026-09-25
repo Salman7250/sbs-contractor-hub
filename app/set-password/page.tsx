@@ -111,6 +111,7 @@ export default function SetPasswordPage() {
 
               <div className={styles.stepText}>
                 <strong>Invitation accepted</strong>
+
                 <span>
                   Your SBS workspace invitation is ready.
                 </span>
@@ -144,6 +145,7 @@ export default function SetPasswordPage() {
 
               <div className={styles.stepText}>
                 <strong>Create your password</strong>
+
                 <span>
                   Secure your account with your own password.
                 </span>
@@ -168,6 +170,7 @@ export default function SetPasswordPage() {
 
               <div className={styles.stepText}>
                 <strong>Enter your workspace</strong>
+
                 <span>
                   Start managing your business with SBS.
                 </span>
@@ -184,7 +187,9 @@ export default function SetPasswordPage() {
                 operations that keep your business moving.
               </p>
 
-              <span>Sharif Business Solutions</span>
+              <span>
+                Sharif Business Solutions
+              </span>
             </div>
           </div>
         </div>
@@ -247,7 +252,9 @@ export default function SetPasswordPage() {
                 ACCOUNT SETUP
               </div>
 
-              <h2>Create your password</h2>
+              <h2>
+                Create your password
+              </h2>
 
               <p>
                 Create a secure password to activate your SBS
@@ -279,7 +286,9 @@ export default function SetPasswordPage() {
                   <path d="M8 11V8a4 4 0 0 1 8 0v3" />
                 </svg>
 
-                <span>Secure setup</span>
+                <span>
+                  Secure setup
+                </span>
               </div>
 
               <div className={styles.trustDivider} />
@@ -293,10 +302,13 @@ export default function SetPasswordPage() {
                   aria-hidden="true"
                 >
                   <path d="M12 3v18" />
+
                   <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5H15a2.5 2.5 0 0 1 0 5H6" />
                 </svg>
 
-                <span>Business ready</span>
+                <span>
+                  Business ready
+                </span>
               </div>
 
               <div className={styles.trustDivider} />
@@ -310,12 +322,17 @@ export default function SetPasswordPage() {
                   aria-hidden="true"
                 >
                   <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+
                   <path d="M4 4v5h5" />
+
                   <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+
                   <path d="M20 20v-5h-5" />
                 </svg>
 
-                <span>Ready to use</span>
+                <span>
+                  Ready to use
+                </span>
               </div>
             </div>
           </div>
@@ -325,16 +342,26 @@ export default function SetPasswordPage() {
       {/* Footer */}
       <footer className={styles.passwordFooter}>
         <span>
-          © {new Date().getFullYear()} Sharif Business Solutions.
+          © 2026 Sharif Business Solutions.
           All rights reserved.
         </span>
 
         <div className={styles.footerLinks}>
-          <Link href="/">Website</Link>
+          <Link href="/">
+            Website
+          </Link>
+
           <span>•</span>
-          <a href="/privacy">Privacy</a>
+
+          <Link href="/privacy">
+            Privacy
+          </Link>
+
           <span>•</span>
-          <a href="/terms">Terms</a>
+
+          <Link href="/terms">
+            Terms
+          </Link>
         </div>
       </footer>
     </main>

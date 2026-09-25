@@ -369,7 +369,7 @@ export default function SetPasswordForm() {
        *
        * No employee activation RPC is required here.
        */
-      window.location.replace("/portal");
+      window.location.replace("/b2b-portal");
     } catch (err) {
       console.error(
         "Set password error:",

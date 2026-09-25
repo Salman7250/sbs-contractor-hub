@@ -52,12 +52,81 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   /*
-   * Always refresh the Supabase auth session before making
+   * Always resolve the current Supabase user before making
    * authorization decisions.
    */
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  /*
+   * ---------------------------------------------------------
+   * CUSTOMER PORTAL
+   * ---------------------------------------------------------
+   *
+   * Customer portal users are separate from company employees.
+   * They must not go through company_members or employee RBAC.
+   */
+
+  const isCustomerPortalPath =
+    pathname === "/portal" ||
+    pathname.startsWith("/portal/");
+
+  if (isCustomerPortalPath) {
+    /*
+     * The portal login page is public.
+     */
+    if (pathname === "/portal/login") {
+      return response;
+    }
+
+    /*
+     * Every other portal page requires an authenticated user.
+     */
+    if (!user) {
+      const loginUrl = new URL(
+        "/portal/login",
+        request.url,
+      );
+
+      loginUrl.searchParams.set(
+        "redirectTo",
+        `${pathname}${request.nextUrl.search}`,
+      );
+
+      return NextResponse.redirect(loginUrl);
+    }
+
+    /*
+     * Verify that the authenticated user has an active
+     * customer portal account.
+     */
+    const {
+      data: portalUser,
+      error: portalUserError,
+    } = await supabase
+      .from("customer_portal_users")
+      .select("id, status")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+
+    if (portalUserError || !portalUser) {
+      return NextResponse.redirect(
+        new URL(
+          "/portal/login?error=portal-access-denied",
+          request.url,
+        ),
+      );
+    }
+
+    /*
+     * Customer portal authorization succeeded.
+     * Do not run employee/company RBAC below.
+     */
+    return response;
+  }
 
   /*
    * Onboarding is intentionally outside employee/company RBAC.
@@ -81,9 +150,14 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  /*
+   * Standard public application routes.
+   */
   if (isPublicPath(pathname)) {
     if (user && pathname === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(
+        new URL("/", request.url),
+      );
     }
 
     return response;
@@ -99,6 +173,9 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  /*
+   * Employee workspace requires authentication.
+   */
   if (!user) {
     const loginUrl = new URL("/login", request.url);
 
@@ -111,7 +188,7 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
-   * Resolve the caller's company.
+   * Resolve the employee/company membership.
    */
   const {
     data: membership,
@@ -125,10 +202,16 @@ export async function middleware(request: NextRequest) {
 
   if (membershipError || !membership?.company_id) {
     return NextResponse.redirect(
-      new URL("/login?error=no-company", request.url),
+      new URL(
+        "/login?error=no-company",
+        request.url,
+      ),
     );
   }
 
+  /*
+   * Check module entitlement.
+   */
   if (rule.entitlementModule) {
     try {
       const hasEntitlement =
@@ -162,7 +245,7 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
-   * Database permission check.
+   * Database permission check for employee workspace.
    */
   const {
     data: allowed,
