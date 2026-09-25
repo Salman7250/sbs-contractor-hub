@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -15,17 +16,13 @@ export default function SetPasswordForm() {
     [],
   );
 
-  const [password, setPassword] =
-    useState("");
-
+  const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] =
     useState("");
 
-  const [error, setError] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -35,18 +32,180 @@ export default function SetPasswordForm() {
 
   const passwordChecks = useMemo(
     () => ({
-      length:
-        password.length >= 8,
-
+      length: password.length >= 8,
       match:
         password.length > 0 &&
         password === confirmPassword,
     }),
-    [
-      password,
-      confirmPassword,
-    ],
+    [password, confirmPassword],
   );
+
+  /*
+   * -------------------------------------------------------
+   * INITIALIZE INVITATION SESSION
+   * -------------------------------------------------------
+   *
+   * Supabase invitation links can return the authentication
+   * tokens in the URL hash:
+   *
+   * #access_token=...
+   * &refresh_token=...
+   * &type=invite
+   *
+   * The browser client needs those tokens converted into a
+   * Supabase session before getUser() or updateUser() can
+   * work.
+   * -------------------------------------------------------
+   */
+  useEffect(() => {
+    let mounted = true;
+
+    async function initializeInvitationSession() {
+      try {
+        /*
+         * First check whether Supabase already has a session.
+         *
+         * This is important because the auth client may have
+         * already processed the invitation URL automatically.
+         */
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          if (mounted) {
+            setInitializing(false);
+          }
+
+          return;
+        }
+
+        /*
+         * Read invitation tokens from the URL hash.
+         */
+        const hash =
+          typeof window !== "undefined"
+            ? window.location.hash
+            : "";
+
+        if (!hash) {
+          if (mounted) {
+            setError(
+              "This invitation link is missing its authentication information. Please request a new invitation.",
+            );
+            setInitializing(false);
+          }
+
+          return;
+        }
+
+        const hashParams = new URLSearchParams(
+          hash.substring(1),
+        );
+
+        const accessToken =
+          hashParams.get("access_token");
+
+        const refreshToken =
+          hashParams.get("refresh_token");
+
+        const tokenType =
+          hashParams.get("type");
+
+        /*
+         * If this is an invitation URL, establish the
+         * authenticated session manually.
+         */
+        if (accessToken && refreshToken) {
+          const {
+            data: sessionData,
+            error: sessionError,
+          } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            console.error(
+              "Invitation session error:",
+              sessionError,
+            );
+
+            if (mounted) {
+              setError(
+                "This invitation link has expired or is no longer valid. Please request a new invitation.",
+              );
+              setInitializing(false);
+            }
+
+            return;
+          }
+
+          if (!sessionData.session) {
+            if (mounted) {
+              setError(
+                "Unable to establish your invitation session. Please request a new invitation.",
+              );
+              setInitializing(false);
+            }
+
+            return;
+          }
+
+          /*
+           * Remove the sensitive authentication tokens from
+           * the visible browser URL after the session has
+           * been established.
+           */
+          if (typeof window !== "undefined") {
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname +
+                window.location.search,
+            );
+          }
+
+          if (mounted) {
+            setInitializing(false);
+          }
+
+          return;
+        }
+
+        /*
+         * No tokens were found and no existing session exists.
+         */
+        if (mounted) {
+          setError(
+            tokenType === "invite"
+              ? "This invitation link could not be authenticated. Please request a new invitation."
+              : "No valid invitation session was found. Please use the invitation link from your email.",
+          );
+
+          setInitializing(false);
+        }
+      } catch (err) {
+        console.error(
+          "Invitation initialization error:",
+          err,
+        );
+
+        if (mounted) {
+          setError(
+            "Something went wrong while opening your invitation. Please try again.",
+          );
+          setInitializing(false);
+        }
+      }
+    }
+
+    initializeInvitationSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, [supabase]);
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -54,7 +213,7 @@ export default function SetPasswordForm() {
     event.preventDefault();
     event.stopPropagation();
 
-    if (loading) {
+    if (loading || initializing) {
       return;
     }
 
@@ -69,9 +228,7 @@ export default function SetPasswordForm() {
     }
 
     if (password !== confirmPassword) {
-      setError(
-        "Passwords do not match.",
-      );
+      setError("Passwords do not match.");
 
       return;
     }
@@ -81,27 +238,53 @@ export default function SetPasswordForm() {
     try {
       /*
        * -------------------------------------------------------
-       * Get the authenticated invitation user.
-       *
-       * Supabase processes the invitation session from the
-       * invitation URL before this page is used.
+       * Make absolutely sure a valid session exists.
        * -------------------------------------------------------
        */
-
       const {
-        data: {
-          user,
-        },
-        error: userError,
-      } =
-        await supabase.auth.getUser();
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (
-        userError ||
-        !user
-      ) {
+      if (sessionError) {
+        console.error(
+          "Session error:",
+          sessionError,
+        );
+
+        setError(
+          "Unable to verify your invitation session. Please try again.",
+        );
+
+        return;
+      }
+
+      if (!session?.user) {
         setError(
           "This invitation link has expired or is no longer valid. Please request a new invitation.",
+        );
+
+        return;
+      }
+
+      /*
+       * -------------------------------------------------------
+       * Get the authenticated invitation user.
+       * -------------------------------------------------------
+       */
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        console.error(
+          "Get user error:",
+          userError,
+        );
+
+        setError(
+          "Unable to verify your account. Please request a new invitation.",
         );
 
         return;
@@ -112,13 +295,11 @@ export default function SetPasswordForm() {
        * Create the user's password.
        * -------------------------------------------------------
        */
-
       const {
         error: passwordError,
-      } =
-        await supabase.auth.updateUser({
-          password,
-        });
+      } = await supabase.auth.updateUser({
+        password,
+      });
 
       if (passwordError) {
         console.error(
@@ -137,43 +318,22 @@ export default function SetPasswordForm() {
       /*
        * -------------------------------------------------------
        * Determine account type.
-       *
-       * B2B portal invitations are created with:
-       *
-       * account_type = customer_portal
-       *
-       * Employee accounts use:
-       *
-       * account_type = employee
-       *
-       * We only need to redirect here. The B2B portal
-       * membership was already created during invitation.
        * -------------------------------------------------------
        */
-
       const accountType =
-        user.user_metadata
-          ?.account_type;
+        user.user_metadata?.account_type;
 
-      if (
-        accountType ===
-        "employee"
-      ) {
-        /*
-         * Preserve the existing employee flow.
-         *
-         * Employee activation is intentionally kept here
-         * because employees require activation after setting
-         * their password.
-         */
-
+      /*
+       * -------------------------------------------------------
+       * EMPLOYEE ACCOUNT
+       * -------------------------------------------------------
+       */
+      if (accountType === "employee") {
         const {
-          error:
-            activationError,
-        } =
-          await supabase.rpc(
-            "employee_activate_my_account",
-          );
+          error: activationError,
+        } = await supabase.rpc(
+          "employee_activate_my_account",
+        );
 
         if (activationError) {
           console.error(
@@ -194,9 +354,7 @@ export default function SetPasswordForm() {
             ? window.location.origin
             : "https://app.sharifbusinesssolutions.com";
 
-        window.location.replace(
-          appUrl,
-        );
+        window.location.replace(appUrl);
 
         return;
       }
@@ -206,15 +364,12 @@ export default function SetPasswordForm() {
        * B2B CUSTOMER PORTAL
        * -------------------------------------------------------
        *
-       * The invitation already created the portal-user
-       * relationship.
+       * The customer portal relationship was already created
+       * when the administrator sent the invitation.
        *
-       * We therefore do NOT call the employee activation RPC.
+       * No employee activation RPC is required here.
        */
-
-      window.location.replace(
-        "/portal",
-      );
+      window.location.replace("/portal");
     } catch (err) {
       console.error(
         "Set password error:",
@@ -227,6 +382,28 @@ export default function SetPasswordForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /*
+   * -------------------------------------------------------
+   * INITIALIZING STATE
+   * -------------------------------------------------------
+   */
+  if (initializing) {
+    return (
+      <div className={styles.form}>
+        <div className={styles.loadingState}>
+          <span
+            className={styles.spinner}
+            aria-hidden="true"
+          />
+
+          <span>
+            Verifying your invitation...
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -246,9 +423,7 @@ export default function SetPasswordForm() {
           Create password
         </label>
 
-        <div
-          className={styles.inputWrapper}
-        >
+        <div className={styles.inputWrapper}>
           <span
             className={styles.inputIcon}
             aria-hidden="true"
@@ -383,9 +558,7 @@ export default function SetPasswordForm() {
           Confirm password
         </label>
 
-        <div
-          className={styles.inputWrapper}
-        >
+        <div className={styles.inputWrapper}>
           <span
             className={styles.inputIcon}
             aria-hidden="true"
@@ -538,6 +711,7 @@ export default function SetPasswordForm() {
         }
         disabled={
           loading ||
+          !!error ||
           !passwordChecks.length ||
           !passwordChecks.match
         }

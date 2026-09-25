@@ -52,7 +52,7 @@ export default function SetPasswordPage() {
       <header className={styles.passwordHeader}>
         <Link href="/" className={styles.brand}>
           <Image
-            src="/sbs-logo.png"
+            src="/sbs-logo-black.png"
             alt="Sharif Business Solutions"
             width={190}
             height={43}
@@ -197,7 +197,7 @@ export default function SetPasswordPage() {
             {/* Card logo */}
             <div className={styles.cardBrand}>
               <Image
-                src="/sbs-logo.png"
+                src="/sbs-logo-black.png"
                 alt="SBS"
                 width={190}
                 height={48}
