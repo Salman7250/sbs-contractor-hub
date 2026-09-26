@@ -1,512 +1,1276 @@
+import Link from "next/link";
+
+import {
+  CheckCircle2,
+  Clock3,
+  DollarSign,
+  Edit3,
+  Gift,
+  Percent,
+  Plus,
+  Search,
+  ShieldCheck,
+  Trash2,
+  Users,
+  XCircle,
+  Zap,
+} from "lucide-react";
+
+import {
+  createDiscount,
+  deleteDiscount,
+  toggleDiscount,
+  updateDiscount,
+} from "./actions";
+
+import CopyDiscountCode from "./copy-discount-code";
+import DiscountForm from "./discount-form";
+
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
+import { createClient } from "@/lib/supabase/server";
 
-const discounts = [
-  {
-    id: "DISC-001",
-    code: "WELCOME25",
-    description: "25% off first subscription",
-    type: "Percentage",
-    value: "25%",
-    appliesTo: "All Plans",
-    status: "active",
-    usage: "12 / 100",
-    expires: "Oct 31, 2026",
-  },
-  {
-    id: "DISC-002",
-    code: "SBS50",
-    description: "Special $50 discount",
-    type: "Fixed Amount",
-    value: "$50",
-    appliesTo: "Professional",
-    status: "active",
-    usage: "4 / 25",
-    expires: "Dec 31, 2026",
-  },
-  {
-    id: "DISC-003",
-    code: "EARLYBIRD",
-    description: "Early customer discount",
-    type: "Percentage",
-    value: "15%",
-    appliesTo: "All Plans",
-    status: "active",
-    usage: "18 / 50",
-    expires: "Sep 30, 2026",
-  },
-  {
-    id: "DISC-004",
-    code: "SUMMER26",
-    description: "Summer promotional discount",
-    type: "Percentage",
-    value: "20%",
-    appliesTo: "Starter",
-    status: "expired",
-    usage: "31 / 50",
-    expires: "Aug 31, 2026",
-  },
-  {
-    id: "DISC-005",
-    code: "PARTNER100",
-    description: "Partner referral discount",
-    type: "Fixed Amount",
-    value: "$100",
-    appliesTo: "Business",
-    status: "disabled",
-    usage: "7 / 20",
-    expires: "Nov 30, 2026",
-  },
-];
+type SearchParams = {
+  q?: string;
+  status?: string;
+  type?: string;
+  create?: string;
+  edit?: string;
+};
 
-const discountRules = [
-  {
-    title: "Percentage Discount",
-    description:
-      "Reduce the subscription price by a defined percentage.",
-    example: "25% off",
-    icon: "%",
-  },
-  {
-    title: "Fixed Amount",
-    description:
-      "Subtract a fixed monetary amount from an eligible purchase.",
-    example: "$50 off",
-    icon: "$",
-  },
-  {
-    title: "Plan Specific",
-    description:
-      "Restrict a discount to one or more specific subscription plans.",
-    example: "Professional only",
-    icon: "P",
-  },
-  {
-    title: "Usage Limited",
-    description:
-      "Limit the number of times a promotional code can be redeemed.",
-    example: "100 redemptions",
-    icon: "#",
-  },
-];
+type PageProps = {
+  searchParams?: Promise<SearchParams>;
+};
 
-export default async function AdminDiscountsPage() {
+type Company = {
+  id: string;
+  name: string;
+};
+
+type Plan = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+type Discount = {
+  id: string;
+  company_id: string | null;
+  plan_id: string | null;
+  name: string;
+  code: string | null;
+
+  discount_type:
+    | "percentage"
+    | "fixed";
+
+  discount_value: number;
+
+  duration_type:
+    | "one_time"
+    | "one_month"
+    | "three_months"
+    | "six_months"
+    | "twelve_months"
+    | "lifetime"
+    | "custom";
+
+  starts_at: string;
+  expires_at: string | null;
+
+  billing_cycle:
+    | "monthly"
+    | "yearly"
+    | null;
+
+  is_active: boolean;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+
+  duration_value: number | null;
+
+  duration_unit:
+    | "days"
+    | "weeks"
+    | "months"
+    | "years"
+    | null;
+
+  max_redemptions: number | null;
+  redemption_count: number;
+};
+
+function getDurationLabel(
+  discount: Discount,
+) {
+  switch (discount.duration_type) {
+    case "one_time":
+      return "One time";
+
+    case "one_month":
+      return "1 month";
+
+    case "three_months":
+      return "3 months";
+
+    case "six_months":
+      return "6 months";
+
+    case "twelve_months":
+      return "12 months";
+
+    case "lifetime":
+      return "Lifetime";
+
+    case "custom":
+      if (
+        discount.duration_value &&
+        discount.duration_unit
+      ) {
+        return `${discount.duration_value} ${discount.duration_unit}`;
+      }
+
+      return "Custom";
+
+    default:
+      return "Lifetime";
+  }
+}
+
+function getDiscountLabel(
+  discount: Discount,
+) {
+  if (
+    discount.discount_type ===
+    "percentage"
+  ) {
+    return `${discount.discount_value}%`;
+  }
+
+  return `$${Number(
+    discount.discount_value,
+  ).toFixed(2)}`;
+}
+
+function getStatus(
+  discount: Discount,
+) {
+  if (!discount.is_active) {
+    return "disabled";
+  }
+
+  if (
+    discount.expires_at &&
+    new Date(
+      discount.expires_at,
+    ).getTime() < Date.now()
+  ) {
+    return "expired";
+  }
+
+  if (
+    discount.max_redemptions !==
+      null &&
+    discount.redemption_count >=
+      discount.max_redemptions
+  ) {
+    return "limit_reached";
+  }
+
+  return "active";
+}
+
+function getStatusLabel(
+  status: string,
+) {
+  switch (status) {
+    case "active":
+      return "Active";
+
+    case "expired":
+      return "Expired";
+
+    case "disabled":
+      return "Disabled";
+
+    case "limit_reached":
+      return "Limit reached";
+
+    default:
+      return status;
+  }
+}
+
+function getStatusStyles(
+  status: string,
+) {
+  switch (status) {
+    case "active":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-600/10";
+
+    case "expired":
+      return "bg-slate-100 text-slate-600 ring-slate-500/10";
+
+    case "disabled":
+      return "bg-red-50 text-red-700 ring-red-600/10";
+
+    case "limit_reached":
+      return "bg-amber-50 text-amber-700 ring-amber-600/10";
+
+    default:
+      return "bg-slate-100 text-slate-600 ring-slate-500/10";
+  }
+}
+
+function buildHref(
+  search: string,
+  status: string,
+  type: string,
+) {
+  const params =
+    new URLSearchParams();
+
+  if (search.trim()) {
+    params.set(
+      "q",
+      search.trim(),
+    );
+  }
+
+  if (
+    status &&
+    status !== "all"
+  ) {
+    params.set(
+      "status",
+      status,
+    );
+  }
+
+  if (
+    type &&
+    type !== "all"
+  ) {
+    params.set(
+      "type",
+      type,
+    );
+  }
+
+  const query =
+    params.toString();
+
+  return query
+    ? `/sbs-admin/discounts?${query}`
+    : "/sbs-admin/discounts";
+}
+
+function formatDate(
+  value: string | null,
+) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Date(
+    value,
+  ).toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    },
+  );
+}
+
+export default async function AdminDiscountsPage({
+  searchParams,
+}: PageProps) {
   await requirePlatformAdmin();
 
-  const activeDiscounts = discounts.filter(
-    (discount) => discount.status === "active"
-  );
+  const supabase =
+    await createClient();
 
-  const expiredDiscounts = discounts.filter(
-    (discount) => discount.status === "expired"
-  );
+  const params =
+    searchParams
+      ? await searchParams
+      : {};
 
-  const disabledDiscounts = discounts.filter(
-    (discount) => discount.status === "disabled"
-  );
+  const searchQuery =
+    typeof params.q === "string"
+      ? params.q.trim()
+      : "";
 
-  const totalUsage = discounts.reduce((total, discount) => {
-    const current = Number(discount.usage.split("/")[0]);
-    return total + current;
-  }, 0);
+  const requestedStatus =
+    typeof params.status ===
+    "string"
+      ? params.status
+      : "all";
+
+  const requestedType =
+    typeof params.type ===
+    "string"
+      ? params.type
+      : "all";
+
+  const showCreate =
+    params.create === "1";
+
+  const editId =
+    typeof params.edit === "string"
+      ? params.edit
+      : "";
+
+  const [
+    discountsResult,
+    companiesResult,
+    plansResult,
+  ] = await Promise.all([
+    supabase
+      .from("company_discounts")
+      .select(
+        `
+          id,
+          company_id,
+          plan_id,
+          name,
+          code,
+          discount_type,
+          discount_value,
+          duration_type,
+          starts_at,
+          expires_at,
+          billing_cycle,
+          is_active,
+          reason,
+          created_by,
+          created_at,
+          updated_at,
+          duration_value,
+          duration_unit,
+          max_redemptions,
+          redemption_count
+        `,
+      )
+      .order("created_at", {
+        ascending: false,
+      }),
+
+    supabase
+      .from("companies")
+      .select("id, name")
+      .order("name"),
+
+    supabase
+      .from("plans")
+      .select("id, name, slug")
+      .eq("is_active", true)
+      .order("sort_order"),
+  ]);
+
+  if (discountsResult.error) {
+    throw new Error(
+      discountsResult.error.message,
+    );
+  }
+
+  if (companiesResult.error) {
+    throw new Error(
+      companiesResult.error.message,
+    );
+  }
+
+  if (plansResult.error) {
+    throw new Error(
+      plansResult.error.message,
+    );
+  }
+
+  const discounts =
+    (discountsResult.data ??
+      []) as Discount[];
+
+  const companies =
+    (companiesResult.data ??
+      []) as Company[];
+
+  const plans =
+    (plansResult.data ??
+      []) as Plan[];
+
+  const companyMap =
+    new Map(
+      companies.map(
+        (company) => [
+          company.id,
+          company,
+        ],
+      ),
+    );
+
+  const planMap =
+    new Map(
+      plans.map(
+        (plan) => [
+          plan.id,
+          plan,
+        ],
+      ),
+    );
+
+  const normalizedSearch =
+    searchQuery.toLowerCase();
+
+  const filteredDiscounts =
+    discounts.filter(
+      (discount) => {
+        const status =
+          getStatus(discount);
+
+        const matchesSearch =
+          !normalizedSearch ||
+          [
+            discount.name,
+            discount.code,
+            discount.reason,
+            companyMap.get(
+              discount.company_id ??
+                "",
+            )?.name,
+            planMap.get(
+              discount.plan_id ??
+                "",
+            )?.name,
+          ]
+            .filter(Boolean)
+            .some(
+              (value) =>
+                String(value)
+                  .toLowerCase()
+                  .includes(
+                    normalizedSearch,
+                  ),
+            );
+
+        const matchesStatus =
+          requestedStatus ===
+            "all" ||
+          status ===
+            requestedStatus;
+
+        const matchesType =
+          requestedType ===
+            "all" ||
+          discount.discount_type ===
+            requestedType;
+
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesType
+        );
+      },
+    );
+
+  const activeCount =
+    discounts.filter(
+      (discount) =>
+        getStatus(discount) ===
+        "active",
+    ).length;
+
+  const expiredCount =
+    discounts.filter(
+      (discount) =>
+        getStatus(discount) ===
+        "expired",
+    ).length;
+
+  const disabledCount =
+    discounts.filter(
+      (discount) =>
+        getStatus(discount) ===
+        "disabled",
+    ).length;
+
+  const redemptionCount =
+    discounts.reduce(
+      (total, discount) =>
+        total +
+        Number(
+          discount.redemption_count ??
+            0,
+        ),
+      0,
+    );
+
+  const limitedCount =
+    discounts.filter(
+      (discount) =>
+        discount.max_redemptions !==
+        null,
+    ).length;
+
+  const editDiscount =
+    editId
+      ? discounts.find(
+          (discount) =>
+            discount.id ===
+            editId,
+        ) ?? null
+      : null;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="min-h-full bg-[#f3f5f8]">
+      {/* HEADER */}
+
+      <div className="flex flex-col gap-5 border-b border-slate-200 pb-7 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+            <Gift className="h-4 w-4" />
             Revenue Management
           </div>
 
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
             Discounts
           </h1>
 
-          <p className="mt-2 max-w-3xl text-slate-400">
-            Create and manage promotional codes, subscription
-            discounts, partner offers, and limited-time pricing
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Create and manage custom
+            subscription discounts,
+            promotional offers,
+            lifetime deals and
+            limited-time pricing
             incentives across SBS.
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center rounded-xl bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-700"
+        <Link
+          href={
+            showCreate ||
+            editDiscount
+              ? "/sbs-admin/discounts"
+              : "/sbs-admin/discounts?create=1"
+          }
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
         >
-          Create Discount
-        </button>
+          {showCreate ||
+          editDiscount ? (
+            <>
+              <XCircle className="h-4 w-4" />
+              Close
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Create Discount
+            </>
+          )}
+        </Link>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DiscountStat
-          label="Active Discounts"
-          value={activeDiscounts.length}
-          icon="%"
+      {/* STATS */}
+
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <StatCard
+          label="Total Discounts"
+          value={discounts.length}
+          icon={
+            <Gift className="h-5 w-5" />
+          }
         />
 
-        <DiscountStat
-          label="Total Redemptions"
-          value={totalUsage}
-          icon="↗"
+        <StatCard
+          label="Active"
+          value={activeCount}
+          icon={
+            <CheckCircle2 className="h-5 w-5" />
+          }
+          accent="green"
         />
 
-        <DiscountStat
+        <StatCard
+          label="Redemptions"
+          value={redemptionCount}
+          icon={
+            <Zap className="h-5 w-5" />
+          }
+          accent="blue"
+        />
+
+        <StatCard
           label="Expired"
-          value={expiredDiscounts.length}
-          icon="◷"
-          warning
+          value={expiredCount}
+          icon={
+            <Clock3 className="h-5 w-5" />
+          }
+          accent="amber"
         />
 
-        <DiscountStat
+        <StatCard
           label="Disabled"
-          value={disabledDiscounts.length}
-          icon="×"
-          danger
+          value={disabledCount}
+          icon={
+            <XCircle className="h-5 w-5" />
+          }
+          accent="red"
         />
       </div>
 
-      {/* Discount Rules */}
-      <section>
-        <div className="mb-5">
-          <h2 className="font-semibold text-white">
-            Discount Types
-          </h2>
+      {/* FEATURE CARDS */}
 
-          <p className="mt-1 text-xs text-slate-500">
-            Supported promotional mechanisms for the SBS billing
-            system.
-          </p>
-        </div>
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <FeatureCard
+          icon={
+            <Percent className="h-5 w-5" />
+          }
+          title="Percentage Discounts"
+          description="Give customers any percentage from 1% to 100% off."
+          example="25% off"
+          accent="green"
+        />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {discountRules.map((rule) => (
-            <div
-              key={rule.title}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm font-semibold text-slate-300">
-                  {rule.icon}
-                </div>
+        <FeatureCard
+          icon={
+            <DollarSign className="h-5 w-5" />
+          }
+          title="Fixed Amount"
+          description="Subtract a specific monetary amount from the subscription."
+          example="$50 off"
+          accent="blue"
+        />
 
-                <span className="text-[10px] uppercase tracking-wider text-slate-600">
-                  Supported
-                </span>
-              </div>
+        <FeatureCard
+          icon={
+            <Clock3 className="h-5 w-5" />
+          }
+          title="Flexible Duration"
+          description="Use lifetime, fixed subscription periods or your own duration."
+          example="90 days"
+          accent="amber"
+        />
+      </div>
 
-              <h3 className="mt-5 text-sm font-semibold text-white">
-                {rule.title}
-              </h3>
+      {/* TOOLBAR */}
 
-              <p className="mt-2 text-xs leading-5 text-slate-500">
-                {rule.description}
-              </p>
+      <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <form
+            method="GET"
+            action="/sbs-admin/discounts"
+            className="w-full lg:max-w-md"
+          >
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-              <div className="mt-4 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-xs text-slate-400">
-                Example:{" "}
-                <span className="text-slate-300">
-                  {rule.example}
-                </span>
-              </div>
+              <input
+                type="text"
+                name="q"
+                defaultValue={searchQuery}
+                placeholder="Search discounts..."
+                autoComplete="off"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+              />
             </div>
-          ))}
+          </form>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterButton
+              label="All"
+              active={
+                requestedStatus ===
+                "all"
+              }
+              href={buildHref(
+                searchQuery,
+                "all",
+                requestedType,
+              )}
+            />
+
+            <FilterButton
+              label="Active"
+              active={
+                requestedStatus ===
+                "active"
+              }
+              href={buildHref(
+                searchQuery,
+                "active",
+                requestedType,
+              )}
+            />
+
+            <FilterButton
+              label="Expired"
+              active={
+                requestedStatus ===
+                "expired"
+              }
+              href={buildHref(
+                searchQuery,
+                "expired",
+                requestedType,
+              )}
+            />
+
+            <FilterButton
+              label="Disabled"
+              active={
+                requestedStatus ===
+                "disabled"
+              }
+              href={buildHref(
+                searchQuery,
+                "disabled",
+                requestedType,
+              )}
+            />
+
+            <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
+
+            <FilterButton
+              label="All Types"
+              active={
+                requestedType ===
+                "all"
+              }
+              href={buildHref(
+                searchQuery,
+                requestedStatus,
+                "all",
+              )}
+            />
+
+            <FilterButton
+              label="Percentage"
+              active={
+                requestedType ===
+                "percentage"
+              }
+              href={buildHref(
+                searchQuery,
+                requestedStatus,
+                "percentage",
+              )}
+            />
+
+            <FilterButton
+              label="Fixed"
+              active={
+                requestedType ===
+                "fixed"
+              }
+              href={buildHref(
+                searchQuery,
+                requestedStatus,
+                "fixed",
+              )}
+            />
+          </div>
         </div>
-      </section>
 
-      {/* Filters */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03]">
-        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
-          <input
-            type="text"
-            disabled
-            placeholder="Search discount code..."
-            className="flex-1 rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600"
-          />
+        <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs text-slate-500">
+            Showing{" "}
+            <span className="font-semibold text-slate-700">
+              {filteredDiscounts.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-slate-700">
+              {discounts.length}
+            </span>{" "}
+            discounts
+          </div>
 
-          <select
-            disabled
-            defaultValue="all"
-            className="rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-500 outline-none"
-          >
-            <option value="all">
-              All statuses
-            </option>
-            <option value="active">
-              Active
-            </option>
-            <option value="expired">
-              Expired
-            </option>
-            <option value="disabled">
-              Disabled
-            </option>
-          </select>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span>
+              {limitedCount} usage-limited
+            </span>
 
-          <select
-            disabled
-            defaultValue="all"
-            className="rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-500 outline-none"
-          >
-            <option value="all">
-              All types
-            </option>
-            <option value="percentage">
-              Percentage
-            </option>
-            <option value="fixed">
-              Fixed Amount
-            </option>
-          </select>
+            {(searchQuery ||
+              requestedStatus !==
+                "all" ||
+              requestedType !==
+                "all") && (
+              <Link
+                href="/sbs-admin/discounts"
+                className="font-semibold text-emerald-700 hover:text-emerald-800"
+              >
+                Clear filters
+              </Link>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
 
-      {/* Discounts Table */}
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
-          <div>
-            <h2 className="font-semibold text-white">
-              Promotional Codes
+      {/* TABLE */}
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {filteredDiscounts.length >
+        0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1250px] text-left">
+              <thead className="border-b border-slate-200 bg-slate-50">
+                <tr>
+                  <TableHeader>
+                    Discount
+                  </TableHeader>
+
+                  <TableHeader>
+                    Customer
+                  </TableHeader>
+
+                  <TableHeader>
+                    Offer
+                  </TableHeader>
+
+                  <TableHeader>
+                    Duration
+                  </TableHeader>
+
+                  <TableHeader>
+                    Billing
+                  </TableHeader>
+
+                  <TableHeader>
+                    Usage
+                  </TableHeader>
+
+                  <TableHeader>
+                    Starts
+                  </TableHeader>
+
+                  <TableHeader>
+                    Status
+                  </TableHeader>
+
+                  <TableHeader>
+                    <span className="sr-only">
+                      Actions
+                    </span>
+                  </TableHeader>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {filteredDiscounts.map(
+                  (discount) => {
+                    const status =
+                      getStatus(
+                        discount,
+                      );
+
+                    const company =
+                      discount.company_id
+                        ? companyMap.get(
+                            discount.company_id,
+                          )
+                        : null;
+
+                    const plan =
+                      discount.plan_id
+                        ? planMap.get(
+                            discount.plan_id,
+                          )
+                        : null;
+
+                    return (
+                      <tr
+                        key={
+                          discount.id
+                        }
+                        className="group transition hover:bg-slate-50/80"
+                      >
+                        {/* DISCOUNT */}
+
+                        <td className="px-5 py-5">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                              {discount.discount_type ===
+                              "percentage" ? (
+                                <Percent className="h-4 w-4" />
+                              ) : (
+                                <DollarSign className="h-4 w-4" />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-900">
+                                {
+                                  discount.name
+                                }
+                              </div>
+
+                              <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                                {discount.code ? (
+                                  <>
+                                    <span className="font-mono font-medium text-emerald-700">
+                                      {
+                                        discount.code
+                                      }
+                                    </span>
+
+                                    <span>
+                                      •
+                                    </span>
+
+                                    <CopyDiscountCode
+                                      code={
+                                        discount.code
+                                      }
+                                    />
+                                  </>
+                                ) : null}
+
+                                <span>
+                                  {discount.id.slice(
+                                    0,
+                                    8,
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* CUSTOMER */}
+
+                        <td className="px-5 py-5">
+                          <div className="text-sm font-medium text-slate-700">
+                            {company?.name ??
+                              "All companies"}
+                          </div>
+
+                          <div className="mt-1 text-xs text-slate-400">
+                            {plan?.name ??
+                              "All plans"}
+                          </div>
+                        </td>
+
+                        {/* OFFER */}
+
+                        <td className="px-5 py-5">
+                          <div className="text-base font-bold text-slate-900">
+                            {getDiscountLabel(
+                              discount,
+                            )}
+                          </div>
+
+                          <div className="mt-1 text-xs capitalize text-slate-400">
+                            {
+                              discount.discount_type
+                            }
+                          </div>
+                        </td>
+
+                        {/* DURATION */}
+
+                        <td className="px-5 py-5">
+                          <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {getDurationLabel(
+                              discount,
+                            )}
+                          </span>
+                        </td>
+
+                        {/* BILLING */}
+
+                        <td className="px-5 py-5">
+                          <span className="text-sm capitalize text-slate-600">
+                            {discount.billing_cycle ??
+                              "Both"}
+                          </span>
+                        </td>
+
+                        {/* USAGE */}
+
+                        <td className="px-5 py-5">
+                          <div className="text-sm font-medium text-slate-700">
+                            {
+                              discount.redemption_count
+                            }
+                            {discount.max_redemptions !==
+                            null
+                              ? ` / ${discount.max_redemptions}`
+                              : " / Unlimited"}
+                          </div>
+                        </td>
+
+                        {/* START */}
+
+                        <td className="px-5 py-5">
+                          <div className="text-sm text-slate-600">
+                            {formatDate(
+                              discount.starts_at,
+                            )}
+                          </div>
+
+                          <div className="mt-1 text-xs text-slate-400">
+                            {discount.expires_at
+                              ? `Ends ${formatDate(
+                                  discount.expires_at,
+                                )}`
+                              : "No expiry"}
+                          </div>
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-5 py-5">
+                          <span
+                            className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${getStatusStyles(
+                              status,
+                            )}`}
+                          >
+                            {getStatusLabel(
+                              status,
+                            )}
+                          </span>
+                        </td>
+
+                        {/* ACTIONS */}
+
+                        <td className="px-5 py-5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Link
+                              href={`/sbs-admin/discounts?edit=${discount.id}`}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+                              title="Edit discount"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </Link>
+
+                            <form
+                              action={
+                                toggleDiscount
+                              }
+                            >
+                              <input
+                                type="hidden"
+                                name="id"
+                                value={
+                                  discount.id
+                                }
+                              />
+
+                              <input
+                                type="hidden"
+                                name="next_status"
+                                value={
+                                  discount.is_active
+                                    ? "false"
+                                    : "true"
+                                }
+                              />
+
+                              <button
+                                type="submit"
+                                title={
+                                  discount.is_active
+                                    ? "Disable discount"
+                                    : "Enable discount"
+                                }
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+                              >
+                                {discount.is_active ? (
+                                  <XCircle className="h-4 w-4" />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            </form>
+
+                            <form
+                              action={
+                                deleteDiscount
+                              }
+                            >
+                              <input
+                                type="hidden"
+                                name="id"
+                                value={
+                                  discount.id
+                                }
+                              />
+
+                              <button
+                                type="submit"
+                                title="Delete discount"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-6 py-16 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <Gift className="h-7 w-7" />
+            </div>
+
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">
+              No discounts found
             </h2>
 
-            <p className="mt-1 text-xs text-slate-500">
-              Manage platform-wide discount campaigns.
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+              Create your first
+              discount or change the
+              current search and
+              filters.
             </p>
+
+            <div className="mt-5">
+              <Link
+                href="/sbs-admin/discounts?create=1"
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                <Plus className="h-4 w-4" />
+                Create Discount
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* LOGIC CARDS */}
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <ShieldCheck className="h-5 w-5" />
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-xs text-slate-500">
-            {discounts.length} codes
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-left">
-            <thead className="border-b border-white/10 bg-white/[0.02]">
-              <tr>
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Code
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Description
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Discount
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Applies To
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Usage
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Expires
-                </th>
-
-                <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Status
-                </th>
-
-                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Action
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-white/10">
-              {discounts.map((discount) => (
-                <tr
-                  key={discount.id}
-                  className="transition hover:bg-white/[0.025]"
-                >
-                  <td className="px-6 py-5">
-                    <div className="font-mono text-xs font-semibold text-emerald-400">
-                      {discount.code}
-                    </div>
-
-                    <div className="mt-1 text-[10px] text-slate-600">
-                      {discount.id}
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <span className="text-sm text-slate-300">
-                      {discount.description}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <div className="font-semibold text-white">
-                      {discount.value}
-                    </div>
-
-                    <div className="mt-1 text-[10px] text-slate-600">
-                      {discount.type}
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <span className="text-sm text-slate-400">
-                      {discount.appliesTo}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <span className="text-sm text-slate-300">
-                      {discount.usage}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <span className="text-sm text-slate-400">
-                      {discount.expires}
-                    </span>
-                  </td>
-
-                  <td className="px-6 py-5">
-                    <DiscountStatus
-                      status={discount.status}
-                    />
-                  </td>
-
-                  <td className="px-6 py-5 text-right">
-                    <button
-                      type="button"
-                      disabled
-                      className="rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-600"
-                    >
-                      Manage
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Discount Logic */}
-      <section className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-sm text-emerald-400">
-            %
-          </div>
-
-          <h3 className="mt-5 font-semibold text-white">
-            Discount Evaluation
+          <h3 className="mt-5 font-semibold text-slate-900">
+            Flexible discount control
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            During checkout, SBS should validate the promotional
-            code against its status, expiration, usage limit,
-            eligible plans, and other configured restrictions.
+            Each discount can target
+            a company, a specific
+            plan or remain available
+            across the platform.
+            You control the
+            percentage or fixed
+            amount, duration,
+            billing cycle and
+            redemption limit.
           </p>
 
-          <div className="mt-5 rounded-xl border border-white/10 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-500">
-            Code Valid
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-6 text-slate-500">
+            Discount
             <br />
-            + Not Expired
+            + Plan / Company
             <br />
-            + Usage Available
+            + Duration
             <br />
-            + Plan Eligible
+            + Usage Limit
             <br />
-            = Discount Applied
+            + Billing Cycle
+            <br />= Controlled Offer
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-sm text-amber-400">
-            $
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <Users className="h-5 w-5" />
           </div>
 
-          <h3 className="mt-5 font-semibold text-white">
-            Revenue Protection
+          <h3 className="mt-5 font-semibold text-slate-900">
+            Customer-specific offers
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Discounts should never be trusted from the browser.
-            The server-side billing system must calculate and
-            validate the final payable amount before charging the
-            customer.
+            Give individual
+            companies special pricing
+            without changing the
+            public plan price.
+            Lifetime deals and
+            custom durations are
+            stored independently
+            from the standard
+            subscription plans.
           </p>
 
-          <div className="mt-5 rounded-xl border border-amber-500/10 bg-amber-500/[0.03] p-4 text-xs leading-5 text-amber-400/60">
-            Original Price → Discount Validation → Final Price →
-            Payment Provider
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/50 p-4 text-xs leading-5 text-blue-700">
+            Standard Plan Price →
+            Custom Discount →
+            Customer&apos;s Final Price
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* Notice */}
-      <section className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
-        <div className="flex gap-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-sm text-amber-400">
-            !
-          </div>
+      {/* DISCOUNT MODAL */}
 
-          <div>
-            <h3 className="text-sm font-semibold text-amber-300">
-              Discount engine is not connected
-            </h3>
-
-            <p className="mt-1 text-xs leading-5 text-amber-400/60">
-              The discount codes shown above are interface
-              placeholders. No promotional codes are currently
-              being applied to real customer billing. The
-              production implementation will connect discounts
-              with plans, subscriptions, checkout, payments,
-              usage limits, and expiration rules.
-            </p>
-          </div>
-        </div>
-      </section>
+      {showCreate || editDiscount ? (
+        <DiscountForm
+          companies={companies}
+          plans={plans}
+          discount={editDiscount}
+          action={
+            editDiscount
+              ? updateDiscount
+              : createDiscount
+          }
+        />
+      ) : null}
     </div>
   );
 }
 
-function DiscountStat({
+function StatCard({
   label,
   value,
   icon,
-  warning = false,
-  danger = false,
+  accent = "slate",
 }: {
   label: string;
-  value: number;
-  icon: string;
-  warning?: boolean;
-  danger?: boolean;
+  value: string | number;
+  icon: React.ReactNode;
+  accent?:
+    | "slate"
+    | "green"
+    | "blue"
+    | "amber"
+    | "red";
 }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="flex items-start justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-sm text-slate-200">
-          {icon}
-        </div>
+  const iconStyles = {
+    slate:
+      "bg-slate-100 text-slate-600",
+    green:
+      "bg-emerald-50 text-emerald-700",
+    blue:
+      "bg-blue-50 text-blue-700",
+    amber:
+      "bg-amber-50 text-amber-700",
+    red:
+      "bg-red-50 text-red-700",
+  };
 
-        <span
-          className={`h-2 w-2 rounded-full ${
-            danger
-              ? "bg-red-400"
-              : warning
-                ? "bg-amber-400"
-                : "bg-emerald-400"
-          }`}
-        />
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconStyles[accent]}`}
+      >
+        {icon}
       </div>
 
       <div className="mt-5">
-        <div className="text-3xl font-bold tracking-tight text-white">
+        <div className="text-2xl font-bold tracking-tight text-slate-950">
           {value}
         </div>
 
-        <div className="mt-1 text-sm text-slate-500">
+        <div className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
           {label}
         </div>
       </div>
@@ -514,30 +1278,89 @@ function DiscountStat({
   );
 }
 
-function DiscountStatus({
-  status,
+function FeatureCard({
+  icon,
+  title,
+  description,
+  example,
+  accent,
 }: {
-  status: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  example: string;
+  accent:
+    | "green"
+    | "blue"
+    | "amber";
 }) {
-  const styles: Record<string, string> = {
-    active: "bg-emerald-500/10 text-emerald-400",
-    expired: "bg-slate-500/10 text-slate-400",
-    disabled: "bg-red-500/10 text-red-400",
-  };
-
-  const labels: Record<string, string> = {
-    active: "Active",
-    expired: "Expired",
-    disabled: "Disabled",
+  const iconStyles = {
+    green:
+      "bg-emerald-50 text-emerald-700",
+    blue:
+      "bg-blue-50 text-blue-700",
+    amber:
+      "bg-amber-50 text-amber-700",
   };
 
   return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-        styles[status] ?? "bg-white/5 text-slate-400"
-      }`}
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconStyles[accent]}`}
+      >
+        {icon}
+      </div>
+
+      <h3 className="mt-5 text-sm font-semibold text-slate-900">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+
+      <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+        Example:{" "}
+        <span className="font-semibold text-slate-900">
+          {example}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FilterButton({
+  label,
+  active,
+  href,
+}: {
+  label: string;
+  active: boolean;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={[
+        "rounded-lg px-3.5 py-2 text-xs font-semibold transition",
+        active
+          ? "bg-slate-900 text-white shadow-sm"
+          : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700",
+      ].join(" ")}
     >
-      {labels[status] ?? status}
-    </span>
+      {label}
+    </Link>
+  );
+}
+
+function TableHeader({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+      {children}
+    </th>
   );
 }
