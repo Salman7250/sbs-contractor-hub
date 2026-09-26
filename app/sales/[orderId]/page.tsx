@@ -64,21 +64,6 @@ type OrderItem = {
   updated_at: string;
 };
 
-type ProductTracking = {
-  id: string;
-  tracking_mode: string | null;
-};
-
-type SerializedUnit = {
-  id: string;
-  serial_number: string;
-  barcode: string | null;
-  status: string;
-  product_id: string;
-  variant_id: string | null;
-  warehouse_id: string | null;
-  location_id: string | null;
-};
 
 type Invoice = {
   id: string;
@@ -108,19 +93,6 @@ type InvoicePayment = {
   updated_at: string;
 };
 
-type Warehouse = {
-  id: string;
-  name: string;
-  code: string;
-  is_default: boolean;
-};
-
-type WarehouseLocation = {
-  id: string;
-  warehouse_id: string;
-  name: string;
-  code: string;
-};
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -196,9 +168,10 @@ export default function OrderDetailsPage() {
   ) =>
     formatRegionalMoney(amount, settings);
 
-  const orderId = String(
-    params.orderId || ""
-  );
+  const rawOrderId = params.orderId;
+  const orderId = Array.isArray(rawOrderId)
+    ? String(rawOrderId[0] || "")
+    : String(rawOrderId || "");
 
   const supabase = useMemo(
     () => createClient(),
@@ -244,41 +217,6 @@ export default function OrderDetailsPage() {
   const [paymentsLoading, setPaymentsLoading] =
     useState(false);
 
-  const [warehouses, setWarehouses] =
-    useState<Warehouse[]>([]);
-
-  const [locations, setLocations] =
-    useState<WarehouseLocation[]>([]);
-
-  const [selectedWarehouseId, setSelectedWarehouseId] =
-    useState("");
-
-  const [selectedLocationId, setSelectedLocationId] =
-    useState("");
-
-  const [fulfillmentOptionsLoading, setFulfillmentOptionsLoading] =
-    useState(false);
-
-  const [isFulfilling, setIsFulfilling] =
-    useState(false);
-
-  const [fulfillmentError, setFulfillmentError] =
-    useState<string | null>(null);
-
-  const [fulfillmentSuccess, setFulfillmentSuccess] =
-    useState<string | null>(null);
-
-  const [productTrackingModes, setProductTrackingModes] =
-    useState<Record<string, string>>({});
-
-  const [availableSerials, setAvailableSerials] =
-    useState<Record<string, SerializedUnit[]>>({});
-
-  const [selectedSerials, setSelectedSerials] =
-    useState<Record<string, string[]>>({});
-
-  const [serialsLoading, setSerialsLoading] =
-    useState(false);
 
   const loadFinancialConnections = useCallback(
     async (
@@ -389,120 +327,6 @@ export default function OrderDetailsPage() {
     [supabase]
   );
 
-  const loadFulfillmentOptions = useCallback(
-    async (companyId: string) => {
-      setFulfillmentOptionsLoading(true);
-      setFulfillmentError(null);
-
-      try {
-        const [
-          warehousesResult,
-          locationsResult,
-        ] = await Promise.all([
-          supabase
-            .from("warehouses")
-            .select(
-              "id, name, code, is_default"
-            )
-            .eq(
-              "company_id",
-              companyId
-            )
-            .eq("is_active", true)
-            .order("is_default", {
-              ascending: false,
-            })
-            .order("name", {
-              ascending: true,
-            }),
-
-          supabase
-            .from("warehouse_locations")
-            .select(
-              "id, warehouse_id, name, code"
-            )
-            .eq(
-              "company_id",
-              companyId
-            )
-            .eq("is_active", true)
-            .order("name", {
-              ascending: true,
-            }),
-        ]);
-
-        if (warehousesResult.error) {
-          throw warehousesResult.error;
-        }
-
-        if (locationsResult.error) {
-          throw locationsResult.error;
-        }
-
-        const loadedWarehouses =
-          (warehousesResult.data ||
-            []) as Warehouse[];
-
-        const loadedLocations =
-          (locationsResult.data ||
-            []) as WarehouseLocation[];
-
-        const defaultWarehouse =
-          loadedWarehouses.find(
-            (warehouse) =>
-              warehouse.is_default
-          ) ||
-          loadedWarehouses[0];
-
-        const defaultLocation =
-          defaultWarehouse
-            ? loadedLocations.find(
-                (location) =>
-                  location.warehouse_id ===
-                  defaultWarehouse.id
-              )
-            : null;
-
-        setWarehouses(
-          loadedWarehouses
-        );
-
-        setLocations(
-          loadedLocations
-        );
-
-        setSelectedWarehouseId(
-          defaultWarehouse?.id ||
-            ""
-        );
-
-        setSelectedLocationId(
-          defaultLocation?.id ||
-            ""
-        );
-      } catch (caughtError) {
-        console.error(
-          "Fulfillment options loading error:",
-          caughtError
-        );
-
-        setWarehouses([]);
-        setLocations([]);
-        setSelectedWarehouseId("");
-        setSelectedLocationId("");
-
-        setFulfillmentError(
-          "Unable to load active warehouses and locations."
-        );
-      } finally {
-        setFulfillmentOptionsLoading(
-          false
-        );
-      }
-    },
-    [supabase]
-  );
-
   const loadOrder = useCallback(
     async () => {
       if (!orderId) {
@@ -513,10 +337,6 @@ export default function OrderDetailsPage() {
 
       setLoading(true);
       setError(null);
-      setFulfillmentError(null);
-      setFulfillmentSuccess(null);
-      setAvailableSerials({});
-      setSelectedSerials({});
 
       const {
         data: { user },
@@ -705,80 +525,10 @@ export default function OrderDetailsPage() {
 
       setItems(loadedItems);
 
-      const productIds =
-        Array.from(
-          new Set(
-            loadedItems
-              .map(
-                (item) =>
-                  item.product_id
-              )
-              .filter(
-                (
-                  productId
-                ): productId is string =>
-                  Boolean(productId)
-              )
-          )
-        );
-
-      if (productIds.length > 0) {
-        const {
-          data: trackingData,
-          error: trackingError,
-        } = await supabase
-          .from("products")
-          .select(
-            "id, tracking_mode"
-          )
-          .eq(
-            "company_id",
-            companyId
-          )
-          .in(
-            "id",
-            productIds
-          );
-
-        if (trackingError) {
-          console.error(
-            "Product tracking mode loading error:",
-            trackingError
-          );
-        }
-
-        const trackingMap:
-          Record<string, string> =
-          {};
-
-        for (
-          const product of
-            (trackingData ||
-              []) as ProductTracking[]
-        ) {
-          trackingMap[
-            product.id
-          ] =
-            product.tracking_mode ||
-            "none";
-        }
-
-        setProductTrackingModes(
-          trackingMap
-        );
-      } else {
-        setProductTrackingModes({});
-      }
-
-      await Promise.all([
-        loadFinancialConnections(
-          companyId,
-          orderId
-        ),
-        loadFulfillmentOptions(
-          companyId
-        ),
-      ]);
+      await loadFinancialConnections(
+        companyId,
+        orderId
+      );
 
       setLoading(false);
     },
@@ -786,7 +536,6 @@ export default function OrderDetailsPage() {
       orderId,
       supabase,
       loadFinancialConnections,
-      loadFulfillmentOptions,
     ]
   );
 
@@ -842,235 +591,6 @@ export default function OrderDetailsPage() {
     );
   }
 
-  const availableLocations =
-    useMemo(
-      () =>
-        locations.filter(
-          (location) =>
-            location.warehouse_id ===
-            selectedWarehouseId
-        ),
-      [
-        locations,
-        selectedWarehouseId,
-      ]
-    );
-
-  const serialItems =
-    useMemo(
-      () =>
-        items.filter(
-          (item) =>
-            Boolean(
-              item.product_id
-            ) &&
-            productTrackingModes[
-              item.product_id ||
-                ""
-            ] === "serial"
-        ),
-      [
-        items,
-        productTrackingModes,
-      ]
-    );
-
-  const hasSerialItems =
-    serialItems.length > 0;
-
-  const loadAvailableSerials =
-    useCallback(
-      async () => {
-        if (
-          !order ||
-          !selectedWarehouseId ||
-          !selectedLocationId ||
-          serialItems.length === 0
-        ) {
-          setAvailableSerials(
-            {}
-          );
-          setSelectedSerials({});
-          return;
-        }
-
-        setSerialsLoading(true);
-
-        try {
-          const productIds =
-            Array.from(
-              new Set(
-                serialItems
-                  .map(
-                    (item) =>
-                      item.product_id
-                  )
-                  .filter(
-                    (
-                      id
-                    ): id is string =>
-                      Boolean(id)
-                  )
-              )
-            );
-
-          const {
-            data,
-            error: serialError,
-          } =
-            await supabase
-              .from(
-                "serialized_units"
-              )
-              .select(
-                `
-                  id,
-                  serial_number,
-                  barcode,
-                  status,
-                  product_id,
-                  variant_id,
-                  warehouse_id,
-                  location_id
-                `
-              )
-              .eq(
-                "company_id",
-                order.company_id
-              )
-              .eq(
-                "status",
-                "available"
-              )
-              .eq(
-                "warehouse_id",
-                selectedWarehouseId
-              )
-              .eq(
-                "location_id",
-                selectedLocationId
-              )
-              .in(
-                "product_id",
-                productIds
-              )
-              .order(
-                "serial_number",
-                {
-                  ascending: true,
-                }
-              );
-
-          if (serialError) {
-            throw serialError;
-          }
-
-          const loadedSerials =
-            (data ||
-              []) as SerializedUnit[];
-
-          const serialMap:
-            Record<
-              string,
-              SerializedUnit[]
-            > = {};
-
-          for (
-            const item of serialItems
-          ) {
-            serialMap[item.id] =
-              loadedSerials.filter(
-                (serial) =>
-                  serial.product_id ===
-                    item.product_id &&
-                  serial.variant_id ===
-                    item.variant_id
-              );
-          }
-
-          setAvailableSerials(
-            serialMap
-          );
-
-          setSelectedSerials(
-            (current) => {
-              const next:
-                Record<
-                  string,
-                  string[]
-                > = {};
-
-              for (
-                const item of serialItems
-              ) {
-                const validIds =
-                  new Set(
-                    (
-                      serialMap[
-                        item.id
-                      ] || []
-                    ).map(
-                      (serial) =>
-                        serial.id
-                    )
-                  );
-
-                next[item.id] =
-                  (
-                    current[
-                      item.id
-                    ] || []
-                  ).filter(
-                    (id) =>
-                      validIds.has(
-                        id
-                      )
-                  );
-              }
-
-              return next;
-            }
-          );
-        } catch (caughtError) {
-          console.error(
-            "Available serial loading error:",
-            caughtError
-          );
-
-          setAvailableSerials({});
-          setSelectedSerials({});
-
-          setFulfillmentError(
-            "Unable to load available serial numbers for the selected warehouse location."
-          );
-        } finally {
-          setSerialsLoading(false);
-        }
-      },
-      [
-        order,
-        selectedWarehouseId,
-        selectedLocationId,
-        serialItems,
-        supabase,
-      ]
-    );
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadAvailableSerials();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    order,
-    selectedWarehouseId,
-    selectedLocationId,
-    loadAvailableSerials,
-  ]);
-
   async function cancelOrder() {
     if (!order) {
       return;
@@ -1095,13 +615,11 @@ export default function OrderDetailsPage() {
     setCancellationError(null);
     setCancellationSuccess(null);
 
-    setFulfillmentError(null);
-    setFulfillmentSuccess(null);
 
     try {
       const response =
         await fetch(
-          `/api/sales/orders/${encodeURIComponent(
+          `/api/sales/${encodeURIComponent(
             order.id
           )}/cancel`,
           {
@@ -1147,286 +665,6 @@ export default function OrderDetailsPage() {
     } finally {
       setIsCancelling(false);
     }
-  }
-
-  async function fulfillOrder() {
-    if (!order) {
-      return;
-    }
-
-    if (
-      !selectedWarehouseId ||
-      !selectedLocationId
-    ) {
-      setFulfillmentError(
-        "Select an active warehouse and location before fulfilling this order."
-      );
-      return;
-    }
-
-    setIsFulfilling(true);
-    setFulfillmentError(null);
-    setFulfillmentSuccess(null);
-
-    try {
-      const response =
-        await fetch(
-          `/api/sales/orders/${encodeURIComponent(
-            order.id
-          )}/fulfill`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              warehouse_id:
-                selectedWarehouseId,
-              location_id:
-                selectedLocationId,
-            }),
-          }
-        );
-
-      const result =
-        (await response.json()) as {
-          error?: string;
-          fulfilled_inventory_lines?: number;
-          fulfilled_non_inventory_lines?: number;
-        };
-
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "The sales order could not be fulfilled."
-        );
-      }
-
-      const inventoryLineLabel =
-        result.fulfilled_inventory_lines ===
-        1
-          ? "inventory line"
-          : "inventory lines";
-
-      setFulfillmentSuccess(
-        `Order fulfilled. ${
-          result.fulfilled_inventory_lines ||
-          0
-        } ${inventoryLineLabel} were issued from inventory.`
-      );
-
-      await loadOrder();
-      router.refresh();
-    } catch (caughtError) {
-      console.error(
-        "Order fulfillment error:",
-        caughtError
-      );
-
-      setFulfillmentError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "The sales order could not be fulfilled."
-      );
-    } finally {
-      setIsFulfilling(false);
-    }
-  }
-
-  async function fulfillSerialOrder() {
-    if (!order) {
-      return;
-    }
-
-    if (
-      !selectedWarehouseId ||
-      !selectedLocationId
-    ) {
-      setFulfillmentError(
-        "Select an active warehouse and location before fulfilling this order."
-      );
-      return;
-    }
-
-    if (serialItems.length === 0) {
-      return;
-    }
-
-    const allocations: {
-      order_item_id: string;
-      serialized_unit_ids: string[];
-    }[] = [];
-
-    for (
-      const item of serialItems
-    ) {
-      const selected =
-        selectedSerials[
-          item.id
-        ] || [];
-
-      const requiredQuantity =
-        Number(
-          item.quantity || 0
-        );
-
-      if (
-        !Number.isInteger(
-          requiredQuantity
-        ) ||
-        requiredQuantity <= 0
-      ) {
-        setFulfillmentError(
-          `${item.product_name} has an invalid serialized quantity.`
-        );
-        return;
-      }
-
-      if (
-        selected.length !==
-        requiredQuantity
-      ) {
-        setFulfillmentError(
-          `${item.product_name} requires ${requiredQuantity} serial number${
-            requiredQuantity === 1
-              ? ""
-              : "s"
-          }, but ${selected.length} ${
-            selected.length === 1
-              ? "was"
-              : "were"
-          } selected.`
-        );
-        return;
-      }
-
-      allocations.push({
-        order_item_id:
-          item.id,
-        serialized_unit_ids:
-          selected,
-      });
-    }
-
-    setIsFulfilling(true);
-    setFulfillmentError(null);
-    setFulfillmentSuccess(null);
-
-    try {
-      const response =
-        await fetch(
-          `/api/sales/orders/${encodeURIComponent(
-            order.id
-          )}/serial-fulfill`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              warehouse_id:
-                selectedWarehouseId,
-              location_id:
-                selectedLocationId,
-              allocations,
-            }),
-          }
-        );
-
-      const result =
-        (await response.json()) as {
-          error?: string;
-          total_quantity_fulfilled?: number;
-        };
-
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "The serialized sales order could not be fulfilled."
-        );
-      }
-
-      const quantity =
-        Number(
-          result.total_quantity_fulfilled ||
-            0
-        );
-
-      setFulfillmentSuccess(
-        `Order fulfilled. ${quantity} serialized unit${
-          quantity === 1
-            ? ""
-            : "s"
-        } allocated successfully.`
-      );
-
-      setSelectedSerials({});
-
-      await loadOrder();
-      router.refresh();
-    } catch (caughtError) {
-      console.error(
-        "Serial order fulfillment error:",
-        caughtError
-      );
-
-      setFulfillmentError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "The serialized sales order could not be fulfilled."
-      );
-    } finally {
-      setIsFulfilling(false);
-    }
-  }
-
-  function toggleSerial(
-    itemId: string,
-    serialId: string,
-    requiredQuantity: number
-  ) {
-    setSelectedSerials(
-      (current) => {
-        const existing =
-          current[itemId] || [];
-
-        if (
-          existing.includes(
-            serialId
-          )
-        ) {
-          return {
-            ...current,
-            [itemId]:
-              existing.filter(
-                (id) =>
-                  id !==
-                  serialId
-              ),
-          };
-        }
-
-        if (
-          existing.length >=
-          requiredQuantity
-        ) {
-          return current;
-        }
-
-        return {
-          ...current,
-          [itemId]: [
-            ...existing,
-            serialId,
-          ],
-        };
-      }
-    );
-
-    setFulfillmentError(null);
-    setFulfillmentSuccess(null);
   }
 
   if (loading) {
@@ -1678,18 +916,6 @@ export default function OrderDetailsPage() {
             : "unpaid"
       : "unpaid";
 
-  const allSerialSelectionsComplete =
-    serialItems.every(
-      (item) =>
-        (
-          selectedSerials[
-            item.id
-          ] || []
-        ).length ===
-        Number(
-          item.quantity || 0
-        )
-    );
 
   return (
     <AppShell
@@ -1757,6 +983,22 @@ export default function OrderDetailsPage() {
             </button>
           )}
 
+          {order.status !== "cancelled" &&
+            order.status !== "refunded" &&
+            order.fulfillment_status !== "fulfilled" && (
+              <button
+                type="button"
+                className="order-fulfill-button"
+                onClick={() =>
+                  router.push(
+                    `/sales/${encodeURIComponent(order.id)}/fulfill`
+                  )
+                }
+              >
+                Fulfill Order
+              </button>
+            )}
+
           <button
             type="button"
             className="order-print-button"
@@ -1778,8 +1020,7 @@ export default function OrderDetailsPage() {
                   void cancelOrder()
                 }
                 disabled={
-                  isCancelling ||
-                  isFulfilling
+                  isCancelling
                 }
               >
                 {isCancelling
@@ -1805,17 +1046,6 @@ export default function OrderDetailsPage() {
           </div>
         )}
 
-        {fulfillmentError && (
-          <div className="order-alert danger">
-            {fulfillmentError}
-          </div>
-        )}
-
-        {fulfillmentSuccess && (
-          <div className="order-alert success">
-            {fulfillmentSuccess}
-          </div>
-        )}
 
         <section className="invoice-document">
 
@@ -2357,451 +1587,6 @@ export default function OrderDetailsPage() {
 
         </section>
 
-        <div className="fulfillment-layout">
-
-          <main className="fulfillment-main">
-
-            <section className="fulfillment-card">
-
-              <div className="fulfillment-card-header">
-
-                <div>
-                  <div className="invoice-section-label">
-                    FULFILLMENT
-                  </div>
-
-                  <h2>
-                    Inventory fulfillment
-                  </h2>
-
-                  <p>
-                    Select the warehouse and location from which this sales order should be issued.
-                  </p>
-                </div>
-
-                <div className="fulfillment-quantity">
-                  <span>
-                    Total quantity
-                  </span>
-
-                  <strong>
-                    {totalQuantity}
-                  </strong>
-                </div>
-
-              </div>
-
-              <div className="fulfillment-controls">
-
-                <div className="fulfillment-field">
-
-                  <label htmlFor="warehouse">
-                    Warehouse
-                  </label>
-
-                  <select
-                    id="warehouse"
-                    value={
-                      selectedWarehouseId
-                    }
-                    onChange={(event) =>
-                      setSelectedWarehouseId(
-                        event.target.value
-                      )
-                    }
-                    disabled={
-                      fulfillmentOptionsLoading ||
-                      isFulfilling
-                    }
-                  >
-                    <option value="">
-                      Select warehouse
-                    </option>
-
-                    {warehouses.map(
-                      (warehouse) => (
-                        <option
-                          key={
-                            warehouse.id
-                          }
-                          value={
-                            warehouse.id
-                          }
-                        >
-                          {
-                            warehouse.name
-                          }
-                          {warehouse.code
-                            ? ` (${warehouse.code})`
-                            : ""}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                </div>
-
-                <div className="fulfillment-field">
-
-                  <label htmlFor="location">
-                    Location
-                  </label>
-
-                  <select
-                    id="location"
-                    value={
-                      selectedLocationId
-                    }
-                    onChange={(event) =>
-                      setSelectedLocationId(
-                        event.target.value
-                      )
-                    }
-                    disabled={
-                      fulfillmentOptionsLoading ||
-                      isFulfilling ||
-                      !selectedWarehouseId
-                    }
-                  >
-                    <option value="">
-                      Select location
-                    </option>
-
-                    {availableLocations.map(
-                      (location) => (
-                        <option
-                          key={
-                            location.id
-                          }
-                          value={
-                            location.id
-                          }
-                        >
-                          {
-                            location.name
-                          }
-                          {location.code
-                            ? ` (${location.code})`
-                            : ""}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                </div>
-
-              </div>
-
-              {hasSerialItems ? (
-                <div className="serial-section">
-
-                  <div className="serial-section-header">
-                    <div>
-                      <div className="invoice-section-label">
-                        SERIALIZED ITEMS
-                      </div>
-
-                      <h3>
-                        Select serial numbers
-                      </h3>
-
-                      <p>
-                        Choose the exact serialized units that will be issued for this order.
-                      </p>
-                    </div>
-
-                    {serialsLoading && (
-                      <span className="serial-loading">
-                        Loading serials...
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="serial-items">
-
-                    {serialItems.map(
-                      (item) => {
-                        const available =
-                          availableSerials[
-                            item.id
-                          ] || [];
-
-                        const selected =
-                          selectedSerials[
-                            item.id
-                          ] || [];
-
-                        const required =
-                          Number(
-                            item.quantity ||
-                              0
-                          );
-
-                        return (
-                          <div
-                            key={
-                              item.id
-                            }
-                            className="serial-item"
-                          >
-
-                            <div className="serial-item-heading">
-
-                              <div>
-                                <strong>
-                                  {
-                                    item.product_name
-                                  }
-                                </strong>
-
-                                {item.variant_name && (
-                                  <span>
-                                    {
-                                      item.variant_name
-                                    }
-                                  </span>
-                                )}
-                              </div>
-
-                              <span>
-                                {
-                                  selected.length
-                                }{" "}
-                                /{" "}
-                                {required} selected
-                              </span>
-
-                            </div>
-
-                            {available.length ===
-                            0 ? (
-                              <div className="serial-empty">
-                                No available serial numbers were found for this product at the selected location.
-                              </div>
-                            ) : (
-                              <div className="serial-grid">
-
-                                {available.map(
-                                  (
-                                    serial
-                                  ) => {
-                                    const isSelected =
-                                      selected.includes(
-                                        serial.id
-                                      );
-
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={
-                                          serial.id
-                                        }
-                                        className={
-                                          isSelected
-                                            ? "serial-chip selected"
-                                            : "serial-chip"
-                                        }
-                                        onClick={() =>
-                                          toggleSerial(
-                                            item.id,
-                                            serial.id,
-                                            required
-                                          )
-                                        }
-                                        disabled={
-                                          isFulfilling ||
-                                          (!isSelected &&
-                                            selected.length >=
-                                              required)
-                                        }
-                                      >
-                                        <strong>
-                                          {
-                                            serial.serial_number
-                                          }
-                                        </strong>
-
-                                        {serial.barcode && (
-                                          <span>
-                                            {
-                                              serial.barcode
-                                            }
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  }
-                                )}
-
-                              </div>
-                            )}
-
-                          </div>
-                        );
-                      }
-                    )}
-
-                  </div>
-
-                  <button
-                    type="button"
-                    className="fulfill-button"
-                    onClick={() =>
-                      void fulfillSerialOrder()
-                    }
-                    disabled={
-                      isFulfilling ||
-                      fulfillmentOptionsLoading ||
-                      !selectedWarehouseId ||
-                      !selectedLocationId ||
-                      !allSerialSelectionsComplete ||
-                      serialsLoading
-                    }
-                  >
-                    {isFulfilling
-                      ? "Fulfilling..."
-                      : "Fulfill Serialized Order"}
-                  </button>
-
-                </div>
-              ) : (
-                <div className="quantity-fulfillment">
-
-                  <div className="quantity-fulfillment-copy">
-                    <strong>
-                      Ready to fulfill
-                    </strong>
-
-                    <p>
-                      This order contains standard inventory items and can be fulfilled from the selected warehouse location.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="fulfill-button"
-                    onClick={() =>
-                      void fulfillOrder()
-                    }
-                    disabled={
-                      isFulfilling ||
-                      fulfillmentOptionsLoading ||
-                      !selectedWarehouseId ||
-                      !selectedLocationId
-                    }
-                  >
-                    {isFulfilling
-                      ? "Fulfilling..."
-                      : "Fulfill Order"}
-                  </button>
-
-                </div>
-              )}
-
-            </section>
-
-          </main>
-
-          <aside className="fulfillment-sidebar">
-
-            <section className="side-card">
-
-              <div className="invoice-section-label">
-                ORDER SUMMARY
-              </div>
-
-              <div className="side-summary-row">
-                <span>
-                  Items
-                </span>
-
-                <strong>
-                  {items.length}
-                </strong>
-              </div>
-
-              <div className="side-summary-row">
-                <span>
-                  Quantity
-                </span>
-
-                <strong>
-                  {totalQuantity}
-                </strong>
-              </div>
-
-              <div className="side-summary-row">
-                <span>
-                  Order total
-                </span>
-
-                <strong>
-                  {formatMoneyForDisplay(
-                    Number(
-                      order.total_amount ||
-                        0
-                    ),
-                    currency
-                  )}
-                </strong>
-              </div>
-
-              <div className="side-summary-row total">
-                <span>
-                  Balance due
-                </span>
-
-                <strong>
-                  {invoice
-                    ? formatMoneyForDisplay(
-                        balanceDue,
-                        currency
-                      )
-                    : "Invoice not created"}
-                </strong>
-              </div>
-
-            </section>
-
-            {order.fulfillment_status ===
-              "fulfilled" && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m5 12 4 4L19 6"
-                      />
-                    </svg>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Order fully fulfilled
-                    </p>
-
-                    <p className="mt-1 text-xs text-emerald-700">
-                      All ordered quantities
-                      have been allocated to
-                      inventory fulfillment.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </aside>
-
-        </div>
-
       </div>
 
       <style jsx>{`
@@ -2814,6 +1599,22 @@ export default function OrderDetailsPage() {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+        }
+
+        .order-fulfill-button {
+          height: 38px;
+          padding: 0 14px;
+          border: 1px solid #111827;
+          border-radius: 9px;
+          background: #111827;
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .order-fulfill-button:hover {
+          background: #1f2937;
         }
 
         .order-header-actions button {
@@ -3290,351 +2091,22 @@ export default function OrderDetailsPage() {
           font-size: 10px;
         }
 
-        .fulfillment-layout {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 300px;
-          gap: 16px;
-          margin-top: 16px;
-        }
 
-        .fulfillment-card,
-        .side-card {
-          border: 1px solid #e1e5eb;
-          border-radius: 14px;
-          background: #ffffff;
-          box-shadow: 0 1px 3px rgba(24, 39, 75, 0.04);
-        }
 
-        .fulfillment-card {
-          overflow: hidden;
-        }
 
-        .fulfillment-card-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 24px;
-          padding: 22px 24px;
-          border-bottom: 1px solid #e7ebf0;
-        }
 
-        .fulfillment-card-header h2 {
-          margin: 0;
-          color: #263043;
-          font-size: 16px;
-          font-weight: 800;
-        }
 
-        .fulfillment-card-header p {
-          max-width: 650px;
-          margin: 5px 0 0;
-          color: #8a94a3;
-          font-size: 10px;
-          line-height: 1.6;
-        }
-
-        .fulfillment-quantity {
-          min-width: 95px;
-          padding: 10px 12px;
-          border: 1px solid #e6eaf0;
-          border-radius: 10px;
-          background: #f8fafc;
-          text-align: right;
-        }
-
-        .fulfillment-quantity span {
-          display: block;
-          color: #98a1ae;
-          font-size: 9px;
-          font-weight: 700;
-        }
-
-        .fulfillment-quantity strong {
-          display: block;
-          margin-top: 3px;
-          color: #263043;
-          font-size: 18px;
-          font-weight: 800;
-        }
-
-        .fulfillment-controls {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 14px;
-          padding: 20px 24px;
-        }
-
-        .fulfillment-field label {
-          display: block;
-          margin-bottom: 6px;
-          color: #657184;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .fulfillment-field select {
-          width: 100%;
-          height: 40px;
-          padding: 0 11px;
-          border: 1px solid #dfe4eb;
-          border-radius: 9px;
-          background: #ffffff;
-          color: #3d4655;
-          outline: none;
-          font-family: inherit;
-          font-size: 11px;
-        }
-
-        .fulfillment-field select:focus {
-          border-color: #98a2b3;
-          box-shadow: 0 0 0 3px rgba(98, 112, 133, 0.08);
-        }
-
-        .serial-section {
-          margin: 0 24px 24px;
-          padding: 18px;
-          border: 1px solid #e5e9ef;
-          border-radius: 11px;
-          background: #fafbfd;
-        }
-
-        .serial-section-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 20px;
-        }
-
-        .serial-section-header h3 {
-          margin: 0;
-          color: #30394a;
-          font-size: 13px;
-          font-weight: 800;
-        }
-
-        .serial-section-header p {
-          margin: 4px 0 0;
-          color: #8992a1;
-          font-size: 10px;
-        }
-
-        .serial-loading {
-          color: #798494;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .serial-items {
-          display: grid;
-          gap: 12px;
-          margin-top: 16px;
-        }
-
-        .serial-item {
-          padding: 14px;
-          border: 1px solid #e2e7ed;
-          border-radius: 9px;
-          background: #ffffff;
-        }
-
-        .serial-item-heading {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-        }
-
-        .serial-item-heading strong {
-          display: block;
-          color: #313a4b;
-          font-size: 11px;
-        }
-
-        .serial-item-heading div > span {
-          display: block;
-          margin-top: 3px;
-          color: #929baa;
-          font-size: 9px;
-        }
-
-        .serial-item-heading > span {
-          color: #687385;
-          font-size: 10px;
-          font-weight: 700;
-        }
-
-        .serial-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-          gap: 8px;
-          margin-top: 12px;
-        }
-
-        .serial-chip {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          min-height: 55px;
-          padding: 9px 10px;
-          border: 1px solid #dfe4eb;
-          border-radius: 8px;
-          background: #ffffff;
-          color: #4b5565;
-          text-align: left;
-          cursor: pointer;
-        }
-
-        .serial-chip:hover:not(:disabled) {
-          border-color: #b9c2ce;
-          background: #f8fafc;
-        }
-
-        .serial-chip.selected {
-          border-color: #9bcdb3;
-          background: #effaf4;
-          color: #1d6543;
-        }
-
-        .serial-chip:disabled {
-          cursor: not-allowed;
-          opacity: 0.55;
-        }
-
-        .serial-chip strong {
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .serial-chip span {
-          margin-top: 3px;
-          color: #8992a1;
-          font-size: 8px;
-        }
-
-        .serial-empty {
-          margin-top: 12px;
-          padding: 12px;
-          border: 1px dashed #dfe4eb;
-          border-radius: 8px;
-          color: #929baa;
-          font-size: 10px;
-          text-align: center;
-        }
-
-        .fulfill-button {
-          height: 39px;
-          margin: 16px 18px 0;
-          padding: 0 15px;
-          border: 1px solid #059669;
-          border-radius: 9px;
-          background: #059669;
-          color: #ffffff;
-          font-family: inherit;
-          font-size: 10px;
-          font-weight: 800;
-          cursor: pointer;
-        }
-
-        .fulfill-button:hover:not(:disabled) {
-          background: #047857;
-          border-color: #047857;
-        }
-
-        .fulfill-button:disabled {
-          cursor: not-allowed;
-          opacity: 0.55;
-        }
-
-        .quantity-fulfillment {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 20px;
-          margin: 0 24px 24px;
-          padding: 17px;
-          border: 1px solid #e5e9ef;
-          border-radius: 11px;
-          background: #fafbfd;
-        }
-
-        .quantity-fulfillment .fulfill-button {
-          flex-shrink: 0;
-          margin: 0;
-        }
-
-        .quantity-fulfillment-copy strong {
-          color: #30394a;
-          font-size: 12px;
-        }
-
-        .quantity-fulfillment-copy p {
-          margin: 4px 0 0;
-          color: #8992a1;
-          font-size: 10px;
-          line-height: 1.6;
-        }
-
-        .fulfillment-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .side-card {
-          padding: 19px;
-        }
-
-        .side-summary-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 11px 0;
-          border-bottom: 1px solid #edf0f4;
-          color: #7a8493;
-          font-size: 10px;
-        }
-
-        .side-summary-row strong {
-          color: #3a4352;
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        .side-summary-row.total {
-          padding-top: 14px;
-          border-bottom: 0;
-          color: #4a5565;
-          font-weight: 700;
-        }
-
-        .side-summary-row.total strong {
-          color: #172033;
-          font-size: 13px;
-        }
 
         @media (max-width: 980px) {
-          .fulfillment-layout {
-            grid-template-columns: 1fr;
-          }
 
-          .fulfillment-sidebar {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
         }
 
         @media (max-width: 760px) {
           .invoice-header,
           .invoice-summary-row,
-          .fulfillment-card-header,
-          .quantity-fulfillment {
-            flex-direction: column;
-          }
 
           .invoice-meta-row,
           .attached-invoice-grid,
-          .fulfillment-controls,
           .invoice-parties {
             grid-template-columns: 1fr;
           }
@@ -3671,34 +2143,14 @@ export default function OrderDetailsPage() {
             flex-direction: column;
           }
 
-          .fulfillment-controls {
-            padding-left: 18px;
-            padding-right: 18px;
-          }
 
-          .serial-section {
-            margin-left: 18px;
-            margin-right: 18px;
-          }
 
-          .fulfillment-card-header {
-            padding-left: 18px;
-            padding-right: 18px;
-          }
 
-          .quantity-fulfillment {
-            margin-left: 18px;
-            margin-right: 18px;
-          }
 
-          .fulfillment-sidebar {
-            display: flex;
-          }
         }
 
         @media print {
           .order-header-actions,
-          .fulfillment-layout,
           .order-alert {
             display: none !important;
           }
