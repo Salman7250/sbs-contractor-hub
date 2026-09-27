@@ -1,5 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import {
+  NextResponse,
+  type NextRequest,
+} from "next/server";
+
 import { hasCompanyModuleAccess } from "@/lib/auth/module-access";
 import { getModuleRouteRule } from "@/lib/navigation/module-routes";
 
@@ -15,7 +19,127 @@ function isPublicPath(pathname: string) {
   );
 }
 
-export async function middleware(request: NextRequest) {
+function suspendedResponse() {
+  return new NextResponse(
+    `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Company Suspended</title>
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 24px;
+              background: #f3f5f8;
+              font-family:
+                Inter,
+                ui-sans-serif,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+              color: #0f172a;
+            }
+
+            .card {
+              width: 100%;
+              max-width: 520px;
+              padding: 40px;
+              border: 1px solid #e2e8f0;
+              border-radius: 24px;
+              background: #ffffff;
+              box-shadow:
+                0 24px 70px rgba(15, 23, 42, 0.08);
+              text-align: center;
+            }
+
+            .icon {
+              width: 58px;
+              height: 58px;
+              margin: 0 auto 22px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 16px;
+              background: #fff7ed;
+              color: #d97706;
+              font-size: 26px;
+              font-weight: 700;
+            }
+
+            h1 {
+              margin: 0;
+              font-size: 27px;
+              line-height: 1.2;
+              letter-spacing: -0.03em;
+            }
+
+            p {
+              margin: 14px auto 0;
+              max-width: 400px;
+              color: #64748b;
+              font-size: 14px;
+              line-height: 1.7;
+            }
+
+            .note {
+              margin-top: 24px;
+              padding: 14px 16px;
+              border-radius: 14px;
+              background: #fffaf0;
+              border: 1px solid #fed7aa;
+              color: #9a6700;
+              font-size: 13px;
+              line-height: 1.6;
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="card">
+            <div class="icon">!</div>
+
+            <h1>
+              Your company is suspended
+            </h1>
+
+            <p>
+              Access to the SBS platform has been
+              temporarily suspended for your company.
+            </p>
+
+            <div class="note">
+              Please contact your company administrator
+              or SBS support for more information.
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+    {
+      status: 403,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "private, no-store",
+      },
+    },
+  );
+}
+
+export async function middleware(
+  request: NextRequest,
+) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -30,10 +154,16 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
+
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
+          cookiesToSet.forEach(
+            ({ name, value }) => {
+              request.cookies.set(
+                name,
+                value,
+              );
+            },
+          );
 
           response = NextResponse.next({
             request: {
@@ -41,31 +171,38 @@ export async function middleware(request: NextRequest) {
             },
           });
 
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          cookiesToSet.forEach(
+            ({
+              name,
+              value,
+              options,
+            }) => {
+              response.cookies.set(
+                name,
+                value,
+                options,
+              );
+            },
+          );
         },
       },
     },
   );
 
-  const pathname = request.nextUrl.pathname;
+  const pathname =
+    request.nextUrl.pathname;
 
   /*
-   * Always resolve the current Supabase user before making
-   * authorization decisions.
+   * Always resolve the current authenticated user.
    */
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * CUSTOMER PORTAL
-   * ---------------------------------------------------------
-   *
-   * Customer portal users are separate from company employees.
-   * They must not go through company_members or employee RBAC.
+   * =========================================================
    */
 
   const isCustomerPortalPath =
@@ -74,14 +211,16 @@ export async function middleware(request: NextRequest) {
 
   if (isCustomerPortalPath) {
     /*
-     * The portal login page is public.
+     * Portal login remains public.
      */
-    if (pathname === "/portal/login") {
+    if (
+      pathname === "/portal/login"
+    ) {
       return response;
     }
 
     /*
-     * Every other portal page requires an authenticated user.
+     * Portal pages require authentication.
      */
     if (!user) {
       const loginUrl = new URL(
@@ -94,25 +233,35 @@ export async function middleware(request: NextRequest) {
         `${pathname}${request.nextUrl.search}`,
       );
 
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(
+        loginUrl,
+      );
     }
 
     /*
-     * Verify that the authenticated user has an active
-     * customer portal account.
+     * Get portal account.
      */
     const {
       data: portalUser,
       error: portalUserError,
     } = await supabase
-      .from("customer_portal_users")
-      .select("id, status")
-      .eq("user_id", user.id)
-      .eq("status", "active")
+      .from(
+        "customer_portal_users",
+      )
+      .select(
+        "id, company_id, status",
+      )
+      .eq(
+        "user_id",
+        user.id,
+      )
       .limit(1)
       .maybeSingle();
 
-    if (portalUserError || !portalUser) {
+    if (
+      portalUserError ||
+      !portalUser
+    ) {
       return NextResponse.redirect(
         new URL(
           "/portal/login?error=portal-access-denied",
@@ -122,39 +271,111 @@ export async function middleware(request: NextRequest) {
     }
 
     /*
-     * Customer portal authorization succeeded.
-     * Do not run employee/company RBAC below.
+     * Portal account itself must be active.
      */
-    return response;
-  }
-
-  /*
-   * Onboarding is intentionally outside employee/company RBAC.
-   *
-   * A newly verified user does not have a company_members record
-   * yet. They must therefore be allowed to reach onboarding before
-   * company permissions can exist.
-   */
-  if (pathname === "/onboarding") {
-    if (!user) {
-      const loginUrl = new URL("/login", request.url);
-
-      loginUrl.searchParams.set(
-        "redirectTo",
-        "/onboarding",
+    if (
+      portalUser.status !==
+      "active"
+    ) {
+      return NextResponse.redirect(
+        new URL(
+          "/portal/login?error=portal-access-denied",
+          request.url,
+        ),
       );
+    }
 
-      return NextResponse.redirect(loginUrl);
+    /*
+     * IMPORTANT:
+     * Check the company status separately.
+     */
+    const {
+      data: portalCompany,
+      error: portalCompanyError,
+    } = await supabase
+      .from("companies")
+      .select(
+        "id, status",
+      )
+      .eq(
+        "id",
+        portalUser.company_id,
+      )
+      .maybeSingle();
+
+    if (
+      portalCompanyError ||
+      !portalCompany
+    ) {
+      return new NextResponse(
+        "Company not found.",
+        {
+          status: 403,
+          headers: {
+            "Content-Type":
+              "text/plain; charset=utf-8",
+            "Cache-Control":
+              "private, no-store",
+          },
+        },
+      );
+    }
+
+    /*
+     * BLOCK SUSPENDED COMPANY.
+     */
+    if (
+      String(
+        portalCompany.status ??
+          "",
+      ).toLowerCase() ===
+      "suspended"
+    ) {
+      return suspendedResponse();
     }
 
     return response;
   }
 
   /*
-   * Standard public application routes.
+   * =========================================================
+   * ONBOARDING
+   * =========================================================
    */
+
+  if (
+    pathname === "/onboarding"
+  ) {
+    if (!user) {
+      const loginUrl = new URL(
+        "/login",
+        request.url,
+      );
+
+      loginUrl.searchParams.set(
+        "redirectTo",
+        "/onboarding",
+      );
+
+      return NextResponse.redirect(
+        loginUrl,
+      );
+    }
+
+    return response;
+  }
+
+  /*
+   * =========================================================
+   * PUBLIC ROUTES
+   * =========================================================
+   */
+
   if (isPublicPath(pathname)) {
-    if (user && pathname === "/login") {
+    if (
+      user &&
+      pathname === "/login"
+    ) {
       return NextResponse.redirect(
         new URL("/", request.url),
       );
@@ -163,44 +384,60 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const rule = getModuleRouteRule(pathname);
-
   /*
-   * Routes that are not part of the employee workspace are left
-   * alone.
+   * =========================================================
+   * EMPLOYEE WORKSPACE
+   * =========================================================
    */
+
+  const rule =
+    getModuleRouteRule(pathname);
+
   if (!rule) {
     return response;
   }
 
   /*
-   * Employee workspace requires authentication.
+   * Protected employee routes require authentication.
    */
   if (!user) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = new URL(
+      "/login",
+      request.url,
+    );
 
     loginUrl.searchParams.set(
       "redirectTo",
       `${pathname}${request.nextUrl.search}`,
     );
 
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(
+      loginUrl,
+    );
   }
 
   /*
-   * Resolve the employee/company membership.
+   * Resolve company membership.
    */
   const {
     data: membership,
     error: membershipError,
   } = await supabase
     .from("company_members")
-    .select("company_id")
-    .eq("user_id", user.id)
+    .select(
+      "company_id",
+    )
+    .eq(
+      "user_id",
+      user.id,
+    )
     .limit(1)
     .maybeSingle();
 
-  if (membershipError || !membership?.company_id) {
+  if (
+    membershipError ||
+    !membership?.company_id
+  ) {
     return NextResponse.redirect(
       new URL(
         "/login?error=no-company",
@@ -210,8 +447,63 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
-   * Check module entitlement.
+   * =========================================================
+   * COMPANY STATUS CHECK
+   * =========================================================
+   *
+   * This is the actual fix.
+   *
+   * A user can still have a valid Supabase session after
+   * the company has been suspended. Therefore we check the
+   * CURRENT database company status on every protected
+   * workspace request.
    */
+
+  const {
+    data: company,
+    error: companyError,
+  } = await supabase
+    .from("companies")
+    .select(
+      "id, status",
+    )
+    .eq(
+      "id",
+      membership.company_id,
+    )
+    .maybeSingle();
+
+  if (
+    companyError ||
+    !company
+  ) {
+    return NextResponse.redirect(
+      new URL(
+        "/login?error=company-not-found",
+        request.url,
+      ),
+    );
+  }
+
+  /*
+   * Suspended companies are blocked BEFORE
+   * module entitlements or employee permissions.
+   */
+  if (
+    String(
+      company.status ?? "",
+    ).toLowerCase() ===
+    "suspended"
+  ) {
+    return suspendedResponse();
+  }
+
+  /*
+   * =========================================================
+   * MODULE ENTITLEMENT
+   * =========================================================
+   */
+
   if (rule.entitlementModule) {
     try {
       const hasEntitlement =
@@ -245,16 +537,23 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
-   * Database permission check for employee workspace.
+   * =========================================================
+   * DATABASE PERMISSION CHECK
+   * =========================================================
    */
+
   const {
     data: allowed,
     error: permissionError,
   } = await supabase.rpc(
     "employee_can_access",
     {
-      p_company_id: membership.company_id,
-      p_module: rule.permissionModule,
+      p_company_id:
+        membership.company_id,
+
+      p_module:
+        rule.permissionModule,
+
       p_action: "view",
     },
   );
