@@ -1,4 +1,4 @@
-import { createServerClient } from "@Supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasCompanyModuleAccess } from "@/lib/auth/module-access";
 import { getModuleRouteRule } from "@/lib/navigation/module-routes";
