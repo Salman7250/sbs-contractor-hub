@@ -1,9 +1,5 @@
-import { createServerClient } from "@supabase/ssr";
-import {
-  NextResponse,
-  type NextRequest,
-} from "next/server";
-
+import { createServerClient } from "@Supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 import { hasCompanyModuleAccess } from "@/lib/auth/module-access";
 import { getModuleRouteRule } from "@/lib/navigation/module-routes";
 
@@ -15,131 +11,12 @@ function isPublicPath(pathname: string) {
     pathname === "/reset-password" ||
     pathname === "/set-password" ||
     pathname === "/onboarding" ||
+    pathname === "/account-suspended" ||
     pathname.startsWith("/auth/")
   );
 }
 
-function suspendedResponse() {
-  return new NextResponse(
-    `
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Company Suspended</title>
-          <style>
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              margin: 0;
-              min-height: 100vh;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 24px;
-              background: #f3f5f8;
-              font-family:
-                Inter,
-                ui-sans-serif,
-                system-ui,
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                sans-serif;
-              color: #0f172a;
-            }
-
-            .card {
-              width: 100%;
-              max-width: 520px;
-              padding: 40px;
-              border: 1px solid #e2e8f0;
-              border-radius: 24px;
-              background: #ffffff;
-              box-shadow:
-                0 24px 70px rgba(15, 23, 42, 0.08);
-              text-align: center;
-            }
-
-            .icon {
-              width: 58px;
-              height: 58px;
-              margin: 0 auto 22px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border-radius: 16px;
-              background: #fff7ed;
-              color: #d97706;
-              font-size: 26px;
-              font-weight: 700;
-            }
-
-            h1 {
-              margin: 0;
-              font-size: 27px;
-              line-height: 1.2;
-              letter-spacing: -0.03em;
-            }
-
-            p {
-              margin: 14px auto 0;
-              max-width: 400px;
-              color: #64748b;
-              font-size: 14px;
-              line-height: 1.7;
-            }
-
-            .note {
-              margin-top: 24px;
-              padding: 14px 16px;
-              border-radius: 14px;
-              background: #fffaf0;
-              border: 1px solid #fed7aa;
-              color: #9a6700;
-              font-size: 13px;
-              line-height: 1.6;
-            }
-          </style>
-        </head>
-
-        <body>
-          <div class="card">
-            <div class="icon">!</div>
-
-            <h1>
-              Your company is suspended
-            </h1>
-
-            <p>
-              Access to the SBS platform has been
-              temporarily suspended for your company.
-            </p>
-
-            <div class="note">
-              Please contact your company administrator
-              or SBS support for more information.
-            </div>
-          </div>
-        </body>
-      </html>
-    `,
-    {
-      status: 403,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "private, no-store",
-      },
-    },
-  );
-}
-
-export async function middleware(
-  request: NextRequest,
-) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -156,14 +33,9 @@ export async function middleware(
         },
 
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(
-            ({ name, value }) => {
-              request.cookies.set(
-                name,
-                value,
-              );
-            },
-          );
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
 
           response = NextResponse.next({
             request: {
@@ -172,11 +44,7 @@ export async function middleware(
           });
 
           cookiesToSet.forEach(
-            ({
-              name,
-              value,
-              options,
-            }) => {
+            ({ name, value, options }) => {
               response.cookies.set(
                 name,
                 value,
@@ -193,16 +61,31 @@ export async function middleware(
     request.nextUrl.pathname;
 
   /*
-   * Always resolve the current authenticated user.
+   * Always resolve the current Supabase user.
    */
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   /*
-   * =========================================================
+   * ---------------------------------------------------------
+   * SUSPENDED ACCOUNT PAGE
+   * ---------------------------------------------------------
+   *
+   * This page is allowed through middleware so a suspended
+   * company can actually see the suspension message and
+   * log out.
+   *
+   * It does NOT give access to the application.
+   */
+  if (pathname === "/account-suspended") {
+    return response;
+  }
+
+  /*
+   * ---------------------------------------------------------
    * CUSTOMER PORTAL
-   * =========================================================
+   * ---------------------------------------------------------
    */
 
   const isCustomerPortalPath =
@@ -211,16 +94,14 @@ export async function middleware(
 
   if (isCustomerPortalPath) {
     /*
-     * Portal login remains public.
+     * Portal login is public.
      */
-    if (
-      pathname === "/portal/login"
-    ) {
+    if (pathname === "/portal/login") {
       return response;
     }
 
     /*
-     * Portal pages require authentication.
+     * All other portal pages require authentication.
      */
     if (!user) {
       const loginUrl = new URL(
@@ -239,22 +120,16 @@ export async function middleware(
     }
 
     /*
-     * Get portal account.
+     * Verify active customer portal account.
      */
     const {
       data: portalUser,
       error: portalUserError,
     } = await supabase
-      .from(
-        "customer_portal_users",
-      )
-      .select(
-        "id, company_id, status",
-      )
-      .eq(
-        "user_id",
-        user.id,
-      )
+      .from("customer_portal_users")
+      .select("id, status")
+      .eq("user_id", user.id)
+      .eq("status", "active")
       .limit(1)
       .maybeSingle();
 
@@ -271,81 +146,18 @@ export async function middleware(
     }
 
     /*
-     * Portal account itself must be active.
+     * Customer portal authorization succeeded.
      */
-    if (
-      portalUser.status !==
-      "active"
-    ) {
-      return NextResponse.redirect(
-        new URL(
-          "/portal/login?error=portal-access-denied",
-          request.url,
-        ),
-      );
-    }
-
-    /*
-     * IMPORTANT:
-     * Check the company status separately.
-     */
-    const {
-      data: portalCompany,
-      error: portalCompanyError,
-    } = await supabase
-      .from("companies")
-      .select(
-        "id, status",
-      )
-      .eq(
-        "id",
-        portalUser.company_id,
-      )
-      .maybeSingle();
-
-    if (
-      portalCompanyError ||
-      !portalCompany
-    ) {
-      return new NextResponse(
-        "Company not found.",
-        {
-          status: 403,
-          headers: {
-            "Content-Type":
-              "text/plain; charset=utf-8",
-            "Cache-Control":
-              "private, no-store",
-          },
-        },
-      );
-    }
-
-    /*
-     * BLOCK SUSPENDED COMPANY.
-     */
-    if (
-      String(
-        portalCompany.status ??
-          "",
-      ).toLowerCase() ===
-      "suspended"
-    ) {
-      return suspendedResponse();
-    }
-
     return response;
   }
 
   /*
-   * =========================================================
+   * ---------------------------------------------------------
    * ONBOARDING
-   * =========================================================
+   * ---------------------------------------------------------
    */
 
-  if (
-    pathname === "/onboarding"
-  ) {
+  if (pathname === "/onboarding") {
     if (!user) {
       const loginUrl = new URL(
         "/login",
@@ -366,9 +178,9 @@ export async function middleware(
   }
 
   /*
-   * =========================================================
-   * PUBLIC ROUTES
-   * =========================================================
+   * ---------------------------------------------------------
+   * PUBLIC APPLICATION ROUTES
+   * ---------------------------------------------------------
    */
 
   if (isPublicPath(pathname)) {
@@ -385,20 +197,24 @@ export async function middleware(
   }
 
   /*
-   * =========================================================
-   * EMPLOYEE WORKSPACE
-   * =========================================================
+   * ---------------------------------------------------------
+   * EMPLOYEE WORKSPACE ROUTES
+   * ---------------------------------------------------------
    */
 
   const rule =
     getModuleRouteRule(pathname);
 
+  /*
+   * Routes outside the employee workspace
+   * are left alone.
+   */
   if (!rule) {
     return response;
   }
 
   /*
-   * Protected employee routes require authentication.
+   * Employee workspace requires authentication.
    */
   if (!user) {
     const loginUrl = new URL(
@@ -417,15 +233,25 @@ export async function middleware(
   }
 
   /*
-   * Resolve company membership.
+   * ---------------------------------------------------------
+   * RESOLVE COMPANY MEMBERSHIP + COMPANY STATUS
+   * ---------------------------------------------------------
    */
+
   const {
     data: membership,
     error: membershipError,
   } = await supabase
     .from("company_members")
     .select(
-      "company_id",
+      `
+        company_id,
+        companies (
+          id,
+          name,
+          status
+        )
+      `,
     )
     .eq(
       "user_id",
@@ -447,61 +273,46 @@ export async function middleware(
   }
 
   /*
-   * =========================================================
-   * COMPANY STATUS CHECK
-   * =========================================================
-   *
-   * This is the actual fix.
-   *
-   * A user can still have a valid Supabase session after
-   * the company has been suspended. Therefore we check the
-   * CURRENT database company status on every protected
-   * workspace request.
+   * Supabase can return the relationship as either
+   * an object or an array depending on the generated
+   * relationship shape.
    */
+  const company = Array.isArray(
+    membership.companies,
+  )
+    ? membership.companies[0]
+    : membership.companies;
 
-  const {
-    data: company,
-    error: companyError,
-  } = await supabase
-    .from("companies")
-    .select(
-      "id, status",
-    )
-    .eq(
-      "id",
-      membership.company_id,
-    )
-    .maybeSingle();
-
+  /*
+   * ---------------------------------------------------------
+   * SUSPENDED COMPANY CHECK
+   * ---------------------------------------------------------
+   *
+   * This is the important part.
+   *
+   * Once the company status is "suspended",
+   * the user cannot enter ANY employee workspace
+   * route.
+   *
+   * Opening another tab will hit this middleware again
+   * and redirect back to /account-suspended.
+   */
   if (
-    companyError ||
-    !company
+    company?.status ===
+    "suspended"
   ) {
     return NextResponse.redirect(
       new URL(
-        "/login?error=company-not-found",
+        "/account-suspended",
         request.url,
       ),
     );
   }
 
   /*
-   * Suspended companies are blocked BEFORE
-   * module entitlements or employee permissions.
-   */
-  if (
-    String(
-      company.status ?? "",
-    ).toLowerCase() ===
-    "suspended"
-  ) {
-    return suspendedResponse();
-  }
-
-  /*
-   * =========================================================
+   * ---------------------------------------------------------
    * MODULE ENTITLEMENT
-   * =========================================================
+   * ---------------------------------------------------------
    */
 
   if (rule.entitlementModule) {
@@ -537,9 +348,9 @@ export async function middleware(
   }
 
   /*
-   * =========================================================
-   * DATABASE PERMISSION CHECK
-   * =========================================================
+   * ---------------------------------------------------------
+   * EMPLOYEE PERMISSION CHECK
+   * ---------------------------------------------------------
    */
 
   const {
@@ -550,10 +361,8 @@ export async function middleware(
     {
       p_company_id:
         membership.company_id,
-
       p_module:
         rule.permissionModule,
-
       p_action: "view",
     },
   );
