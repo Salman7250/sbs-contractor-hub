@@ -700,6 +700,12 @@ export default function ExpensesPage() {
             employeesResult.error
           );
         }
+    if (membersResult.error) {
+  console.warn(
+    "Could not load company members:",
+    membersResult.error
+  );
+}
 
 const memberUserIds =
   (membersResult.data || [])
