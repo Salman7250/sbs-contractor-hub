@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+import { useRegionalSettings } from "@/app/components/regional-settings-provider";
 
 type Supplier = {
   id: string;
@@ -298,6 +299,7 @@ function normalizeSupplierProducts(
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
+  const { settings: regionalSettings } = useRegionalSettings();
 
   const supabase = useMemo(
     () => createClient(),
@@ -348,7 +350,7 @@ export default function NewPurchaseOrderPage() {
   ] = useState("");
 
   const [currency, setCurrency] =
-    useState("USD");
+    useState("");
 
   const [notes, setNotes] =
     useState("");
@@ -650,38 +652,40 @@ export default function NewPurchaseOrderPage() {
   }
 
   useEffect(() => {
-    if (!supplierId) {
-      setCurrency("USD");
-      setSelectedProductId("");
-      setProductSearch("");
-      setProductSearchOpen(false);
-      return;
-    }
-
-    const supplier =
-      suppliers.find(
-        (item) =>
-          item.id ===
-          supplierId
-      );
-
-    if (!supplier) {
-      return;
-    }
-
+  if (!supplierId) {
     setCurrency(
-      supplier.currency ||
-        "USD"
+      regionalSettings?.base_currency || ""
     );
-
     setSelectedProductId("");
     setProductSearch("");
     setProductSearchOpen(false);
-  }, [
-    supplierId,
-    suppliers,
-  ]);
+    return;
+  }
 
+  const supplier =
+    suppliers.find(
+      (item) =>
+        item.id === supplierId
+    );
+
+  if (!supplier) {
+    return;
+  }
+
+  setCurrency(
+    supplier.currency ||
+      regionalSettings?.base_currency ||
+      ""
+  );
+
+  setSelectedProductId("");
+  setProductSearch("");
+  setProductSearchOpen(false);
+}, [
+  supplierId,
+  suppliers,
+  regionalSettings,
+]);
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node | null;
