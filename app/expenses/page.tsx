@@ -876,6 +876,8 @@ profilesData.forEach(          (profile: any) => {
       ])
     );
   }, [people]);
+  
+  
 
   const categoryMap = useMemo(() => {
     return new Map(
