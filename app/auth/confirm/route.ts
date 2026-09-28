@@ -1,8 +1,12 @@
-import { type EmailOtpType } from "@supabase/supabase-js";
+import {
+  type EmailOtpType,
+} from "@supabase/supabase-js";
+
 import {
   type NextRequest,
   NextResponse,
 } from "next/server";
+
 import { createClient } from "@/lib/supabase/server";
 
 function getSafeRedirectPath(
@@ -30,23 +34,40 @@ function getSafeRedirectPath(
   return value;
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+export async function GET(
+  request: NextRequest,
+) {
+  const { searchParams } =
+    new URL(request.url);
 
-  const tokenHash = searchParams.get("token_hash");
+  const tokenHash =
+    searchParams.get("token_hash");
 
-  const type = searchParams.get(
-    "type",
-  ) as EmailOtpType | null;
+  const type =
+    searchParams.get(
+      "type",
+    ) as EmailOtpType | null;
 
-  const plan = searchParams.get("plan");
+  const plan =
+    searchParams.get("plan");
 
   /*
-   * Employee invitations send:
+   * Employee invitations may contain:
    *
-   * /auth/confirm?token_hash=...&type=invite&next=/set-password
+   * /auth/confirm
+   *   ?token_hash=...
+   *   &type=invite
+   *   &next=/set-password
    *
-   * Company signup confirmation continues to onboarding.
+   * Company signup confirmation can use:
+   *
+   * /auth/confirm
+   *   ?token_hash=...
+   *   &type=email
+   *   &next=/onboarding
+   *
+   * We still read these values for normal confirmation
+   * handling and debugging.
    */
   const requestedNext =
     searchParams.get("next") ||
@@ -60,13 +81,18 @@ export async function GET(request: NextRequest) {
    * This lets us verify exactly what Supabase is sending to
    * the confirmation route and what redirect path we receive.
    */
-  console.log("AUTH CONFIRM DEBUG:", {
-    type,
-    requestedNext,
-    tokenHashPresent: !!tokenHash,
-    plan,
-    pathname: request.nextUrl.pathname,
-  });
+  console.log(
+    "AUTH CONFIRM DEBUG:",
+    {
+      type,
+      requestedNext,
+      tokenHashPresent:
+        !!tokenHash,
+      plan,
+      pathname:
+        request.nextUrl.pathname,
+    },
+  );
 
   const redirectTo =
     request.nextUrl.clone();
@@ -112,9 +138,12 @@ export async function GET(request: NextRequest) {
     console.error(
       "Email confirmation error:",
       {
-        message: error.message,
-        code: error.code,
-        status: error.status,
+        message:
+          error.message,
+        code:
+          error.code,
+        status:
+          error.status,
       },
     );
 
@@ -135,18 +164,36 @@ export async function GET(request: NextRequest) {
    * =========================================================
    *
    * INVITE:
-   *     /set-password
+   *     ALWAYS /set-password
    *
    * COMPANY SIGNUP:
    *     /onboarding
    */
 
   if (type === "invite") {
-    const safeNext =
-      getSafeRedirectPath(
-        requestedNext,
-        "/set-password",
-      );
+    /*
+     * IMPORTANT:
+     *
+     * Employee invitations MUST always go to /set-password.
+     *
+     * We intentionally DO NOT honor:
+     *
+     *     ?next=...
+     *     ?redirect_to=...
+     *
+     * here.
+     *
+     * This prevents an employee invitation from ever being
+     * redirected into the company onboarding flow.
+     */
+    redirectTo.pathname =
+      "/set-password";
+
+    /*
+     * Remove all query parameters after the invitation
+     * token has been successfully verified.
+     */
+    redirectTo.search = "";
 
     /*
      * =======================================================
@@ -157,19 +204,11 @@ export async function GET(request: NextRequest) {
       "INVITE REDIRECT DEBUG:",
       {
         requestedNext,
-        safeNext,
+        forcedPath:
+          "/set-password",
         type,
       },
     );
-
-    redirectTo.pathname =
-      safeNext;
-
-    /*
-     * Remove token/query parameters after
-     * confirmation.
-     */
-    redirectTo.search = "";
 
     /*
      * =======================================================
@@ -211,11 +250,18 @@ export async function GET(request: NextRequest) {
     plan
   ) {
     redirectTo.search =
-      `?plan=${encodeURIComponent(plan)}`;
+      `?plan=${encodeURIComponent(
+        plan,
+      )}`;
   } else {
     redirectTo.search = "";
   }
 
+  /*
+   * =========================================================
+   * DEBUG COMPANY SIGNUP REDIRECT
+   * =========================================================
+   */
   console.log(
     "COMPANY SIGNUP REDIRECT DEBUG:",
     {

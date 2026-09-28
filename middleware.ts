@@ -157,25 +157,70 @@ export async function middleware(request: NextRequest) {
    * ---------------------------------------------------------
    */
 
-  if (pathname === "/onboarding") {
-    if (!user) {
-      const loginUrl = new URL(
-        "/login",
-        request.url,
-      );
+  /*
+ * ---------------------------------------------------------
+ * ONBOARDING
+ * ---------------------------------------------------------
+ */
 
-      loginUrl.searchParams.set(
-        "redirectTo",
-        "/onboarding",
-      );
+if (pathname === "/onboarding") {
+  if (!user) {
+    const loginUrl = new URL(
+      "/login",
+      request.url,
+    );
 
-      return NextResponse.redirect(
-        loginUrl,
-      );
-    }
+    loginUrl.searchParams.set(
+      "redirectTo",
+      "/onboarding",
+    );
 
-    return response;
+    return NextResponse.redirect(
+      loginUrl,
+    );
   }
+
+  /*
+   * Employees must NEVER enter company onboarding.
+   *
+   * Employee accounts already belong to a company and
+   * therefore have no reason to complete company setup.
+   */
+  const {
+    data: employee,
+    error: employeeError,
+  } = await supabase
+    .from("employees")
+    .select("id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (employeeError) {
+    console.error(
+      "Onboarding employee lookup failed:",
+      employeeError,
+    );
+
+    return NextResponse.redirect(
+      new URL(
+        "/?error=employee-check-failed",
+        request.url,
+      ),
+    );
+  }
+
+  if (employee) {
+    return NextResponse.redirect(
+      new URL(
+        "/",
+        request.url,
+      ),
+    );
+  }
+
+  return response;
+}
 
   /*
    * ---------------------------------------------------------

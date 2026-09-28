@@ -389,13 +389,12 @@ export default function SetPasswordForm() {
          *
          * They must NEVER be sent to /onboarding.
          */
-        const appUrl =
-          window.location.hostname ===
-          "localhost"
-            ? window.location.origin
-            : "https://app.sharifbusinesssolutions.com";
+        const workspaceUrl =
+  window.location.hostname === "localhost"
+    ? `${window.location.origin}/`
+    : "https://app.sharifbusinesssolutions.com/";
 
-        window.location.replace(appUrl);
+window.location.replace(workspaceUrl);
 
         return;
       }
