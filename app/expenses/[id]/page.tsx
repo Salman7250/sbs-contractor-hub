@@ -10,8 +10,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
-const [currentUserId, setCurrentUserId] = useState("");
-const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
+
 
 type ExpenseType =
   | "operating_expense"
@@ -240,6 +239,8 @@ function actionLabel(action: string) {
 }
 
 export default function ExpenseDetailPage() {
+  const [currentUserId, setCurrentUserId] = useState("");
+const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
   const params = useParams();
   const router = useRouter();
 
