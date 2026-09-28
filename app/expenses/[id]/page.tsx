@@ -10,6 +10,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
+const [currentUserId, setCurrentUserId] = useState("");
+const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
 
 type ExpenseType =
   | "operating_expense"
@@ -312,12 +314,12 @@ export default function ExpenseDetailPage() {
           router.push("/login");
           return;
         }
-
+setCurrentUserId(user.id);
         const { data: membership, error: membershipError } =
           await supabase
             .from("company_members")
-            .select("company_id")
-            .eq("user_id", user.id)
+.select("company_id, role")
+.eq("user_id", user.id)
             .limit(1)
             .maybeSingle();
 
@@ -332,6 +334,11 @@ export default function ExpenseDetailPage() {
         }
 
         const companyId = membership.company_id;
+
+setIsCompanyAdmin(
+  membership.role === "owner" ||
+    membership.role === "admin"
+);
 
         const [
           companyResult,
@@ -582,20 +589,34 @@ export default function ExpenseDetailPage() {
     );
   }, [expense, settledAmount]);
 
-  const canApprove =
-    expense?.status === "pending";
+  const isOwnExpense =
+  !!expense &&
+  !!expense.created_by &&
+  expense.created_by === currentUserId;
 
-  const canReject =
-    expense?.status === "pending" ||
-    expense?.status === "approved";
+const employeeOwnExpenseRestricted =
+  isOwnExpense && !isCompanyAdmin;
 
-  const canMarkPaid =
-    expense?.status === "approved";
+const canEdit =
+  !employeeOwnExpenseRestricted;
 
-  const canCancel =
-    expense?.status !== "cancelled" &&
-    expense?.status !== "paid";
+const canApprove =
+  expense?.status === "pending" &&
+  !employeeOwnExpenseRestricted;
 
+const canReject =
+  (expense?.status === "pending" ||
+    expense?.status === "approved") &&
+  !employeeOwnExpenseRestricted;
+
+const canMarkPaid =
+  expense?.status === "approved" &&
+  !employeeOwnExpenseRestricted;
+
+const canCancel =
+  expense?.status !== "cancelled" &&
+  expense?.status !== "paid" &&
+  !employeeOwnExpenseRestricted;
   const canSettle =
     expense &&
     expense.expense_type === "employee_advance" &&
@@ -935,12 +956,14 @@ export default function ExpenseDetailPage() {
                   {refreshing ? "Refreshing..." : "Refresh"}
                 </button>
 
-                <Link
-                  href={`/expenses/${expense.id}/edit`}
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  Edit
-                </Link>
+                {canEdit && (
+  <Link
+    href={`/expenses/${expense.id}/edit`}
+    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+  >
+    Edit
+  </Link>
+)}
 
                 {canApprove && (
                   <button
