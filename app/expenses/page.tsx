@@ -637,12 +637,12 @@ export default function ExpensesPage() {
         }
 
         const [
-          companyResult,
-          expensesResult,
-          categoriesResult,
-          employeesResult,
-          profilesResult,
-        ] = await Promise.all([
+  companyResult,
+  expensesResult,
+  categoriesResult,
+  employeesResult,
+  membersResult,
+] = await Promise.all([
           supabase
             .from("companies")
             .select(
@@ -676,15 +676,10 @@ export default function ExpensesPage() {
             )
             .order("first_name"),
 
-          /*
-           * profiles gives us the actual user behind
-           * created_by / approved_by.
-           */
           supabase
-            .from("profiles")
-            .select(
-              "id, full_name"
-            ),
+  .from("company_members")
+  .select("user_id")
+  .eq("company_id", companyId),
         ]);
 
         if (companyResult.error) {
@@ -706,12 +701,35 @@ export default function ExpensesPage() {
           );
         }
 
-        if (profilesResult.error) {
-          console.warn(
-            "Could not load profiles:",
-            profilesResult.error
-          );
-        }
+const memberUserIds =
+  (membersResult.data || [])
+    .map((member) => member.user_id)
+    .filter(Boolean);
+
+let profilesData: Array<{
+  id: string;
+  full_name: string | null;
+}> = [];
+
+if (memberUserIds.length > 0) {
+  const {
+    data,
+    error,
+  } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", memberUserIds);
+
+  if (error) {
+    console.warn(
+      "Could not load member profiles:",
+      error
+    );
+  } else {
+    profilesData = data || [];
+  }
+}
+       
 
         setCompany(
           companyResult.data
@@ -748,8 +766,7 @@ export default function ExpensesPage() {
 
         const normalizedPeople: Person[] = [];
 
-        (profilesResult.data || []).forEach(
-          (profile: any) => {
+profilesData.forEach(          (profile: any) => {
             const name =
               profile.full_name?.trim() ||
               "User";
