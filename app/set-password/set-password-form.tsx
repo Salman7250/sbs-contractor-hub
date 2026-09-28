@@ -41,21 +41,19 @@ export default function SetPasswordForm() {
   );
 
   /*
-   * -------------------------------------------------------
+   * =========================================================
    * INITIALIZE INVITATION SESSION
-   * -------------------------------------------------------
+   * =========================================================
    *
-   * Supabase invitation links can return the authentication
+   * Supabase invitation links can contain authentication
    * tokens in the URL hash:
    *
    * #access_token=...
    * &refresh_token=...
    * &type=invite
    *
-   * The browser client needs those tokens converted into a
-   * Supabase session before getUser() or updateUser() can
-   * work.
-   * -------------------------------------------------------
+   * Establish the browser session before allowing the user
+   * to create their password.
    */
   useEffect(() => {
     let mounted = true;
@@ -64,9 +62,6 @@ export default function SetPasswordForm() {
       try {
         /*
          * First check whether Supabase already has a session.
-         *
-         * This is important because the auth client may have
-         * already processed the invitation URL automatically.
          */
         const {
           data: { session },
@@ -81,7 +76,7 @@ export default function SetPasswordForm() {
         }
 
         /*
-         * Read invitation tokens from the URL hash.
+         * Read authentication tokens from the URL hash.
          */
         const hash =
           typeof window !== "undefined"
@@ -93,6 +88,7 @@ export default function SetPasswordForm() {
             setError(
               "This invitation link is missing its authentication information. Please request a new invitation.",
             );
+
             setInitializing(false);
           }
 
@@ -113,8 +109,8 @@ export default function SetPasswordForm() {
           hashParams.get("type");
 
         /*
-         * If this is an invitation URL, establish the
-         * authenticated session manually.
+         * Establish the Supabase session from the
+         * invitation tokens.
          */
         if (accessToken && refreshToken) {
           const {
@@ -135,6 +131,7 @@ export default function SetPasswordForm() {
               setError(
                 "This invitation link has expired or is no longer valid. Please request a new invitation.",
               );
+
               setInitializing(false);
             }
 
@@ -146,6 +143,7 @@ export default function SetPasswordForm() {
               setError(
                 "Unable to establish your invitation session. Please request a new invitation.",
               );
+
               setInitializing(false);
             }
 
@@ -153,9 +151,7 @@ export default function SetPasswordForm() {
           }
 
           /*
-           * Remove the sensitive authentication tokens from
-           * the visible browser URL after the session has
-           * been established.
+           * Remove sensitive tokens from the browser URL.
            */
           if (typeof window !== "undefined") {
             window.history.replaceState(
@@ -174,7 +170,7 @@ export default function SetPasswordForm() {
         }
 
         /*
-         * No tokens were found and no existing session exists.
+         * No usable invitation tokens.
          */
         if (mounted) {
           setError(
@@ -195,6 +191,7 @@ export default function SetPasswordForm() {
           setError(
             "Something went wrong while opening your invitation. Please try again.",
           );
+
           setInitializing(false);
         }
       }
@@ -237,10 +234,11 @@ export default function SetPasswordForm() {
 
     try {
       /*
-       * -------------------------------------------------------
-       * Make absolutely sure a valid session exists.
-       * -------------------------------------------------------
+       * =======================================================
+       * 1. Verify authenticated session
+       * =======================================================
        */
+
       const {
         data: { session },
         error: sessionError,
@@ -268,10 +266,11 @@ export default function SetPasswordForm() {
       }
 
       /*
-       * -------------------------------------------------------
-       * Get the authenticated invitation user.
-       * -------------------------------------------------------
+       * =======================================================
+       * 2. Get authenticated user
+       * =======================================================
        */
+
       const {
         data: { user },
         error: userError,
@@ -291,10 +290,11 @@ export default function SetPasswordForm() {
       }
 
       /*
-       * -------------------------------------------------------
-       * Create the user's password.
-       * -------------------------------------------------------
+       * =======================================================
+       * 3. Create password
+       * =======================================================
        */
+
       const {
         error: passwordError,
       } = await supabase.auth.updateUser({
@@ -316,19 +316,55 @@ export default function SetPasswordForm() {
       }
 
       /*
-       * -------------------------------------------------------
-       * Determine account type.
-       * -------------------------------------------------------
+       * =======================================================
+       * 4. Determine whether this is an EMPLOYEE
+       * =======================================================
+       *
+       * DO NOT rely only on user_metadata.account_type.
+       *
+       * The employee record is the authoritative application
+       * record for employee accounts.
+       *
+       * This prevents an employee from accidentally falling
+       * through to the customer portal onboarding flow.
        */
-      const accountType =
-        user.user_metadata?.account_type;
+
+      const {
+        data: employee,
+        error: employeeLookupError,
+      } = await supabase
+        .from("employees")
+        .select(
+          "id, company_id, user_id, status",
+        )
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (employeeLookupError) {
+        console.error(
+          "Employee lookup error:",
+          employeeLookupError,
+        );
+
+        setError(
+          "Your password was created, but we could not verify your employee account. Please contact your administrator.",
+        );
+
+        return;
+      }
 
       /*
-       * -------------------------------------------------------
-       * EMPLOYEE ACCOUNT
-       * -------------------------------------------------------
+       * =======================================================
+       * 5. EMPLOYEE ACCOUNT
+       * =======================================================
        */
-      if (accountType === "employee") {
+
+      if (employee) {
+        /*
+         * Activate the employee account through the existing
+         * server-side RPC.
+         */
         const {
           error: activationError,
         } = await supabase.rpc(
@@ -348,6 +384,11 @@ export default function SetPasswordForm() {
           return;
         }
 
+        /*
+         * Employee accounts go directly to the SBS workspace.
+         *
+         * They must NEVER be sent to /onboarding.
+         */
         const appUrl =
           window.location.hostname ===
           "localhost"
@@ -360,34 +401,35 @@ export default function SetPasswordForm() {
       }
 
       /*
- * -------------------------------------------------------
- * B2B CUSTOMER PORTAL
- * -------------------------------------------------------
- *
- * Activate the customer portal membership immediately
- * after the customer successfully creates their password.
- *
- * The RPC identifies the portal account using auth.uid(),
- * so the customer cannot activate another user's account.
- */
-const { error: portalActivationError } = await supabase.rpc(
-  "customer_portal_activate_my_account",
-);
+       * =======================================================
+       * 6. B2B CUSTOMER PORTAL
+       * =======================================================
+       *
+       * Only users who are NOT employees reach this branch.
+       */
 
-if (portalActivationError) {
-  console.error(
-    "Customer portal activation error:",
-    portalActivationError,
-  );
+      const {
+        error: portalActivationError,
+      } = await supabase.rpc(
+        "customer_portal_activate_my_account",
+      );
 
-  setError(
-    "Your password was created, but your customer portal account could not be activated. Please contact your administrator.",
-  );
+      if (portalActivationError) {
+        console.error(
+          "Customer portal activation error:",
+          portalActivationError,
+        );
 
-  return;
-}
+        setError(
+          "Your password was created, but your customer portal account could not be activated. Please contact your administrator.",
+        );
 
-window.location.replace("/b2b-portal");
+        return;
+      }
+
+      window.location.replace(
+        "/b2b-portal",
+      );
     } catch (err) {
       console.error(
         "Set password error:",
@@ -403,10 +445,11 @@ window.location.replace("/b2b-portal");
   }
 
   /*
-   * -------------------------------------------------------
+   * =========================================================
    * INITIALIZING STATE
-   * -------------------------------------------------------
+   * =========================================================
    */
+
   if (initializing) {
     return (
       <div className={styles.form}>
@@ -429,9 +472,9 @@ window.location.replace("/b2b-portal");
       className={styles.form}
       onSubmit={handleSubmit}
     >
-      {/* -------------------------------------------------- */}
-      {/* PASSWORD */}
-      {/* -------------------------------------------------- */}
+      {/* =====================================================
+          PASSWORD
+      ====================================================== */}
 
       <div className={styles.fieldGroup}>
         <label
@@ -564,9 +607,9 @@ window.location.replace("/b2b-portal");
         </div>
       </div>
 
-      {/* -------------------------------------------------- */}
-      {/* CONFIRM PASSWORD */}
-      {/* -------------------------------------------------- */}
+      {/* =====================================================
+          CONFIRM PASSWORD
+      ====================================================== */}
 
       <div className={styles.fieldGroup}>
         <label
@@ -699,9 +742,9 @@ window.location.replace("/b2b-portal");
         </div>
       </div>
 
-      {/* -------------------------------------------------- */}
-      {/* ERROR */}
-      {/* -------------------------------------------------- */}
+      {/* =====================================================
+          ERROR
+      ====================================================== */}
 
       {error && (
         <div
@@ -718,9 +761,9 @@ window.location.replace("/b2b-portal");
         </div>
       )}
 
-      {/* -------------------------------------------------- */}
-      {/* SUBMIT */}
-      {/* -------------------------------------------------- */}
+      {/* =====================================================
+          SUBMIT
+      ====================================================== */}
 
       <button
         type="submit"

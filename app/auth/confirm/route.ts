@@ -1,53 +1,235 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
-import { type NextRequest, NextResponse } from "next/server";
+import {
+  type NextRequest,
+  NextResponse,
+} from "next/server";
 import { createClient } from "@/lib/supabase/server";
+
+function getSafeRedirectPath(
+  value: string | null,
+  fallback: string,
+): string {
+  if (!value) {
+    return fallback;
+  }
+
+  /*
+   * Only allow internal application paths.
+   *
+   * This prevents an external URL from being supplied through
+   * the confirmation link and used as an open redirect.
+   */
+  if (!value.startsWith("/")) {
+    return fallback;
+  }
+
+  if (value.startsWith("//")) {
+    return fallback;
+  }
+
+  return value;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const tokenHash = searchParams.get("token_hash");
-  const type = searchParams.get("type") as EmailOtpType | null;
+
+  const type = searchParams.get(
+    "type",
+  ) as EmailOtpType | null;
+
   const plan = searchParams.get("plan");
 
-  const redirectTo = request.nextUrl.clone();
+  /*
+   * Employee invitations send:
+   *
+   * /auth/confirm?token_hash=...&type=invite&next=/set-password
+   *
+   * Company signup confirmation continues to onboarding.
+   */
+  const requestedNext =
+    searchParams.get("next") ||
+    searchParams.get("redirect_to");
 
-  if (!tokenHash || !type) {
-    redirectTo.pathname = "/signup/verify";
-    redirectTo.search = "?error=invalid_confirmation";
-
-    return NextResponse.redirect(redirectTo);
-  }
-
-  const supabase = await createClient();
-
-  const { error } = await supabase.auth.verifyOtp({
+  /*
+   * =========================================================
+   * DEBUG
+   * =========================================================
+   *
+   * This lets us verify exactly what Supabase is sending to
+   * the confirmation route and what redirect path we receive.
+   */
+  console.log("AUTH CONFIRM DEBUG:", {
     type,
-    token_hash: tokenHash,
+    requestedNext,
+    tokenHashPresent: !!tokenHash,
+    plan,
+    pathname: request.nextUrl.pathname,
   });
 
-  if (error) {
-    console.error("Email confirmation error:", {
-      message: error.message,
-      code: error.code,
-      status: error.status,
-    });
+  const redirectTo =
+    request.nextUrl.clone();
 
-    redirectTo.pathname = "/signup/verify";
-    redirectTo.search = "?error=confirmation_failed";
+  /*
+   * =========================================================
+   * 1. Validate confirmation parameters
+   * =========================================================
+   */
 
-    return NextResponse.redirect(redirectTo);
+  if (!tokenHash || !type) {
+    console.log(
+      "AUTH CONFIRM DEBUG: Missing tokenHash or type",
+    );
+
+    redirectTo.pathname =
+      "/signup/verify";
+
+    redirectTo.search =
+      "?error=invalid_confirmation";
+
+    return NextResponse.redirect(
+      redirectTo,
+    );
   }
 
   /*
-   * Email is now confirmed and Supabase has established
-   * the authenticated session.
-   *
-   * Continue directly to business onboarding.
+   * =========================================================
+   * 2. Verify Supabase confirmation token
+   * =========================================================
    */
-  redirectTo.pathname = "/onboarding";
-  redirectTo.search = plan
-    ? `?plan=${encodeURIComponent(plan)}`
-    : "";
 
-  return NextResponse.redirect(redirectTo);
+  const supabase =
+    await createClient();
+
+  const { error } =
+    await supabase.auth.verifyOtp({
+      type,
+      token_hash: tokenHash,
+    });
+
+  if (error) {
+    console.error(
+      "Email confirmation error:",
+      {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+      },
+    );
+
+    redirectTo.pathname =
+      "/signup/verify";
+
+    redirectTo.search =
+      "?error=confirmation_failed";
+
+    return NextResponse.redirect(
+      redirectTo,
+    );
+  }
+
+  /*
+   * =========================================================
+   * 3. Determine where the confirmed user should go
+   * =========================================================
+   *
+   * INVITE:
+   *     /set-password
+   *
+   * COMPANY SIGNUP:
+   *     /onboarding
+   */
+
+  if (type === "invite") {
+    const safeNext =
+      getSafeRedirectPath(
+        requestedNext,
+        "/set-password",
+      );
+
+    /*
+     * =======================================================
+     * DEBUG INVITATION REDIRECT
+     * =======================================================
+     */
+    console.log(
+      "INVITE REDIRECT DEBUG:",
+      {
+        requestedNext,
+        safeNext,
+        type,
+      },
+    );
+
+    redirectTo.pathname =
+      safeNext;
+
+    /*
+     * Remove token/query parameters after
+     * confirmation.
+     */
+    redirectTo.search = "";
+
+    /*
+     * =======================================================
+     * DEBUG FINAL REDIRECT
+     * =======================================================
+     */
+    console.log(
+      "FINAL REDIRECT:",
+      redirectTo.toString(),
+    );
+
+    return NextResponse.redirect(
+      redirectTo,
+    );
+  }
+
+  /*
+   * =========================================================
+   * 4. Normal company email confirmation
+   * =========================================================
+   *
+   * Company signup users continue through the normal
+   * business onboarding flow.
+   */
+
+  redirectTo.pathname =
+    getSafeRedirectPath(
+      requestedNext,
+      "/onboarding",
+    );
+
+  /*
+   * Preserve the selected pricing plan for company
+   * onboarding when no custom redirect was supplied.
+   */
+  if (
+    redirectTo.pathname ===
+      "/onboarding" &&
+    plan
+  ) {
+    redirectTo.search =
+      `?plan=${encodeURIComponent(plan)}`;
+  } else {
+    redirectTo.search = "";
+  }
+
+  console.log(
+    "COMPANY SIGNUP REDIRECT DEBUG:",
+    {
+      requestedNext,
+      finalPath:
+        redirectTo.pathname,
+      finalUrl:
+        redirectTo.toString(),
+      type,
+      plan,
+    },
+  );
+
+  return NextResponse.redirect(
+    redirectTo,
+  );
 }

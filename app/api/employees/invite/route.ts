@@ -57,7 +57,7 @@ function isValidEmail(email: string): boolean {
 
 function jsonError(
   message: string,
-  status = 400
+  status = 400,
 ) {
   return NextResponse.json(
     {
@@ -65,7 +65,7 @@ function jsonError(
     },
     {
       status,
-    }
+    },
   );
 }
 
@@ -86,7 +86,7 @@ function getAdminClient() {
   ) {
     try {
       const secretKeys = JSON.parse(
-        process.env.SUPABASE_SECRET_KEYS
+        process.env.SUPABASE_SECRET_KEYS,
       );
 
       if (
@@ -98,14 +98,14 @@ function getAdminClient() {
     } catch (error) {
       console.error(
         "Unable to parse SUPABASE_SECRET_KEYS:",
-        error
+        error,
       );
     }
   }
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error(
-      "Supabase server credentials are not configured."
+      "Supabase server credentials are not configured.",
     );
   }
 
@@ -117,8 +117,19 @@ function getAdminClient() {
         autoRefreshToken: false,
         persistSession: false,
       },
-    }
+    },
   );
+}
+
+function getAppUrl(request: Request): string {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  return new URL(request.url).origin;
 }
 
 export async function POST(request: Request) {
@@ -159,7 +170,7 @@ export async function POST(request: Request) {
     if (userError || !currentUser) {
       return jsonError(
         "You must be signed in to invite an employee.",
-        401
+        401,
       );
     }
 
@@ -186,19 +197,19 @@ export async function POST(request: Request) {
     if (membershipError) {
       console.error(
         "Employee invite membership lookup failed:",
-        membershipError
+        membershipError,
       );
 
       return jsonError(
         "Unable to determine your company membership.",
-        500
+        500,
       );
     }
 
     if (!membership?.company_id) {
       return jsonError(
         "Your account is not associated with a company.",
-        403
+        403,
       );
     }
 
@@ -236,18 +247,18 @@ export async function POST(request: Request) {
           p_company_id: companyId,
           p_module: "employees",
           p_action: "create",
-        }
+        },
       );
 
       if (permissionError) {
         console.error(
           "Employee invite permission check failed:",
-          permissionError
+          permissionError,
         );
 
         return jsonError(
           "Unable to verify employee-management permission.",
-          500
+          500,
         );
       }
 
@@ -261,7 +272,7 @@ export async function POST(request: Request) {
     ) {
       return jsonError(
         "You do not have permission to create employees.",
-        403
+        403,
       );
     }
 
@@ -271,15 +282,31 @@ export async function POST(request: Request) {
      * =========================================================
      */
 
-    const firstName = cleanString(body.first_name);
-    const lastName = cleanString(body.last_name);
-    const employeeNumber = cleanString(
-      body.employee_number
+    const firstName = cleanString(
+      body.first_name,
     );
+
+    const lastName = cleanString(
+      body.last_name,
+    );
+
+    const employeeNumber = cleanString(
+      body.employee_number,
+    );
+
     const email = cleanEmail(body.email);
-    const phone = cleanString(body.phone);
-    const jobTitle = cleanString(body.job_title);
-    const department = cleanString(body.department);
+
+    const phone = cleanString(
+      body.phone,
+    );
+
+    const jobTitle = cleanString(
+      body.job_title,
+    );
+
+    const department = cleanString(
+      body.department,
+    );
 
     const employmentType =
       cleanString(body.employment_type) ||
@@ -289,63 +316,79 @@ export async function POST(request: Request) {
       cleanString(body.status) ||
       "invited";
 
-    const roleId = cleanString(body.role_id);
-    const hireDate = cleanString(body.hire_date);
-    const managerId = cleanString(body.manager_id);
-
-    const emergencyContactName = cleanString(
-      body.emergency_contact_name
+    const roleId = cleanString(
+      body.role_id,
     );
 
-    const emergencyContactPhone = cleanString(
-      body.emergency_contact_phone
+    const hireDate = cleanString(
+      body.hire_date,
     );
 
-    const notes = cleanString(body.notes);
+    const managerId = cleanString(
+      body.manager_id,
+    );
+
+    const emergencyContactName =
+      cleanString(
+        body.emergency_contact_name,
+      );
+
+    const emergencyContactPhone =
+      cleanString(
+        body.emergency_contact_phone,
+      );
+
+    const notes = cleanString(
+      body.notes,
+    );
 
     if (!firstName) {
-      return jsonError("First name is required.");
+      return jsonError(
+        "First name is required.",
+      );
     }
 
     if (!lastName) {
-      return jsonError("Last name is required.");
+      return jsonError(
+        "Last name is required.",
+      );
     }
 
     if (!email) {
       return jsonError(
-        "SBS login email is required."
+        "SBS login email is required.",
       );
     }
 
     if (!isValidEmail(email)) {
       return jsonError(
-        "Please enter a valid email address."
+        "Please enter a valid email address.",
       );
     }
 
     if (!roleId) {
       return jsonError(
-        "Employee role is required."
+        "Employee role is required.",
       );
     }
 
     if (
       !ALLOWED_EMPLOYMENT_TYPES.has(
-        employmentType
+        employmentType,
       )
     ) {
       return jsonError(
-        "Invalid employment type."
+        "Invalid employment type.",
       );
     }
 
     if (
       !ALLOWED_STATUSES.has(
-        requestedStatus
+        requestedStatus,
       )
     ) {
       return jsonError(
-        "Invalid employee status."
+        "Invalid employee status.",
       );
     }
 
@@ -363,7 +406,7 @@ export async function POST(request: Request) {
     } = await supabase
       .from("employee_roles")
       .select(
-        "id, company_id, name, description"
+        "id, company_id, name, description",
       )
       .eq("id", roleId)
       .eq("company_id", companyId)
@@ -372,18 +415,18 @@ export async function POST(request: Request) {
     if (roleError) {
       console.error(
         "Employee role lookup failed:",
-        roleError
+        roleError,
       );
 
       return jsonError(
         "Unable to verify the selected employee role.",
-        500
+        500,
       );
     }
 
     if (!role) {
       return jsonError(
-        "The selected employee role does not belong to this company."
+        "The selected employee role does not belong to this company.",
       );
     }
 
@@ -399,7 +442,9 @@ export async function POST(request: Request) {
         error: managerError,
       } = await supabase
         .from("employees")
-        .select("id, company_id, status")
+        .select(
+          "id, company_id, status",
+        )
         .eq("id", managerId)
         .eq("company_id", companyId)
         .maybeSingle();
@@ -407,18 +452,18 @@ export async function POST(request: Request) {
       if (managerError) {
         console.error(
           "Employee manager lookup failed:",
-          managerError
+          managerError,
         );
 
         return jsonError(
           "Unable to verify the selected manager.",
-          500
+          500,
         );
       }
 
       if (!manager) {
         return jsonError(
-          "The selected manager does not belong to this company."
+          "The selected manager does not belong to this company.",
         );
       }
 
@@ -427,7 +472,7 @@ export async function POST(request: Request) {
         manager.status === "terminated"
       ) {
         return jsonError(
-          "An inactive or terminated employee cannot be assigned as manager."
+          "An inactive or terminated employee cannot be assigned as manager.",
         );
       }
     }
@@ -448,26 +493,26 @@ export async function POST(request: Request) {
         .eq("company_id", companyId)
         .eq(
           "employee_number",
-          employeeNumber
+          employeeNumber,
         )
         .maybeSingle();
 
       if (numberError) {
         console.error(
           "Employee number lookup failed:",
-          numberError
+          numberError,
         );
 
         return jsonError(
           "Unable to verify the employee number.",
-          500
+          500,
         );
       }
 
       if (existingNumber) {
         return jsonError(
           `Employee number "${employeeNumber}" is already in use.`,
-          409
+          409,
         );
       }
     }
@@ -484,7 +529,7 @@ export async function POST(request: Request) {
     } = await supabase
       .from("employees")
       .select(
-        "id, user_id, email"
+        "id, user_id, email",
       )
       .eq("company_id", companyId)
       .ilike("email", email)
@@ -493,19 +538,19 @@ export async function POST(request: Request) {
     if (existingEmployeeError) {
       console.error(
         "Existing employee lookup failed:",
-        existingEmployeeError
+        existingEmployeeError,
       );
 
       return jsonError(
         "Unable to check for an existing employee.",
-        500
+        500,
       );
     }
 
     if (existingEmployee) {
       return jsonError(
         "An employee with this email already exists in your company.",
-        409
+        409,
       );
     }
 
@@ -553,12 +598,12 @@ export async function POST(request: Request) {
       if (usersError) {
         console.error(
           "Auth user lookup failed:",
-          usersError
+          usersError,
         );
 
         return jsonError(
           "Unable to verify the employee login account.",
-          500
+          500,
         );
       }
 
@@ -566,7 +611,7 @@ export async function POST(request: Request) {
         usersPage.users.find(
           (authUser) =>
             authUser.email?.toLowerCase() ===
-            email
+            email,
         );
 
       if (matchedUser) {
@@ -591,13 +636,45 @@ export async function POST(request: Request) {
     if (existingAuthUser) {
       return jsonError(
         "A Supabase login account already exists with this email. Use a different email or manage the existing SBS user.",
-        409
+        409,
       );
     }
 
     /*
      * =========================================================
-     * 12. Invite Auth user
+     * 12. Build employee invitation redirect
+     * =========================================================
+     *
+     * IMPORTANT:
+     *
+     * Supabase's invitation link handles the invitation
+     * verification itself.
+     *
+     * Once the invitation is accepted, the employee MUST
+     * land directly on /set-password.
+     *
+     * We intentionally do NOT send employees through:
+     *
+     *     /onboarding
+     *     /auth/confirm
+     *
+     * because those routes belong to the company signup /
+     * normal authentication flow.
+     */
+
+    const appUrl = getAppUrl(
+      request,
+    );
+
+    const inviteRedirectUrl =
+      new URL(
+        "/set-password",
+        `${appUrl}/`,
+      );
+
+    /*
+     * =========================================================
+     * 13. Invite Auth user
      * =========================================================
      */
 
@@ -608,7 +685,15 @@ export async function POST(request: Request) {
       await adminSupabase.auth.admin.inviteUserByEmail(
         email,
         {
+          /*
+           * Employee identity metadata.
+           *
+           * account_type is important because the
+           * /set-password flow uses it to distinguish an
+           * employee invitation from a normal company signup.
+           */
           data: {
+            account_type: "employee",
             first_name: firstName,
             last_name: lastName,
             display_name:
@@ -617,7 +702,19 @@ export async function POST(request: Request) {
             employee_role_id: roleId,
             employee_role_name: role.name,
           },
-        }
+
+          /*
+           * IMPORTANT:
+           *
+           * Explicitly control the post-invitation redirect.
+           *
+           * This prevents Supabase from falling back to the
+           * project Site URL and sending the employee into
+           * company onboarding.
+           */
+          redirectTo:
+            inviteRedirectUrl.toString(),
+        },
       );
 
     if (
@@ -626,13 +723,13 @@ export async function POST(request: Request) {
     ) {
       console.error(
         "Supabase employee invitation failed:",
-        inviteError
+        inviteError,
       );
 
       return jsonError(
         inviteError?.message ||
           "Unable to send the employee invitation.",
-        500
+        500,
       );
     }
 
@@ -641,7 +738,7 @@ export async function POST(request: Request) {
 
     /*
      * =========================================================
-     * 13. Create company membership
+     * 14. Create company membership
      * =========================================================
      *
      * company_members.role is intentionally separate from
@@ -667,11 +764,11 @@ export async function POST(request: Request) {
     if (companyMemberError) {
       console.error(
         "Employee company membership creation failed:",
-        companyMemberError
+        companyMemberError,
       );
 
       throw new Error(
-        "The employee invitation was created, but the company membership could not be created."
+        "The employee invitation was created, but the company membership could not be created.",
       );
     }
 
@@ -679,7 +776,7 @@ export async function POST(request: Request) {
 
     /*
      * =========================================================
-     * 14. Create employee record
+     * 15. Create employee record
      * =========================================================
      */
 
@@ -738,7 +835,7 @@ export async function POST(request: Request) {
           notes,
           created_at,
           updated_at
-        `
+        `,
       )
       .single();
 
@@ -748,11 +845,11 @@ export async function POST(request: Request) {
     ) {
       console.error(
         "Employee record creation failed:",
-        createEmployeeError
+        createEmployeeError,
       );
 
       throw new Error(
-        "The employee login was created, but the employee record could not be created."
+        "The employee login was created, but the employee record could not be created.",
       );
     }
 
@@ -761,7 +858,7 @@ export async function POST(request: Request) {
 
     /*
      * =========================================================
-     * 15. Create notification
+     * 16. Create notification
      * =========================================================
      *
      * Best effort only.
@@ -791,25 +888,25 @@ export async function POST(request: Request) {
             employee_role_id:
               roleId,
           },
-        }
+        },
       );
 
       if (notificationError) {
         console.error(
           "Employee notification failed:",
-          notificationError
+          notificationError,
         );
       }
     } catch (notificationError) {
       console.error(
         "Employee notification exception:",
-        notificationError
+        notificationError,
       );
     }
 
     /*
      * =========================================================
-     * 16. Success
+     * 17. Success
      * =========================================================
      */
 
@@ -826,7 +923,7 @@ export async function POST(request: Request) {
       },
       {
         status: 201,
-      }
+      },
     );
   } catch (error) {
     /*
@@ -857,13 +954,13 @@ export async function POST(request: Request) {
             .delete()
             .eq(
               "id",
-              createdEmployeeId
+              createdEmployeeId,
             );
 
           if (employeeCleanupError) {
             console.error(
               "Employee cleanup failed:",
-              employeeCleanupError
+              employeeCleanupError,
             );
           }
         }
@@ -882,17 +979,17 @@ export async function POST(request: Request) {
             .delete()
             .eq(
               "company_id",
-              companyId
+              companyId,
             )
             .eq(
               "user_id",
-              invitedAuthUserId
+              invitedAuthUserId,
             );
 
           if (membershipCleanupError) {
             console.error(
               "Company membership cleanup failed:",
-              membershipCleanupError
+              membershipCleanupError,
             );
           }
         }
@@ -904,33 +1001,33 @@ export async function POST(request: Request) {
           error: authCleanupError,
         } =
           await adminSupabase.auth.admin.deleteUser(
-            invitedAuthUserId
+            invitedAuthUserId,
           );
 
         if (authCleanupError) {
           console.error(
             "Auth user cleanup failed:",
-            authCleanupError
+            authCleanupError,
           );
         }
       }
     } catch (cleanupError) {
       console.error(
         "Employee invite cleanup encountered an error:",
-        cleanupError
+        cleanupError,
       );
     }
 
     console.error(
       "Employee invitation request failed:",
-      error
+      error,
     );
 
     return jsonError(
       error instanceof Error
         ? error.message
         : "Unable to create the employee.",
-      500
+      500,
     );
   }
 }
