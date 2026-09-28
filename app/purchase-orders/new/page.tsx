@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { useRegionalSettings } from "@/app/components/regional-settings-provider";
+import { formatMoney } from "@/lib/regional-settings";
 
 type Supplier = {
   id: string;
@@ -1441,7 +1442,7 @@ export default function NewPurchaseOrderPage() {
                       )
                     }
                     maxLength={3}
-                    placeholder="USD"
+                    placeholder="AED"
                   />
                 </div>
 
