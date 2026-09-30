@@ -1115,6 +1115,256 @@ export default function ExpenseClosingsPage() {
   }
 
   /* =========================
+     ELEGANT CLOSING CARDS
+     ========================= */
+
+  .sbs-closing-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: #f8faf9;
+  }
+
+  .sbs-closing-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(190px, 1.35fr) minmax(150px, 1fr) minmax(170px, 1fr) minmax(150px, 0.9fr) auto;
+    align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 13px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  }
+
+  .sbs-closing-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 7px 22px rgba(15, 23, 42, 0.07);
+    transform: translateY(-1px);
+  }
+
+  .sbs-closing-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #10b981;
+  }
+
+  .sbs-closing-card.failed::before { background: #ef4444; }
+  .sbs-closing-card.processing::before { background: #f59e0b; }
+  .sbs-closing-card.pending::before { background: #94a3b8; }
+
+  .sbs-closing-main,
+  .sbs-closing-metric,
+  .sbs-closing-status,
+  .sbs-closing-actions {
+    min-width: 0;
+    padding: 15px 16px;
+  }
+
+  .sbs-closing-main {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .sbs-closing-icon {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #d1fae5;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #ecfdf5, #f0fdf4);
+    color: #047857;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+
+  .sbs-closing-title {
+    color: #0f172a;
+    font-size: 13px;
+    line-height: 1.35;
+    font-weight: 800;
+  }
+
+  .sbs-closing-period {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sbs-closing-id {
+    margin-top: 3px;
+    color: #a1a1aa;
+    font-size: 9px;
+    line-height: 1.3;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .sbs-closing-metric {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-left: 1px solid #f0f1f3;
+  }
+
+  .sbs-closing-metric-label {
+    color: #94a3b8;
+    font-size: 9px;
+    line-height: 1.4;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .sbs-closing-amount {
+    margin-top: 4px;
+    color: #0f172a;
+    font-size: 17px;
+    line-height: 1.2;
+    font-weight: 850;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  .sbs-closing-subvalue {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+
+  .sbs-closing-status {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    border-left: 1px solid #f0f1f3;
+  }
+
+  .sbs-closing-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .sbs-closing-status-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 0 3px #ecfdf5;
+  }
+
+  .sbs-closing-status-dot.failed { background: #ef4444; box-shadow: 0 0 0 3px #fef2f2; }
+  .sbs-closing-status-dot.processing { background: #f59e0b; box-shadow: 0 0 0 3px #fffbeb; }
+  .sbs-closing-status-dot.pending { background: #94a3b8; box-shadow: 0 0 0 3px #f1f5f9; }
+
+  .sbs-closing-status-name {
+    color: #334155;
+    font-size: 11px;
+    line-height: 1.3;
+    font-weight: 800;
+  }
+
+  .sbs-closing-notifications {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .sbs-channel-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 3px 7px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .sbs-channel-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+
+  .sbs-channel-pill.sent {
+    color: #047857;
+    border-color: #d1fae5;
+    background: #ecfdf5;
+  }
+
+  .sbs-channel-pill.sent::before { background: #10b981; }
+  .sbs-channel-pill.sending { color: #b45309; border-color: #fef3c7; background: #fffbeb; }
+  .sbs-channel-pill.sending::before { background: #f59e0b; }
+  .sbs-channel-pill.failed { color: #b91c1c; border-color: #fee2e2; background: #fef2f2; }
+  .sbs-channel-pill.failed::before { background: #ef4444; }
+
+  .sbs-closing-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    border-left: 1px solid #f0f1f3;
+  }
+
+  .sbs-closing-action {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid #dbe3ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #475569;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sbs-closing-action:hover {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #047857;
+  }
+
+  .sbs-closing-action.primary {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #fff;
+  }
+
+  .sbs-closing-action.primary:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+  }
+
+  /* =========================
      TABLE
      ========================= */
 
@@ -1145,6 +1395,13 @@ export default function ExpenseClosingsPage() {
     line-height: 1.4;
     font-weight: 800;
     overflow-wrap: anywhere;
+  }
+
+  .sbs-table-subtitle {
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 10px;
+    line-height: 1.45;
   }
 
   .sbs-table-count {
@@ -1674,6 +1931,24 @@ export default function ExpenseClosingsPage() {
     }
   }
 
+  @media (max-width: 1180px) {
+    .sbs-closing-card {
+      grid-template-columns: minmax(190px, 1.4fr) minmax(150px, 1fr) minmax(160px, 1fr);
+    }
+
+    .sbs-closing-status:nth-child(4),
+    .sbs-closing-actions {
+      border-left: 1px solid #f0f1f3;
+    }
+
+    .sbs-closing-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+      border-top: 1px solid #f0f1f3;
+      border-left: 0;
+    }
+  }
+
   @media (max-width: 900px) {
     .sbs-stats-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1694,6 +1969,37 @@ export default function ExpenseClosingsPage() {
      ========================= */
 
   @media (max-width: 640px) {
+    .sbs-closing-list {
+      padding: 10px;
+    }
+
+    .sbs-closing-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sbs-closing-main,
+    .sbs-closing-metric,
+    .sbs-closing-status,
+    .sbs-closing-actions {
+      width: 100%;
+      border-left: 0 !important;
+      border-top: 1px solid #f0f1f3;
+    }
+
+    .sbs-closing-main {
+      border-top: 0;
+    }
+
+    .sbs-closing-actions {
+      justify-content: stretch;
+    }
+
+    .sbs-closing-action {
+      flex: 1 1 0;
+    }
+
+
     .sbs-page {
       padding: 16px;
     }
@@ -2045,240 +2351,103 @@ export default function ExpenseClosingsPage() {
 
         <div className="sbs-table-card">
           <div className="sbs-table-header">
-            <h2 className="sbs-table-title">
-              Closing History
-            </h2>
+            <div>
+              <h2 className="sbs-table-title">Closing History</h2>
+              <div className="sbs-table-subtitle">A clear view of every completed and scheduled expense period.</div>
+            </div>
 
             <span className="sbs-table-count">
-              {filteredClosings.length}{" "}
-              {filteredClosings.length === 1
-                ? "closing"
-                : "closings"}
+              {filteredClosings.length} {filteredClosings.length === 1 ? "closing" : "closings"}
             </span>
           </div>
 
           {loading ? (
-            <div className="sbs-loading">
-              Loading expense closings...
-            </div>
+            <div className="sbs-loading">Loading expense closings...</div>
           ) : filteredClosings.length === 0 ? (
             <div className="sbs-empty">
-              <div className="sbs-empty-icon">
-                C
-              </div>
-
-              <h3 className="sbs-empty-title">
-                No closings found
-              </h3>
-
+              <div className="sbs-empty-icon">C</div>
+              <h3 className="sbs-empty-title">No closings found</h3>
               <p className="sbs-empty-text">
-                No expense closing periods match your
-                current filters. Create a closing manually
-                or wait for your configured automated
-                closing schedule.
+                No expense closing periods match your current filters. Create a closing manually or wait for your configured automated closing schedule.
               </p>
             </div>
           ) : (
-            <div className="sbs-table-wrap">
-              <table className="sbs-table">
-                <thead>
-                  <tr>
-                    <th>Closing</th>
-                    <th>Period</th>
-                    <th>Total Expenses</th>
-                    <th>Transactions</th>
-                    <th>Status</th>
-                    <th>Notifications</th>
-                    <th>Closed At</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+            <div className="sbs-closing-list">
+              {filteredClosings.map((closing) => {
+                const closingJobs = jobs.filter((job) => job.closing_id === closing.id);
+                const closingJobIds = new Set(closingJobs.map((job) => job.id));
+                const closingDeliveries = deliveries.filter((delivery) => closingJobIds.has(delivery.job_id));
+                const emailDelivery = closingDeliveries.find((delivery) => delivery.channel === "email");
+                const whatsappDelivery = closingDeliveries.find((delivery) => delivery.channel === "whatsapp");
 
-                <tbody>
-                  {filteredClosings.map((closing) => {
-                    const closingJobs = jobs.filter(
-                      (job) =>
-                        job.closing_id === closing.id,
-                    );
+                return (
+                  <div key={closing.id} className={`sbs-closing-card ${closing.status}`}>
+                    <div className="sbs-closing-main">
+                      <div className="sbs-closing-icon">
+                        {getClosingTypeIcon(closing.closing_type)}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="sbs-closing-title">
+                          {closingTypeLabels[closing.closing_type]} Closing
+                        </div>
+                        <div className="sbs-closing-period">
+                          {formatPeriod(closing)}
+                        </div>
+                        <div className="sbs-closing-id">
+                          #{closing.id.slice(0, 8)}
+                        </div>
+                      </div>
+                    </div>
 
-                    const closingJobIds = new Set(
-                      closingJobs.map((job) => job.id),
-                    );
+                    <div className="sbs-closing-metric">
+                      <div className="sbs-closing-metric-label">Total Expenses</div>
+                      <div className="sbs-closing-amount">
+                        {formatMoney(closing.total_expenses, closing.currency ?? "AED")}
+                      </div>
+                      <div className="sbs-closing-subvalue">
+                        {Number(closing.transaction_count ?? 0).toLocaleString()} transactions · {closing.currency ?? "AED"}
+                      </div>
+                    </div>
 
-                    const closingDeliveries =
-                      deliveries.filter((delivery) =>
-                        closingJobIds.has(
-                          delivery.job_id,
-                        ),
-                      );
+                    <div className="sbs-closing-status">
+                      <div className="sbs-closing-status-line">
+                        <span className={`sbs-closing-status-dot ${closing.status}`} />
+                        <span className="sbs-closing-status-name">
+                          {closingStatusLabels[closing.status]}
+                        </span>
+                      </div>
+                      <div className="sbs-closing-notifications">
+                        <span className={`sbs-channel-pill ${emailDelivery?.status ?? ""}`}>Email</span>
+                        <span className={`sbs-channel-pill ${whatsappDelivery?.status ?? ""}`}>WhatsApp</span>
+                      </div>
+                    </div>
 
-                    const emailDelivery =
-                      closingDeliveries.find(
-                        (delivery) =>
-                          delivery.channel === "email",
-                      );
+                    <div className="sbs-closing-status">
+                      <div className="sbs-closing-metric-label">Closed At</div>
+                      <div className="sbs-closing-subvalue" style={{ marginTop: 5, color: "#334155", fontWeight: 700 }}>
+                        {formatDateTime(closing.closed_at)}
+                      </div>
+                    </div>
 
-                    const whatsappDelivery =
-                      closingDeliveries.find(
-                        (delivery) =>
-                          delivery.channel ===
-                          "whatsapp",
-                      );
-
-                    return (
-                      <tr key={closing.id}>
-                        <td>
-                          <div className="sbs-type-cell">
-                            <div className="sbs-type-icon">
-                              {getClosingTypeIcon(
-                                closing.closing_type,
-                              )}
-                            </div>
-
-                            <div>
-                              <div className="sbs-primary-text">
-                                {
-                                  closingTypeLabels[
-                                    closing
-                                      .closing_type
-                                  ]
-                                }{" "}
-                                Closing
-                              </div>
-
-                              <div className="sbs-secondary-text">
-                                ID:{" "}
-                                {closing.id.slice(
-                                  0,
-                                  8,
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="sbs-primary-text">
-                            {formatPeriod(closing)}
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="sbs-primary-text">
-                            {formatMoney(
-                              closing.total_expenses,
-                              closing.currency ??
-                                "AED",
-                            )}
-                          </div>
-
-                          <div className="sbs-secondary-text">
-                            {closing.currency ?? "AED"}
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="sbs-primary-text">
-                            {Number(
-                              closing.transaction_count ??
-                                0,
-                            ).toLocaleString()}
-                          </div>
-                        </td>
-
-                        <td>
-                          <span
-                            className={getStatusClass(
-                              closing.status,
-                            )}
-                          >
-                            {
-                              closingStatusLabels[
-                                closing.status
-                              ]
-                            }
-                          </span>
-                        </td>
-
-                        <td>
-                          <div className="sbs-delivery-list">
-                            {emailDelivery ? (
-                              <span
-                                className={getDeliveryClass(
-                                  emailDelivery.status,
-                                )}
-                              >
-                                Email
-                              </span>
-                            ) : (
-                              <span className="sbs-delivery-dot neutral">
-                                Email
-                              </span>
-                            )}
-
-                            {whatsappDelivery ? (
-                              <span
-                                className={getDeliveryClass(
-                                  whatsappDelivery.status,
-                                )}
-                              >
-                                WhatsApp
-                              </span>
-                            ) : (
-                              <span className="sbs-delivery-dot neutral">
-                                WhatsApp
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="sbs-primary-text">
-                            {formatDateTime(
-                              closing.closed_at,
-                            )}
-                          </div>
-                        </td>
-
-                        <td>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 7,
-                              alignItems:
-                                "center",
-                            }}
-                          >
-                            <button
-                              type="button"
-                              className="sbs-button sbs-button-small"
-                              onClick={() =>
-                                setSelectedClosing(
-                                  closing,
-                                )
-                              }
-                            >
-                              View
-                            </button>
-
-                            <button
-                              type="button"
-                              className="sbs-button sbs-button-small"
-                              onClick={() =>
-                                downloadClosingCsv(
-                                  closing,
-                                )
-                              }
-                            >
-                              CSV
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    <div className="sbs-closing-actions">
+                      <button
+                        type="button"
+                        className="sbs-closing-action primary"
+                        onClick={() => setSelectedClosing(closing)}
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        className="sbs-closing-action"
+                        onClick={() => downloadClosingCsv(closing)}
+                      >
+                        CSV
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

@@ -2140,6 +2140,17 @@ export default function DashboardPage() {
       ],
     );
 
+ /*
+ * ============================================================================
+ * RESTYLE ONLY — classNames changed, no logic/markup/data changes.
+ *
+ * HOW TO APPLY:
+ * In your original file, keep EVERYTHING above `if (loading) {` exactly as is.
+ * Delete from `if (loading) {` to the end of the file and paste this whole file
+ * in its place. Background stays bg-[#f5f7fa].
+ * ============================================================================
+ */
+
   if (loading) {
     return (
       <AppShell>
@@ -2151,126 +2162,93 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="min-h-full bg-[#f5f7fa]">
-        <div className="mx-auto max-w-[1800px] space-y-6 p-4 sm:p-6 lg:p-8">
-          {/* -------------------------------------------------------- */}
-          {/* HEADER                                                   */}
-          {/* -------------------------------------------------------- */}
-
-          <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mx-auto max-w-[1800px] space-y-8 p-4 sm:p-6 lg:p-10">
+          {/* HEADER */}
+          <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 ring-1 ring-inset ring-emerald-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                </span>
                 Business overview
               </div>
 
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.6rem] sm:leading-[1.1]">
                 Good morning,{" "}
-                {greeting}.
+                <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
+                  {greeting}.
+                </span>
               </h1>
 
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Here is what is happening
-                across{" "}
-                <span className="font-semibold text-slate-700">
-                  {company?.name ||
-                    "your business"}
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                Here is what is happening across{" "}
+                <span className="font-medium text-slate-800">
+                  {company?.name || "your business"}
                 </span>{" "}
                 right now.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Period selector */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() =>
-                    setPeriodOpen(
-                      (value) =>
-                        !value,
-                    )
-                  }
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                  onClick={() => setPeriodOpen((value) => !value)}
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 text-xs font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur transition hover:border-slate-300 hover:bg-white"
                 >
                   <Clock3 className="h-4 w-4 text-slate-400" />
 
-                  {
-                    PERIODS.find(
-                      (item) =>
-                        item.key ===
-                        period,
-                    )?.label
-                  }
+                  {PERIODS.find((item) => item.key === period)?.label}
 
                   <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                 </button>
 
                 {periodOpen ? (
-                  <div className="absolute right-0 z-50 mt-2 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                    {PERIODS.map(
-                      (item) => (
-                        <button
-                          key={
-                            item.key
-                          }
-                          type="button"
-                          onClick={() => {
-                            setPeriod(
-                              item.key,
-                            );
-                            setPeriodOpen(
-                              false,
-                            );
-                          }}
-                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition ${
-                            period ===
-                            item.key
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          {
-                            item.label
-                          }
+                  <div className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-slate-200/70 bg-white/95 p-1.5 shadow-[0_20px_40px_-12px_rgba(15,23,42,0.18)] backdrop-blur">
+                    {PERIODS.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          setPeriod(item.key);
+                          setPeriodOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition ${
+                          period === item.key
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {item.label}
 
-                          {period ===
-                          item.key ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : null}
-                        </button>
-                      ),
-                    )}
+                        {period === item.key ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : null}
+                      </button>
+                    ))}
                   </div>
                 ) : null}
               </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  void loadDashboard(
-                    true,
-                  )
-                }
+                onClick={() => void loadDashboard(true)}
                 disabled={refreshing}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 text-xs font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur transition hover:border-slate-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${
-                    refreshing
-                      ? "animate-spin"
-                      : ""
-                  }`}
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
                 />
 
                 Refresh
               </button>
 
-              {enabledModules.has(
-                "invoices",
-              ) ? (
+              {enabledModules.has("invoices") ? (
                 <a
                   href="/invoices/new"
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800"
+                  className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 px-5 text-xs font-semibold text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] ring-1 ring-slate-900 transition hover:from-slate-700 hover:to-slate-900"
                 >
                   <Plus className="h-4 w-4" />
                   New Invoice
@@ -2280,7 +2258,7 @@ export default function DashboardPage() {
           </header>
 
           {errorMessage ? (
-            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200/70 bg-red-50/80 p-4 text-sm text-red-700">
               <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
               <div>
@@ -2295,85 +2273,57 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          {/* -------------------------------------------------------- */}
-          {/* TOP FINANCIAL CARDS                                      */}
-          {/* -------------------------------------------------------- */}
-
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {/* TOP FINANCIAL CARDS */}
+          <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardMetric
               label="Revenue"
-              value={money(
-                revenue,
-                regionalSettings,
-              )}
+              value={money(revenue, regionalSettings)}
               detail={`${periodOrders.length} sales orders`}
               icon={
-  <span className="text-lg font-medium">
-    {regionalSettings.currency_symbol}
-  </span>
-}
+                <span className="text-lg font-medium">
+                  {regionalSettings.currency_symbol}
+                </span>
+              }
               accent="green"
             />
 
             <DashboardMetric
               label="Collected"
-              value={money(
-                collected,
-                regionalSettings,
-              )}
+              value={money(collected, regionalSettings)}
               detail={`${periodPayments.length} payments`}
-              icon={
-                <CreditCard className="h-5 w-5" />
-              }
+              icon={<CreditCard className="h-5 w-5" />}
               accent="blue"
             />
 
             <DashboardMetric
               label="Outstanding"
-              value={money(
-                outstanding,
-                regionalSettings,
-              )}
+              value={money(outstanding, regionalSettings)}
               detail={`${periodInvoices.length} invoices`}
-              icon={
-                <Clock3 className="h-5 w-5" />
-              }
+              icon={<Clock3 className="h-5 w-5" />}
               accent="amber"
             />
 
             <DashboardMetric
               label="Expenses"
-              value={money(
-                expensesTotal,
-                regionalSettings,
-              )}
-              detail={`Net ${money(
-                revenue -
-                  expensesTotal,
-                regionalSettings,
-              )}`}
-              icon={
-                <ArrowDownRight className="h-5 w-5" />
-              }
+              value={money(expensesTotal, regionalSettings)}
+              detail={`Net ${money(revenue - expensesTotal, regionalSettings)}`}
+              icon={<ArrowDownRight className="h-5 w-5" />}
               accent="slate"
             />
           </section>
 
-          {/* -------------------------------------------------------- */}
-          {/* CHART + INVOICE HEALTH                                  */}
-          {/* -------------------------------------------------------- */}
-
+          {/* CHART + INVOICE HEALTH */}
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.8fr)]">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)] sm:p-7">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/60 text-emerald-600 ring-1 ring-inset ring-emerald-200/60">
                       <BarChart3 className="h-4.5 w-4.5" />
                     </div>
 
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900">
+                      <h2 className="text-sm font-semibold tracking-tight text-slate-900">
                         Revenue performance
                       </h2>
 
@@ -2384,7 +2334,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-[11px] font-medium text-slate-500">
+                <div className="flex items-center gap-4 rounded-full bg-slate-50 px-3.5 py-1.5 text-[11px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200/60">
                   <div className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     Revenue
@@ -2397,100 +2347,56 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="mt-7 h-[280px]">
-                <RevenueChart
-                  points={chartPoints}
-                  max={maxChart}
-                />
+              <div className="mt-8 h-[280px]">
+                <RevenueChart points={chartPoints} max={maxChart} />
               </div>
             </div>
 
             <InvoiceHealth
-              invoices={
-                periodInvoices
-              }
+              invoices={periodInvoices}
               paid={
                 periodInvoices.filter(
-                  (invoice) =>
-                    normalize(
-                      invoice.status,
-                    ) ===
-                    "paid",
+                  (invoice) => normalize(invoice.status) === "paid",
                 ).length
               }
-              overdueAmount={
-                overdue
-              }
+              overdueAmount={overdue}
             />
           </section>
 
-          {/* -------------------------------------------------------- */}
-          {/* PERFORMANCE STRIP                                       */}
-          {/* -------------------------------------------------------- */}
-
-          <section className="grid gap-4 md:grid-cols-3">
+          {/* PERFORMANCE STRIP */}
+          <section className="grid gap-5 md:grid-cols-3">
             <PerformanceCard
               title="Sales"
-              value={money(
-                revenue,
-                regionalSettings,
-              )}
+              value={money(revenue, regionalSettings)}
               subtitle={`${periodOrders.length} orders`}
-              icon={
-                <ShoppingCart className="h-5 w-5" />
-              }
+              icon={<ShoppingCart className="h-5 w-5" />}
               href={
-                enabledModules.has(
-                  "sales-orders",
-                )
-                  ? "/sales-orders"
-                  : undefined
+                enabledModules.has("sales-orders") ? "/sales-orders" : undefined
               }
             />
 
             <PerformanceCard
               title="Pipeline"
-              value={money(
-                estimatePipeline,
-                regionalSettings,
-              )}
+              value={money(estimatePipeline, regionalSettings)}
               subtitle={`${activeLeads} open leads`}
-              icon={
-                <Target className="h-5 w-5" />
-              }
-              href={
-                enabledModules.has(
-                  "leads",
-                )
-                  ? "/leads"
-                  : undefined
-              }
+              icon={<Target className="h-5 w-5" />}
+              href={enabledModules.has("leads") ? "/leads" : undefined}
             />
 
             <PerformanceCard
               title="Net operating"
-              value={money(
-                revenue -
-                  expensesTotal,
-                regionalSettings,
-              )}
+              value={money(revenue - expensesTotal, regionalSettings)}
               subtitle="Revenue less recorded expenses"
-              icon={
-                <Activity className="h-5 w-5" />
-              }
+              icon={<Activity className="h-5 w-5" />}
             />
           </section>
 
-          {/* -------------------------------------------------------- */}
-          {/* MODULES                                                  */}
-          {/* -------------------------------------------------------- */}
-
-          {moduleMetrics.length >
-          0 ? (
+          {/* MODULES */}
+          {moduleMetrics.length > 0 ? (
             <section>
-              <div className="mb-4 flex items-end justify-between gap-4">
+              <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">
+                  <h2 className="text-base font-semibold tracking-tight text-slate-900">
                     Your business
                   </h2>
 
@@ -2499,37 +2405,25 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 ring-1 ring-inset ring-slate-200/70">
                   {moduleMetrics.length} active modules
                 </span>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {moduleMetrics.map(
-                  (metric) => (
-                    <ModuleCard
-                      key={
-                        metric.slug
-                      }
-                      metric={
-                        metric
-                      }
-                    />
-                  ),
-                )}
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {moduleMetrics.map((metric) => (
+                  <ModuleCard key={metric.slug} metric={metric} />
+                ))}
               </div>
             </section>
           ) : null}
 
-          {/* -------------------------------------------------------- */}
-          {/* ACTIVITY + ALERTS                                       */}
-          {/* -------------------------------------------------------- */}
-
+          {/* ACTIVITY + ALERTS */}
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5 sm:px-6">
+            <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 sm:px-7">
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">
+                  <h2 className="text-sm font-semibold tracking-tight text-slate-900">
                     Recent activity
                   </h2>
 
@@ -2541,65 +2435,40 @@ export default function DashboardPage() {
                 <Activity className="h-4 w-4 text-slate-300" />
               </div>
 
-              {recentActivity.length >
-              0 ? (
-                <div className="divide-y divide-slate-100">
-                  {recentActivity.map(
-                    (
-                      activity,
-                    ) => (
-                      <div
-                        key={
-                          activity.id
-                        }
-                        className="group flex items-center gap-4 px-5 py-4 transition hover:bg-slate-50 sm:px-6"
-                      >
-                        <ActivityIcon
-                          type={
-                            activity.type
-                          }
-                        />
+              {recentActivity.length > 0 ? (
+                <div className="divide-y divide-slate-100/80">
+                  {recentActivity.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className="group flex items-center gap-4 px-6 py-4 transition hover:bg-slate-50/70 sm:px-7"
+                    >
+                      <ActivityIcon type={activity.type} />
 
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-slate-800">
-                            {
-                              activity.title
-                            }
-                          </div>
-
-                          <div className="mt-1 text-xs text-slate-400">
-                            {
-                              activity.detail
-                            }{" "}
-                            ·{" "}
-                            {formatDate(
-                              activity.date,
-                            )}
-                          </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-slate-800">
+                          {activity.title}
                         </div>
 
-                        {activity.amount !=
-                        null ? (
-                          <div className="text-sm font-bold text-slate-800">
-                            {money(
-                              activity.amount,
-                              regionalSettings,
-                            )}
-                          </div>
-                        ) : null}
-
-                        <span className="text-slate-300 transition group-hover:text-emerald-500">
-                          →
-                        </span>
+                        <div className="mt-1 text-xs text-slate-400">
+                          {activity.detail} · {formatDate(activity.date)}
+                        </div>
                       </div>
-                    ),
-                  )}
+
+                      {activity.amount != null ? (
+                        <div className="text-sm font-semibold tabular-nums text-slate-800">
+                          {money(activity.amount, regionalSettings)}
+                        </div>
+                      ) : null}
+
+                      <span className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500">
+                        →
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <EmptyPanel
-                  icon={
-                    <Activity className="h-6 w-6" />
-                  }
+                  icon={<Activity className="h-6 w-6" />}
                   title="No activity yet"
                   description="New sales, invoices and customers will appear here."
                 />
@@ -2609,58 +2478,30 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <AlertsCard
                 lowStockCount={
-                  enabledModules.has(
-                    "inventory",
-                  )
-                    ? lowStockCount
-                    : 0
+                  enabledModules.has("inventory") ? lowStockCount : 0
                 }
-                overdueAmount={
-                  enabledModules.has(
-                    "invoices",
-                  )
-                    ? overdue
-                    : 0
-                }
+                overdueAmount={enabledModules.has("invoices") ? overdue : 0}
                 activeRepairs={
-                  enabledModules.has(
-                    "repairs",
-                  )
-                    ? activeRepairs
-                    : 0
+                  enabledModules.has("repairs") ? activeRepairs : 0
                 }
-                openRmas={
-                  enabledModules.has(
-                    "rma",
-                  )
-                    ? openRmas
-                    : 0
-                }
+                openRmas={enabledModules.has("rma") ? openRmas : 0}
               />
 
-              <QuickActions
-                enabledModules={
-                  enabledModules
-                }
-              />
+              <QuickActions enabledModules={enabledModules} />
             </div>
           </section>
 
-          {/* -------------------------------------------------------- */}
-          {/* PLAN / WORKSPACE FOOTER                                 */}
-          {/* -------------------------------------------------------- */}
-
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          {/* PLAN / WORKSPACE FOOTER */}
+          <section className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+            <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
               <div className="flex items-center gap-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-emerald-100/60 text-emerald-600 ring-1 ring-inset ring-emerald-200/60">
                   <Layers3 className="h-5 w-5" />
                 </div>
 
                 <div>
-                  <div className="text-sm font-bold text-slate-900">
-                    {company?.name ||
-                      "Your workspace"}
+                  <div className="text-sm font-semibold tracking-tight text-slate-900">
+                    {company?.name || "Your workspace"}
                   </div>
 
                   <div className="mt-1 text-xs text-slate-400">
@@ -2669,7 +2510,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200/60">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
 
                 {enabledModules.size} modules enabled
@@ -2697,28 +2538,23 @@ function DashboardMetric({
   value: string;
   detail: string;
   icon: React.ReactNode;
-  accent:
-    | "green"
-    | "blue"
-    | "amber"
-    | "slate";
+  accent: "green" | "blue" | "amber" | "slate";
 }) {
   const styles = {
     green:
-      "bg-emerald-50 text-emerald-600",
-    blue:
-      "bg-blue-50 text-blue-600",
+      "bg-gradient-to-br from-emerald-50 to-emerald-100/60 text-emerald-600 ring-emerald-200/60",
+    blue: "bg-gradient-to-br from-blue-50 to-blue-100/60 text-blue-600 ring-blue-200/60",
     amber:
-      "bg-amber-50 text-amber-600",
+      "bg-gradient-to-br from-amber-50 to-amber-100/60 text-amber-600 ring-amber-200/60",
     slate:
-      "bg-slate-100 text-slate-600",
+      "bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 ring-slate-200/70",
   };
 
   return (
-    <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+    <div className="group relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)] transition duration-300 hover:-translate-y-1 hover:border-slate-300/80 hover:shadow-[0_1px_2px_rgba(15,23,42,0.04),0_20px_40px_-16px_rgba(15,23,42,0.18)]">
       <div className="flex items-start justify-between">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${styles[accent]}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-inset ${styles[accent]}`}
         >
           {icon}
         </div>
@@ -2726,18 +2562,14 @@ function DashboardMetric({
         <ArrowUpRight className="h-4 w-4 text-slate-200 transition group-hover:text-emerald-500" />
       </div>
 
-      <div className="mt-5">
-        <div className="text-2xl font-bold tracking-tight text-slate-950">
+      <div className="mt-6">
+        <div className="text-[1.65rem] font-semibold leading-none tracking-tight tabular-nums text-slate-900">
           {value}
         </div>
 
-        <div className="mt-1 text-xs font-semibold text-slate-500">
-          {label}
-        </div>
+        <div className="mt-2.5 text-xs font-medium text-slate-500">{label}</div>
 
-        <div className="mt-2 text-[11px] text-slate-400">
-          {detail}
-        </div>
+        <div className="mt-1 text-[11px] text-slate-400">{detail}</div>
       </div>
     </div>
   );
@@ -2754,75 +2586,38 @@ function RevenueChart({
   points: ChartPoint[];
   max: number;
 }) {
-  const { settings: regionalSettings } =
-    useRegionalSettings();
+  const { settings: regionalSettings } = useRegionalSettings();
   const width = 1000;
   const height = 260;
   const paddingX = 36;
   const paddingY = 20;
 
-  const usableWidth =
-    width - paddingX * 2;
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
 
-  const usableHeight =
-    height - paddingY * 2;
-
-  const getX = (
-    index: number,
-  ) => {
+  const getX = (index: number) => {
     if (points.length <= 1) {
       return width / 2;
     }
 
-    return (
-      paddingX +
-      (index /
-        (points.length - 1)) *
-        usableWidth
-    );
+    return paddingX + (index / (points.length - 1)) * usableWidth;
   };
 
-  const getY = (
-    value: number,
-  ) =>
-    height -
-    paddingY -
-    (value / max) *
-      usableHeight;
+  const getY = (value: number) =>
+    height - paddingY - (value / max) * usableHeight;
 
-  const revenuePoints =
-    points
-      .map(
-        (point, index) =>
-          `${getX(index)},${getY(
-            point.revenue,
-          )}`,
-      )
-      .join(" ");
+  const revenuePoints = points
+    .map((point, index) => `${getX(index)},${getY(point.revenue)}`)
+    .join(" ");
 
-  const collectedPoints =
-    points
-      .map(
-        (point, index) =>
-          `${getX(index)},${getY(
-            point.collected,
-          )}`,
-      )
-      .join(" ");
+  const collectedPoints = points
+    .map((point, index) => `${getX(index)},${getY(point.collected)}`)
+    .join(" ");
 
   const revenueArea = [
-    `${getX(0)},${
-      height - paddingY
-    }`,
-    ...points.map(
-      (point, index) =>
-        `${getX(index)},${getY(
-          point.revenue,
-        )}`,
-    ),
-    `${getX(
-      points.length - 1,
-    )},${height - paddingY}`,
+    `${getX(0)},${height - paddingY}`,
+    ...points.map((point, index) => `${getX(index)},${getY(point.revenue)}`),
+    `${getX(points.length - 1)},${height - paddingY}`,
   ].join(" ");
 
   return (
@@ -2832,35 +2627,25 @@ function RevenueChart({
         className="h-full w-full overflow-visible"
         preserveAspectRatio="none"
       >
-        {[0, 1, 2, 3, 4].map(
-          (line) => {
-            const y =
-              paddingY +
-              (line / 4) *
-                usableHeight;
+        {[0, 1, 2, 3, 4].map((line) => {
+          const y = paddingY + (line / 4) * usableHeight;
 
-            return (
-              <line
-                key={line}
-                x1={paddingX}
-                x2={
-                  width -
-                  paddingX
-                }
-                y1={y}
-                y2={y}
-                stroke="currentColor"
-                className="text-slate-100"
-                strokeWidth="1"
-              />
-            );
-          },
-        )}
+          return (
+            <line
+              key={line}
+              x1={paddingX}
+              x2={width - paddingX}
+              y1={y}
+              y2={y}
+              stroke="currentColor"
+              className="text-slate-100"
+              strokeWidth="1"
+              strokeDasharray="3 6"
+            />
+          );
+        })}
 
-        <polygon
-          points={revenueArea}
-          className="fill-emerald-500/[0.06]"
-        />
+        <polygon points={revenueArea} className="fill-emerald-500/[0.08]" />
 
         <polyline
           points={revenuePoints}
@@ -2883,50 +2668,34 @@ function RevenueChart({
           className="text-blue-500"
         />
 
-        {points.map(
-          (point, index) => (
-            <g key={index}>
-              <circle
-                cx={getX(index)}
-                cy={getY(
-                  point.revenue,
-                )}
-                r="4"
-                className="fill-white stroke-emerald-500"
-                strokeWidth="2"
-              />
+        {points.map((point, index) => (
+          <g key={index}>
+            <circle
+              cx={getX(index)}
+              cy={getY(point.revenue)}
+              r="4.5"
+              className="fill-white stroke-emerald-500"
+              strokeWidth="2.5"
+            />
 
-              <title>
-                {point.label}:{" "}
-                {money(
-                  point.revenue,
-                  regionalSettings,
-                )}
-              </title>
-            </g>
-          ),
-        )}
+            <title>
+              {point.label}: {money(point.revenue, regionalSettings)}
+            </title>
+          </g>
+        ))}
       </svg>
 
-      <div className="absolute inset-x-0 bottom-0 flex justify-between px-1 text-[10px] font-medium text-slate-400">
-        {points.map(
-          (point, index) => (
-            <span
-              key={`${point.label}-${index}`}
-              className={
-                points.length >
-                  8 &&
-                index %
-                  2 !==
-                  0
-                  ? "hidden sm:inline"
-                  : ""
-              }
-            >
-              {point.label}
-            </span>
-          ),
-        )}
+      <div className="absolute inset-x-0 bottom-0 flex justify-between px-1 text-[10px] font-medium tracking-wide text-slate-400">
+        {points.map((point, index) => (
+          <span
+            key={`${point.label}-${index}`}
+            className={
+              points.length > 8 && index % 2 !== 0 ? "hidden sm:inline" : ""
+            }
+          >
+            {point.label}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -2945,107 +2714,44 @@ function InvoiceHealth({
   paid: number;
   overdueAmount: number;
 }) {
-  const { settings: regionalSettings } =
-    useRegionalSettings();
-  const total =
-    invoices.length;
+  const { settings: regionalSettings } = useRegionalSettings();
+  const total = invoices.length;
 
-  const partial =
-    invoices.filter(
-      (invoice) => {
-        const totalValue =
-          Number(
-            invoice.total ??
-              0,
-          );
+  const partial = invoices.filter((invoice) => {
+    const totalValue = Number(invoice.total ?? 0);
+    const paidValue = Number(invoice.amount_paid ?? 0);
 
-        const paidValue =
-          Number(
-            invoice.amount_paid ??
-              0,
-          );
+    return paidValue > 0 && paidValue < totalValue;
+  }).length;
 
-        return (
-          paidValue > 0 &&
-          paidValue <
-            totalValue
-        );
-      },
-    ).length;
+  const outstanding = invoices.filter((invoice) => {
+    const totalValue = Number(invoice.total ?? 0);
+    const paidValue = Number(invoice.amount_paid ?? 0);
 
-  const outstanding =
-    invoices.filter(
-      (invoice) => {
-        const totalValue =
-          Number(
-            invoice.total ??
-              0,
-          );
+    return paidValue === 0 && totalValue > 0;
+  }).length;
 
-        const paidValue =
-          Number(
-            invoice.amount_paid ??
-              0,
-          );
-
-        return (
-          paidValue === 0 &&
-          totalValue > 0
-        );
-      },
-    ).length;
-
-  const paidPct =
-    total
-      ? (paid / total) *
-        100
-      : 0;
-
-  const partialPct =
-    total
-      ? (partial / total) *
-        100
-      : 0;
-
-  const outstandingPct =
-    total
-      ? (outstanding /
-          total) *
-        100
-      : 0;
+  const paidPct = total ? (paid / total) * 100 : 0;
+  const partialPct = total ? (partial / total) * 100 : 0;
+  const outstandingPct = total ? (outstanding / total) * 100 : 0;
 
   const radius = 48;
-  const circumference =
-    2 * Math.PI * radius;
+  const circumference = 2 * Math.PI * radius;
 
   const segments = [
+    { value: paidPct, className: "text-emerald-500", offset: 0 },
+    { value: partialPct, className: "text-blue-500", offset: paidPct },
     {
-      value: paidPct,
-      className:
-        "text-emerald-500",
-      offset: 0,
-    },
-    {
-      value: partialPct,
-      className:
-        "text-blue-500",
-      offset: paidPct,
-    },
-    {
-      value:
-        outstandingPct,
-      className:
-        "text-slate-300",
-      offset:
-        paidPct +
-        partialPct,
+      value: outstandingPct,
+      className: "text-slate-300",
+      offset: paidPct + partialPct,
     },
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)] sm:p-7">
       <div>
-        <h2 className="text-sm font-bold text-slate-900">
+        <h2 className="text-sm font-semibold tracking-tight text-slate-900">
           Invoice health
         </h2>
 
@@ -3054,12 +2760,9 @@ function InvoiceHealth({
         </p>
       </div>
 
-      <div className="mt-6 flex items-center gap-6">
+      <div className="mt-7 flex items-center gap-6">
         <div className="relative h-36 w-36 shrink-0">
-          <svg
-            viewBox="0 0 120 120"
-            className="h-full w-full -rotate-90"
-          >
+          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
             <circle
               cx="60"
               cy="60"
@@ -3070,65 +2773,39 @@ function InvoiceHealth({
               className="text-slate-100"
             />
 
-            {segments.map(
-              (
-                segment,
-                index,
-              ) => (
-                <circle
-                  key={index}
-                  cx="60"
-                  cy="60"
-                  r={radius}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  strokeDasharray={`${(
-                    segment.value /
-                    100
-                  ) * circumference} ${circumference}`}
-                  strokeDashoffset={
-                    -(
-                      segment.offset /
-                      100
-                    ) *
-                    circumference
-                  }
-                  strokeLinecap="round"
-                  pathLength={
-                    circumference
-                  }
-                  className={
-                    segment.className
-                  }
-                />
-              ),
-            )}
+            {segments.map((segment, index) => (
+              <circle
+                key={index}
+                cx="60"
+                cy="60"
+                r={radius}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="12"
+                strokeDasharray={`${(segment.value / 100) * circumference} ${circumference}`}
+                strokeDashoffset={-(segment.offset / 100) * circumference}
+                strokeLinecap="round"
+                pathLength={circumference}
+                className={segment.className}
+              />
+            ))}
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-2xl font-bold text-slate-950">
+            <div className="text-2xl font-semibold tabular-nums text-slate-900">
               {total}
             </div>
 
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-400">
               Invoices
             </div>
           </div>
         </div>
 
         <div className="min-w-0 flex-1 space-y-4">
-          <HealthRow
-            label="Paid"
-            value={paid}
-            color="bg-emerald-500"
-          />
+          <HealthRow label="Paid" value={paid} color="bg-emerald-500" />
 
-          <HealthRow
-            label="Partial"
-            value={partial}
-            color="bg-blue-500"
-          />
+          <HealthRow label="Partial" value={partial} color="bg-blue-500" />
 
           <HealthRow
             label="Outstanding"
@@ -3136,17 +2813,14 @@ function InvoiceHealth({
             color="bg-slate-300"
           />
 
-          <div className="border-t border-slate-100 pt-3">
+          <div className="border-t border-slate-100 pt-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-400">
+              <span className="text-[11px] font-medium text-slate-400">
                 Overdue value
               </span>
 
-              <span className="text-sm font-bold text-red-600">
-                {money(
-                  overdueAmount,
-                  regionalSettings,
-                )}
+              <span className="text-sm font-semibold tabular-nums text-red-600">
+                {money(overdueAmount, regionalSettings)}
               </span>
             </div>
           </div>
@@ -3167,17 +2841,13 @@ function HealthRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <span
-          className={`h-2 w-2 rounded-full ${color}`}
-        />
+      <div className="flex items-center gap-2.5">
+        <span className={`h-2 w-2 rounded-full ${color}`} />
 
-        <span className="text-xs font-medium text-slate-600">
-          {label}
-        </span>
+        <span className="text-xs font-medium text-slate-600">{label}</span>
       </div>
 
-      <span className="text-xs font-bold text-slate-800">
+      <span className="text-xs font-semibold tabular-nums text-slate-800">
         {value}
       </span>
     </div>
@@ -3202,9 +2872,9 @@ function PerformanceCard({
   href?: string;
 }) {
   const content = (
-    <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+    <div className="group h-full rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)] transition duration-300 hover:-translate-y-1 hover:border-slate-300/80 hover:shadow-[0_1px_2px_rgba(15,23,42,0.04),0_20px_40px_-16px_rgba(15,23,42,0.18)]">
       <div className="flex items-center justify-between">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition group-hover:bg-emerald-50 group-hover:text-emerald-600">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200/70 transition group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:ring-emerald-200/60">
           {icon}
         </div>
 
@@ -3213,17 +2883,13 @@ function PerformanceCard({
         ) : null}
       </div>
 
-      <div className="mt-5 text-lg font-bold text-slate-900">
+      <div className="mt-6 text-xl font-semibold tracking-tight tabular-nums text-slate-900">
         {value}
       </div>
 
-      <div className="mt-1 text-xs font-semibold text-slate-600">
-        {title}
-      </div>
+      <div className="mt-1.5 text-xs font-medium text-slate-600">{title}</div>
 
-      <div className="mt-1 text-[11px] text-slate-400">
-        {subtitle}
-      </div>
+      <div className="mt-1 text-[11px] text-slate-400">{subtitle}</div>
     </div>
   );
 
@@ -3231,41 +2897,33 @@ function PerformanceCard({
     return content;
   }
 
-  return (
-    <a href={href}>
-      {content}
-    </a>
-  );
+  return <a href={href}>{content}</a>;
 }
 
 /* -------------------------------------------------------------------------- */
 /* Module Card                                                                */
 /* -------------------------------------------------------------------------- */
 
-function ModuleCard({
-  metric,
-}: {
-  metric: ModuleMetric;
-}) {
+function ModuleCard({ metric }: { metric: ModuleMetric }) {
   return (
     <a
       href={metric.href}
-      className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
+      className="group rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-[0_20px_40px_-16px_rgba(16,185,129,0.22)]"
     >
       <div className="flex items-start justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition group-hover:bg-emerald-50 group-hover:text-emerald-600">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200/70 transition group-hover:bg-emerald-50 group-hover:text-emerald-600 group-hover:ring-emerald-200/60">
           {metric.icon}
         </div>
 
         <ArrowUpRight className="h-4 w-4 text-slate-200 transition group-hover:text-emerald-500" />
       </div>
 
-      <div className="mt-5">
-        <div className="text-xl font-bold tracking-tight text-slate-900">
+      <div className="mt-6">
+        <div className="text-xl font-semibold tracking-tight tabular-nums text-slate-900">
           {metric.value}
         </div>
 
-        <div className="mt-1 text-xs font-bold text-slate-700">
+        <div className="mt-1.5 text-xs font-medium text-slate-700">
           {metric.name}
         </div>
 
@@ -3292,23 +2950,16 @@ function AlertsCard({
   activeRepairs: number;
   openRmas: number;
 }) {
-  const { settings: regionalSettings } =
-    useRegionalSettings();
+  const { settings: regionalSettings } = useRegionalSettings();
   const alerts = [
     ...(lowStockCount > 0
       ? [
           {
-            icon: (
-              <Boxes className="h-4 w-4" />
-            ),
+            icon: <Boxes className="h-4 w-4" />,
             title: `${lowStockCount} low-stock item${
-              lowStockCount ===
-              1
-                ? ""
-                : "s"
+              lowStockCount === 1 ? "" : "s"
             }`,
-            detail:
-              "Inventory needs attention.",
+            detail: "Inventory needs attention.",
             tone: "amber",
           },
         ]
@@ -3317,15 +2968,9 @@ function AlertsCard({
     ...(overdueAmount > 0
       ? [
           {
-            icon: (
-              <AlertTriangle className="h-4 w-4" />
-            ),
-            title: `${money(
-              overdueAmount,
-              regionalSettings,
-            )} overdue`,
-            detail:
-              "Invoices require collection.",
+            icon: <AlertTriangle className="h-4 w-4" />,
+            title: `${money(overdueAmount, regionalSettings)} overdue`,
+            detail: "Invoices require collection.",
             tone: "red",
           },
         ]
@@ -3334,17 +2979,11 @@ function AlertsCard({
     ...(activeRepairs > 0
       ? [
           {
-            icon: (
-              <Wrench className="h-4 w-4" />
-            ),
+            icon: <Wrench className="h-4 w-4" />,
             title: `${activeRepairs} active repair${
-              activeRepairs ===
-              1
-                ? ""
-                : "s"
+              activeRepairs === 1 ? "" : "s"
             }`,
-            detail:
-              "Repair workflow has open work.",
+            detail: "Repair workflow has open work.",
             tone: "blue",
           },
         ]
@@ -3353,17 +2992,9 @@ function AlertsCard({
     ...(openRmas > 0
       ? [
           {
-            icon: (
-              <PackageCheck className="h-4 w-4" />
-            ),
-            title: `${openRmas} open RMA${
-              openRmas ===
-              1
-                ? ""
-                : "s"
-            }`,
-            detail:
-              "Returns require action.",
+            icon: <PackageCheck className="h-4 w-4" />,
+            title: `${openRmas} open RMA${openRmas === 1 ? "" : "s"}`,
+            detail: "Returns require action.",
             tone: "violet",
           },
         ]
@@ -3371,10 +3002,10 @@ function AlertsCard({
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5">
+    <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)]">
+      <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
         <div>
-          <h2 className="text-sm font-bold text-slate-900">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-900">
             Needs attention
           </h2>
 
@@ -3387,54 +3018,49 @@ function AlertsCard({
       </div>
 
       {alerts.length > 0 ? (
-        <div className="divide-y divide-slate-100">
-          {alerts.map(
-            (alert, index) => (
+        <div className="divide-y divide-slate-100/80">
+          {alerts.map((alert, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-3.5 px-6 py-4 transition hover:bg-slate-50/70"
+            >
               <div
-                key={index}
-                className="flex items-center gap-3 px-5 py-4"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${
+                  alert.tone === "red"
+                    ? "bg-red-50 text-red-600 ring-red-200/60"
+                    : alert.tone === "amber"
+                      ? "bg-amber-50 text-amber-600 ring-amber-200/60"
+                      : alert.tone === "blue"
+                        ? "bg-blue-50 text-blue-600 ring-blue-200/60"
+                        : "bg-violet-50 text-violet-600 ring-violet-200/60"
+                }`}
               >
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                    alert.tone ===
-                    "red"
-                      ? "bg-red-50 text-red-600"
-                      : alert.tone ===
-                          "amber"
-                        ? "bg-amber-50 text-amber-600"
-                        : alert.tone ===
-                            "blue"
-                          ? "bg-blue-50 text-blue-600"
-                          : "bg-violet-50 text-violet-600"
-                  }`}
-                >
-                  {alert.icon}
+                {alert.icon}
+              </div>
+
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-slate-800">
+                  {alert.title}
                 </div>
 
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-slate-800">
-                    {alert.title}
-                  </div>
-
-                  <div className="mt-0.5 text-[10px] text-slate-400">
-                    {alert.detail}
-                  </div>
+                <div className="mt-0.5 text-[11px] text-slate-400">
+                  {alert.detail}
                 </div>
               </div>
-            ),
-          )}
+            </div>
+          ))}
         </div>
       ) : (
-        <div className="flex flex-col items-center px-5 py-8 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+        <div className="flex flex-col items-center px-6 py-9 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200/60">
             <CheckCircle2 className="h-5 w-5" />
           </div>
 
-          <div className="mt-3 text-xs font-bold text-slate-700">
+          <div className="mt-3 text-xs font-semibold text-slate-700">
             Everything looks good
           </div>
 
-          <div className="mt-1 text-[10px] text-slate-400">
+          <div className="mt-1 text-[11px] text-slate-400">
             No major attention items right now.
           </div>
         </div>
@@ -3447,55 +3073,38 @@ function AlertsCard({
 /* Quick Actions                                                              */
 /* -------------------------------------------------------------------------- */
 
-function QuickActions({
-  enabledModules,
-}: {
-  enabledModules: Set<string>;
-}) {
+function QuickActions({ enabledModules }: { enabledModules: Set<string> }) {
   const actions = [
     {
       slug: "customers",
       label: "Add customer",
       href: "/customers/new",
-      icon: (
-        <Users className="h-4 w-4" />
-      ),
+      icon: <Users className="h-4 w-4" />,
     },
     {
       slug: "estimates",
       label: "Create estimate",
       href: "/estimates/new",
-      icon: (
-        <FileText className="h-4 w-4" />
-      ),
+      icon: <FileText className="h-4 w-4" />,
     },
     {
       slug: "invoices",
       label: "Create invoice",
       href: "/invoices/new",
-      icon: (
-        <CreditCard className="h-4 w-4" />
-      ),
+      icon: <CreditCard className="h-4 w-4" />,
     },
     {
       slug: "sales-orders",
       label: "New sales order",
       href: "/sales-orders/new",
-      icon: (
-        <ShoppingCart className="h-4 w-4" />
-      ),
+      icon: <ShoppingCart className="h-4 w-4" />,
     },
-  ].filter(
-    (action) =>
-      enabledModules.has(
-        action.slug,
-      ),
-  );
+  ].filter((action) => enabledModules.has(action.slug));
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)]">
       <div>
-        <h2 className="text-sm font-bold text-slate-900">
+        <h2 className="text-sm font-semibold tracking-tight text-slate-900">
           Quick actions
         </h2>
 
@@ -3504,34 +3113,24 @@ function QuickActions({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-2">
-        {actions.map(
-          (action) => (
-            <a
-              key={
-                action.label
-              }
-              href={
-                action.href
-              }
-              className="group flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-3 transition hover:border-emerald-100 hover:bg-emerald-50/50"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition group-hover:bg-emerald-100 group-hover:text-emerald-600">
-                {
-                  action.icon
-                }
-              </div>
+      <div className="mt-5 grid gap-2">
+        {actions.map((action) => (
+          <a
+            key={action.label}
+            href={action.href}
+            className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/40 px-3.5 py-3 transition hover:border-emerald-200/70 hover:bg-emerald-50/50"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 ring-1 ring-inset ring-slate-200/70 transition group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:ring-emerald-200/60">
+              {action.icon}
+            </div>
 
-              <span className="flex-1 text-xs font-semibold text-slate-700">
-                {
-                  action.label
-                }
-              </span>
+            <span className="flex-1 text-xs font-medium text-slate-700">
+              {action.label}
+            </span>
 
-              <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:text-emerald-500" />
-            </a>
-          ),
-        )}
+            <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:text-emerald-500" />
+          </a>
+        ))}
       </div>
     </div>
   );
@@ -3541,14 +3140,10 @@ function QuickActions({
 /* Activity Icon                                                              */
 /* -------------------------------------------------------------------------- */
 
-function ActivityIcon({
-  type,
-}: {
-  type: string;
-}) {
+function ActivityIcon({ type }: { type: string }) {
   if (type === "sale") {
     return (
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200/60">
         <ShoppingCart className="h-4 w-4" />
       </div>
     );
@@ -3556,14 +3151,14 @@ function ActivityIcon({
 
   if (type === "invoice") {
     return (
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200/60">
         <FileText className="h-4 w-4" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-200/60">
       <Users className="h-4 w-4" />
     </div>
   );
@@ -3583,14 +3178,12 @@ function EmptyPanel({
   description: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+    <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-slate-400 ring-1 ring-inset ring-slate-200/70">
         {icon}
       </div>
 
-      <div className="mt-4 text-sm font-bold text-slate-700">
-        {title}
-      </div>
+      <div className="mt-4 text-sm font-semibold text-slate-700">{title}</div>
 
       <div className="mt-1 max-w-xs text-xs leading-5 text-slate-400">
         {description}
@@ -3600,38 +3193,34 @@ function EmptyPanel({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Skeleton                                                                    */
+/* Skeleton                                                                   */
 /* -------------------------------------------------------------------------- */
 
 function DashboardSkeleton() {
   return (
-    <div className="min-h-full bg-[#f5f7fa] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1800px] space-y-6">
-        <div className="h-20 animate-pulse rounded-2xl bg-white" />
+    <div className="min-h-full bg-[#f5f7fa] p-4 sm:p-6 lg:p-10">
+      <div className="mx-auto max-w-[1800px] space-y-8">
+        <div className="h-20 animate-pulse rounded-3xl bg-white/80" />
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({
-            length: 4,
-          }).map((_, index) => (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className="h-36 animate-pulse rounded-2xl bg-white"
+              className="h-40 animate-pulse rounded-3xl bg-white/80"
             />
           ))}
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1.65fr_0.8fr]">
-          <div className="h-[370px] animate-pulse rounded-2xl bg-white" />
-          <div className="h-[370px] animate-pulse rounded-2xl bg-white" />
+          <div className="h-[370px] animate-pulse rounded-3xl bg-white/80" />
+          <div className="h-[370px] animate-pulse rounded-3xl bg-white/80" />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({
-            length: 8,
-          }).map((_, index) => (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => (
             <div
               key={index}
-              className="h-32 animate-pulse rounded-2xl bg-white"
+              className="h-36 animate-pulse rounded-3xl bg-white/80"
             />
           ))}
         </div>

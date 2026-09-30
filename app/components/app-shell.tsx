@@ -31,6 +31,7 @@ type IconName =
   | "orders"
   | "invoices"
   | "payments"
+  | "accounting"
   | "products"
   | "serials"
   | "inventory"
@@ -171,19 +172,21 @@ function getWorkspaceSections(): NavSection[] {
           ],
         },
         {
-          label: "Payments",
-          href: "/payments",
-          icon: "payments",
+          label: "Accounting",
+          href: "/accounting",
+          icon: "accounting",
           available: true,
           keywords: [
-            "payment",
-            "payments",
-            "money",
-            "received",
-            "incoming",
-            "paid",
+            "accounting",
+            "finance",
+            "financial",
+            "accounts",
+            "ledger",
+            "journal",
+            "transactions",
             "cash",
-            "receipts",
+            "bank",
+            "payments",
           ],
         },
       ],
@@ -647,6 +650,17 @@ function Icon({
             x2="10"
             y2="15"
           />
+        </svg>
+      );
+
+    case "accounting":
+      return (
+        <svg {...common}>
+          <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+          <path d="M8 7h8" />
+          <path d="M8 11h8" />
+          <path d="M8 15h5" />
+          <path d="M8 19h3" />
         </svg>
       );
 

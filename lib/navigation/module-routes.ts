@@ -50,6 +50,11 @@ export const MODULE_ROUTE_RULES: ModuleRouteRule[] = [
     entitlementModule: "payments",
   },
   {
+    prefix: "/accounting",
+    permissionModule: "accounting",
+    entitlementModule: null,
+  },
+  {
     prefix: "/products",
     permissionModule: "products",
     entitlementModule: "products",

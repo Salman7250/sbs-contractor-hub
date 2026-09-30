@@ -36,6 +36,7 @@ type InvoicePayment = {
   invoice_id: string;
   customer_id: string | null;
   amount: number;
+  refunded_amount: number;
   currency: string;
   payment_method: string | null;
   reference: string | null;
@@ -93,6 +94,17 @@ export default function PaymentsPage() {
     new Date().toISOString().slice(0, 10)
   );
   const [notes, setNotes] = useState("");
+
+  const [showRefundModal, setShowRefundModal] =
+    useState(false);
+  const [selectedPayment, setSelectedPayment] =
+    useState<PaymentRow | null>(null);
+  const [refundAmount, setRefundAmount] =
+    useState("");
+  const [refundReason, setRefundReason] =
+    useState("");
+  const [savingRefund, setSavingRefund] =
+    useState(false);
 
   const getCompanyId = useCallback(async (): Promise<string> => {
     const {
@@ -154,6 +166,7 @@ export default function PaymentsPage() {
               invoice_id,
               customer_id,
               amount,
+              refunded_amount,
               currency,
               payment_method,
               reference,
@@ -298,7 +311,12 @@ export default function PaymentsPage() {
   const totalCollected = useMemo(() => {
     return payments.reduce(
       (sum, payment) =>
-        sum + Number(payment.amount || 0),
+        sum +
+        Math.max(
+          Number(payment.amount || 0) -
+            Number(payment.refunded_amount || 0),
+          0
+        ),
       0
     );
   }, [payments]);
@@ -316,7 +334,7 @@ export default function PaymentsPage() {
           date.getMonth() === today.getMonth() &&
           date.getDate() === today.getDate()
         ) {
-          return sum + Number(payment.amount || 0);
+          return sum + Math.max(Number(payment.amount || 0) - Number(payment.refunded_amount || 0), 0);
         }
 
         return sum;
@@ -337,7 +355,7 @@ export default function PaymentsPage() {
             today.getFullYear() &&
           date.getMonth() === today.getMonth()
         ) {
-          return sum + Number(payment.amount || 0);
+          return sum + Math.max(Number(payment.amount || 0) - Number(payment.refunded_amount || 0), 0);
         }
 
         return sum;
@@ -600,6 +618,104 @@ export default function PaymentsPage() {
     }
   }
 
+  function openRefundModal(payment: PaymentRow) {
+    const refundable = Math.max(
+      Number(payment.amount || 0) -
+        Number(payment.refunded_amount || 0),
+      0
+    );
+
+    if (refundable <= 0) {
+      setError("This payment has no refundable balance remaining.");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setSelectedPayment(payment);
+    setRefundAmount(refundable.toFixed(2));
+    setRefundReason("");
+    setShowRefundModal(true);
+  }
+
+  function closeRefundModal() {
+    if (savingRefund) {
+      return;
+    }
+
+    setShowRefundModal(false);
+    setSelectedPayment(null);
+    setRefundAmount("");
+    setRefundReason("");
+  }
+
+  async function submitRefund() {
+    setError("");
+    setSuccess("");
+
+    if (!selectedPayment) {
+      setError("Select a payment to refund.");
+      return;
+    }
+
+    const value = Number(refundAmount);
+    const refundable = Math.max(
+      Number(selectedPayment.amount || 0) -
+        Number(selectedPayment.refunded_amount || 0),
+      0
+    );
+
+    if (!Number.isFinite(value) || value <= 0) {
+      setError("Refund amount must be greater than zero.");
+      return;
+    }
+
+    if (value > refundable) {
+      setError(
+        `Refund cannot exceed the remaining refundable amount of ${formatCurrency(refundable)}.`
+      );
+      return;
+    }
+
+    setSavingRefund(true);
+
+    try {
+      const { error: refundError } = await supabase.rpc(
+        "record_invoice_payment_refund",
+        {
+          p_payment_id: selectedPayment.id,
+          p_refund_amount: value,
+          p_reason: refundReason.trim() || null,
+        }
+      );
+
+      if (refundError) {
+        throw refundError;
+      }
+
+      setShowRefundModal(false);
+      setSelectedPayment(null);
+      setRefundAmount("");
+      setRefundReason("");
+
+      setSuccess(
+        `Refund of ${formatCurrency(value)} was recorded successfully.`
+      );
+
+      await loadPayments();
+    } catch (err: unknown) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to process refund."
+      );
+    } finally {
+      setSavingRefund(false);
+    }
+  }
+
   if (loading) {
     return (
       <AppShell
@@ -786,6 +902,9 @@ export default function PaymentsPage() {
                   <th className="right">
                     AMOUNT
                   </th>
+                  <th className="right">
+                    ACTION
+                  </th>
                 </tr>
               </thead>
 
@@ -794,7 +913,7 @@ export default function PaymentsPage() {
                 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="empty"
                     >
                       <div className="empty-box">
@@ -903,14 +1022,42 @@ export default function PaymentsPage() {
                         </td>
 
                         <td className="right">
-                          <strong className="amount-value">
-                            +
-                            {formatCurrency(
-                              Number(
-                                payment.amount
-                              )
+                          <div className="amount-cell">
+                            <strong className="amount-value">
+                              +
+                              {formatCurrency(
+                                Math.max(
+                                  Number(payment.amount || 0) -
+                                    Number(payment.refunded_amount || 0),
+                                  0
+                                )
+                              )}
+                            </strong>
+
+                            {Number(payment.refunded_amount || 0) > 0 && (
+                              <small className="refunded-label">
+                                Refunded {formatCurrency(Number(payment.refunded_amount))}
+                              </small>
                             )}
-                          </strong>
+                          </div>
+                        </td>
+
+                        <td className="right action-cell">
+                          {Number(payment.amount || 0) -
+                            Number(payment.refunded_amount || 0) > 0 ? (
+                            <button
+                              type="button"
+                              className="refund-button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openRefundModal(payment);
+                              }}
+                            >
+                              Refund
+                            </button>
+                          ) : (
+                            <span className="refunded-status">Refunded</span>
+                          )}
                         </td>
                       </tr>
                     )
@@ -920,6 +1067,117 @@ export default function PaymentsPage() {
             </table>
           </div>
         </section>
+
+        {showRefundModal && selectedPayment && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeRefundModal();
+              }
+            }}
+          >
+            <div className="modal refund-modal">
+              <div className="modal-header">
+                <div>
+                  <h2>Refund Payment</h2>
+                  <p>Return money to the customer and reverse the accounting entry.</p>
+                </div>
+
+                <button
+                  type="button"
+                  className="close"
+                  onClick={closeRefundModal}
+                  disabled={savingRefund}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="refund-summary">
+                  <div>
+                    <span>Invoice</span>
+                    <strong>{selectedPayment.invoice?.invoice_number || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Original Payment</span>
+                    <strong>{formatCurrency(Number(selectedPayment.amount || 0))}</strong>
+                  </div>
+                  <div>
+                    <span>Already Refunded</span>
+                    <strong>{formatCurrency(Number(selectedPayment.refunded_amount || 0))}</strong>
+                  </div>
+                  <div>
+                    <span>Refundable</span>
+                    <strong className="green">
+                      {formatCurrency(
+                        Math.max(
+                          Number(selectedPayment.amount || 0) -
+                            Number(selectedPayment.refunded_amount || 0),
+                          0
+                        )
+                      )}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="refund-warning">
+                  This will reduce the customer payment and create the corresponding accounting reversal.
+                </div>
+
+                <label>
+                  Refund Amount
+                  <span>*</span>
+                </label>
+
+                <input
+                  type="number"
+                  min="0.01"
+                  max={Math.max(
+                    Number(selectedPayment.amount || 0) -
+                      Number(selectedPayment.refunded_amount || 0),
+                    0
+                  )}
+                  step="0.01"
+                  value={refundAmount}
+                  onChange={(event) => setRefundAmount(event.target.value)}
+                  placeholder="0.00"
+                />
+
+                <label className="refund-reason-label">
+                  Reason
+                </label>
+
+                <textarea
+                  value={refundReason}
+                  onChange={(event) => setRefundReason(event.target.value)}
+                  placeholder="Reason for refund..."
+                />
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="cancel"
+                  onClick={closeRefundModal}
+                  disabled={savingRefund}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="refund-confirm-button"
+                  onClick={() => void submitRefund()}
+                  disabled={savingRefund}
+                >
+                  {savingRefund ? "Processing..." : "Confirm Refund"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showPaymentModal && (
           <div
@@ -1403,6 +1661,46 @@ export default function PaymentsPage() {
           white-space: nowrap;
         }
 
+        .amount-cell {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+        }
+
+        .refunded-label {
+          color: #b45309;
+          font-size: 9px;
+          white-space: nowrap;
+        }
+
+        .action-cell {
+          width: 90px;
+        }
+
+        .refund-button {
+          height: 30px;
+          padding: 0 10px;
+          border: 1px solid #fecaca;
+          border-radius: 7px;
+          background: #fff;
+          color: #b91c1c;
+          cursor: pointer;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .refund-button:hover {
+          background: #fef2f2;
+        }
+
+        .refunded-status {
+          color: #94a3b8;
+          font-size: 9px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
         .empty {
           height: 320px;
         }
@@ -1580,6 +1878,73 @@ export default function PaymentsPage() {
           color: #059669 !important;
         }
 
+        .refund-summary {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1px;
+          margin-bottom: 15px;
+          background: #e5e7eb;
+          border: 1px solid #e5e7eb;
+          border-radius: 9px;
+          overflow: hidden;
+        }
+
+        .refund-summary div {
+          padding: 11px;
+          background: #f8fafc;
+        }
+
+        .refund-summary span {
+          display: block;
+          color: #94a3b8;
+          font-size: 8px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .refund-summary strong {
+          display: block;
+          margin-top: 4px;
+          color: #334155;
+          font-size: 11px;
+        }
+
+        .refund-warning {
+          margin-bottom: 16px;
+          padding: 11px 12px;
+          border: 1px solid #fed7aa;
+          border-radius: 8px;
+          background: #fff7ed;
+          color: #9a3412;
+          font-size: 10px;
+          line-height: 1.5;
+        }
+
+        .refund-reason-label {
+          margin-top: 16px;
+        }
+
+        .refund-confirm-button {
+          height: 40px;
+          padding: 0 14px;
+          border: 0;
+          border-radius: 8px;
+          background: #b91c1c;
+          color: #fff;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .refund-confirm-button:hover {
+          background: #991b1b;
+        }
+
+        .refund-confirm-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
         .form-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -1641,7 +2006,74 @@ export default function PaymentsPage() {
             grid-template-columns: 1fr 1fr;
           }
 
-          .form-grid {
+          .refund-summary {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1px;
+          margin-bottom: 15px;
+          background: #e5e7eb;
+          border: 1px solid #e5e7eb;
+          border-radius: 9px;
+          overflow: hidden;
+        }
+
+        .refund-summary div {
+          padding: 11px;
+          background: #f8fafc;
+        }
+
+        .refund-summary span {
+          display: block;
+          color: #94a3b8;
+          font-size: 8px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .refund-summary strong {
+          display: block;
+          margin-top: 4px;
+          color: #334155;
+          font-size: 11px;
+        }
+
+        .refund-warning {
+          margin-bottom: 16px;
+          padding: 11px 12px;
+          border: 1px solid #fed7aa;
+          border-radius: 8px;
+          background: #fff7ed;
+          color: #9a3412;
+          font-size: 10px;
+          line-height: 1.5;
+        }
+
+        .refund-reason-label {
+          margin-top: 16px;
+        }
+
+        .refund-confirm-button {
+          height: 40px;
+          padding: 0 14px;
+          border: 0;
+          border-radius: 8px;
+          background: #b91c1c;
+          color: #fff;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .refund-confirm-button:hover {
+          background: #991b1b;
+        }
+
+        .refund-confirm-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .form-grid {
             grid-template-columns: 1fr;
           }
 
