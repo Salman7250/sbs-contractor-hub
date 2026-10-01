@@ -44,6 +44,7 @@ import {
   type RegionalSettings,
 } from "@/lib/regional-settings";
 import { createClient } from "@/lib/supabase/client";
+import { usePermissions } from "@/hooks/use-permissions";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -254,11 +255,12 @@ const MODULE_HREFS: Record<string, string> = {
   products: "/products",
   inventory: "/inventory",
   employees: "/employees",
-  warehouses: "/inventory/warehouses",
-  "serial-assets": "/inventory/serial-numbers",
+  warehouses: "/warehouses",
+  "serial-assets": "/serial-numbers",
   payments: "/payments",
+  accounting: "/accounting",
   "purchase-orders": "/purchase-orders",
-  "sales-orders": "/sales-orders",
+  "sales-orders": "/sales",
   expenses: "/expenses",
   repairs: "/repairs",
   rma: "/rma",
@@ -269,6 +271,57 @@ const MODULE_HREFS: Record<string, string> = {
   analytics: "/analytics",
   "advanced-analytics": "/analytics",
   "b2b-client-portal": "/b2b-portal",
+};
+
+const MODULE_ACCESS: Record<
+  string,
+  { permission: string; entitlement: string | null }
+> = {
+  customers: { permission: "customers", entitlement: "customers" },
+  leads: { permission: "leads", entitlement: "leads" },
+  jobs: { permission: "jobs", entitlement: "jobs" },
+  estimates: { permission: "quotes", entitlement: "estimates" },
+  invoices: { permission: "invoices", entitlement: "invoices" },
+  payments: { permission: "payments", entitlement: "payments" },
+  accounting: { permission: "accounting", entitlement: null },
+  products: { permission: "products", entitlement: "products" },
+  inventory: { permission: "inventory", entitlement: "inventory" },
+  employees: { permission: "employees", entitlement: "employees" },
+  warehouses: { permission: "warehouses", entitlement: "warehouses" },
+  "serial-assets": {
+    permission: "serial_numbers",
+    entitlement: "serial-assets",
+  },
+  pricing: { permission: "pricing", entitlement: "pricing" },
+  suppliers: { permission: "suppliers", entitlement: "suppliers" },
+  "purchase-orders": {
+    permission: "purchase_orders",
+    entitlement: "purchase-orders",
+  },
+  "sales-orders": {
+    permission: "sales_orders",
+    entitlement: "sales-orders",
+  },
+  expenses: { permission: "expenses", entitlement: "expenses" },
+  repairs: { permission: "repairs", entitlement: "repairs" },
+  rma: { permission: "rma", entitlement: "rma" },
+  warranty: { permission: "warranty", entitlement: "warranty" },
+  "service-jobs": {
+    permission: "service_jobs",
+    entitlement: "service-jobs",
+  },
+  "service-providers": {
+    permission: "service_jobs",
+    entitlement: "service-providers",
+  },
+  "b2b-client-portal": {
+    permission: "b2b_portal",
+    entitlement: "b2b-client-portal",
+  },
+  analytics: { permission: "analytics", entitlement: "analytics" },
+  reports: { permission: "reports", entitlement: "reports" },
+  documents: { permission: "documents", entitlement: "documents" },
+  settings: { permission: "settings", entitlement: "settings" },
 };
 
 const PERIOD_DAYS: Record<PeriodKey, number> = {
@@ -424,6 +477,7 @@ function getEnabledModules(
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const { settings: regionalSettings } =
     useRegionalSettings();
 
@@ -668,7 +722,7 @@ export default function DashboardPage() {
           );
         }
 
-        if (enabled.has("leads")) {
+        if (enabled.has("leads") && hasPermission("leads", "view")) {
           requests.push(
             supabase
               .from("leads")
@@ -817,7 +871,7 @@ export default function DashboardPage() {
           );
         }
 
-        if (enabled.has("jobs")) {
+        if (enabled.has("jobs") && hasPermission("jobs", "view")) {
           requests.push(
             supabase
               .from("jobs")
@@ -997,7 +1051,7 @@ export default function DashboardPage() {
           );
         }
 
-        if (enabled.has("repairs")) {
+        if (enabled.has("repairs") && hasPermission("repairs", "view")) {
           requests.push(
             supabase
               .from("repairs")
@@ -1025,7 +1079,7 @@ export default function DashboardPage() {
           );
         }
 
-        if (enabled.has("rma")) {
+        if (enabled.has("rma") && hasPermission("rma", "view")) {
           requests.push(
             supabase
               .from("rmas")
@@ -1226,21 +1280,29 @@ export default function DashboardPage() {
         setRefreshing(false);
       }
     },
-    [router, supabase],
+    [router, supabase, hasPermission],
   );
 
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const enabledModules =
-    useMemo(
-      () =>
-        getEnabledModules(
-          entitlements,
-        ),
-      [entitlements],
-    );
+  const enabledModules = useMemo(() => {
+    const entitlementSet = getEnabledModules(entitlements);
+    const accessible = new Set<string>();
+
+    Object.entries(MODULE_ACCESS).forEach(([slug, access]) => {
+      const hasEntitlement =
+        access.entitlement === null ||
+        entitlementSet.has(access.entitlement);
+
+      if (hasEntitlement && hasPermission(access.permission, "view")) {
+        accessible.add(slug);
+      }
+    });
+
+    return accessible;
+  }, [entitlements, hasPermission]);
 
   /*
    * ------------------------------------------------------------------------
@@ -1817,107 +1879,77 @@ export default function DashboardPage() {
         amount?: number;
       }[] = [];
 
-      periodOrders
-        .slice()
-        .sort(
-          (a, b) =>
-            new Date(
-              b.created_at,
-            ).getTime() -
-            new Date(
-              a.created_at,
-            ).getTime(),
-        )
-        .slice(0, 4)
-        .forEach((order) => {
-          activities.push({
-            id: `order-${order.id}`,
-            type: "sale",
-            title:
-              order.order_number ||
-              "Sales order",
-            detail:
-              order.status ||
-              "Order created",
-            date: order.created_at,
-            amount:
-              Number(
-                order.total_amount ??
-                  0,
-              ),
+      if (enabledModules.has("sales-orders")) {
+        periodOrders
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
+          )
+          .slice(0, 4)
+          .forEach((order) => {
+            activities.push({
+              id: `order-${order.id}`,
+              type: "sale",
+              title: order.order_number || "Sales order",
+              detail: order.status || "Order created",
+              date: order.created_at,
+              amount: Number(order.total_amount ?? 0),
+            });
           });
-        });
+      }
 
-      periodCustomers
-        .slice()
-        .sort(
-          (a, b) =>
-            new Date(
-              b.created_at,
-            ).getTime() -
-            new Date(
-              a.created_at,
-            ).getTime(),
-        )
-        .slice(0, 3)
-        .forEach((customer) => {
-          activities.push({
-            id: `customer-${customer.id}`,
-            type: "customer",
-            title:
-              customer.name ||
-              "New customer",
-            detail:
-              "Customer added",
-            date:
-              customer.created_at,
+      if (enabledModules.has("customers")) {
+        periodCustomers
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
+          )
+          .slice(0, 3)
+          .forEach((customer) => {
+            activities.push({
+              id: `customer-${customer.id}`,
+              type: "customer",
+              title: customer.name || "New customer",
+              detail: "Customer added",
+              date: customer.created_at,
+            });
           });
-        });
+      }
 
-      periodInvoices
-        .slice()
-        .sort(
-          (a, b) =>
-            new Date(
-              b.created_at,
-            ).getTime() -
-            new Date(
-              a.created_at,
-            ).getTime(),
-        )
-        .slice(0, 3)
-        .forEach((invoice) => {
-          activities.push({
-            id: `invoice-${invoice.id}`,
-            type: "invoice",
-            title:
-              invoice.invoice_number ||
-              "Invoice",
-            detail:
-              invoice.status ||
-              "Invoice created",
-            date:
-              invoice.created_at,
-            amount:
-              Number(
-                invoice.total ??
-                  0,
-              ),
+      if (enabledModules.has("invoices")) {
+        periodInvoices
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime(),
+          )
+          .slice(0, 3)
+          .forEach((invoice) => {
+            activities.push({
+              id: `invoice-${invoice.id}`,
+              type: "invoice",
+              title: invoice.invoice_number || "Invoice",
+              detail: invoice.status || "Invoice created",
+              date: invoice.created_at,
+              amount: Number(invoice.total ?? 0),
+            });
           });
-        });
+      }
 
       return activities
         .sort(
           (a, b) =>
-            new Date(
-              b.date,
-            ).getTime() -
-            new Date(
-              a.date,
-            ).getTime(),
+            new Date(b.date).getTime() -
+            new Date(a.date).getTime(),
         )
         .slice(0, 7);
     }, [
+      enabledModules,
       periodOrders,
       periodCustomers,
       periodInvoices,
@@ -2035,6 +2067,14 @@ export default function DashboardPage() {
           ),
           "Recorded in period",
           <CreditCard className="h-5 w-5" />,
+        );
+
+        add(
+          "accounting",
+          "Accounting",
+          "Open",
+          "Financial accounts & ledger",
+          <DollarSign className="h-5 w-5" />,
         );
 
         add(
@@ -2245,7 +2285,7 @@ export default function DashboardPage() {
                 Refresh
               </button>
 
-              {enabledModules.has("invoices") ? (
+              {enabledModules.has("invoices") && hasPermission("invoices", "create") ? (
                 <a
                   href="/invoices/new"
                   className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 px-5 text-xs font-semibold text-white shadow-[0_8px_20px_-8px_rgba(15,23,42,0.6)] ring-1 ring-slate-900 transition hover:from-slate-700 hover:to-slate-900"
@@ -2275,6 +2315,7 @@ export default function DashboardPage() {
 
           {/* TOP FINANCIAL CARDS */}
           <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {enabledModules.has("sales-orders") ? (
             <DashboardMetric
               label="Revenue"
               value={money(revenue, regionalSettings)}
@@ -2286,7 +2327,9 @@ export default function DashboardPage() {
               }
               accent="green"
             />
+            ) : null}
 
+            {enabledModules.has("payments") || enabledModules.has("invoices") ? (
             <DashboardMetric
               label="Collected"
               value={money(collected, regionalSettings)}
@@ -2294,7 +2337,9 @@ export default function DashboardPage() {
               icon={<CreditCard className="h-5 w-5" />}
               accent="blue"
             />
+            ) : null}
 
+            {enabledModules.has("invoices") ? (
             <DashboardMetric
               label="Outstanding"
               value={money(outstanding, regionalSettings)}
@@ -2302,7 +2347,9 @@ export default function DashboardPage() {
               icon={<Clock3 className="h-5 w-5" />}
               accent="amber"
             />
+            ) : null}
 
+            {enabledModules.has("expenses") ? (
             <DashboardMetric
               label="Expenses"
               value={money(expensesTotal, regionalSettings)}
@@ -2310,9 +2357,13 @@ export default function DashboardPage() {
               icon={<ArrowDownRight className="h-5 w-5" />}
               accent="slate"
             />
+            ) : null}
           </section>
 
           {/* CHART + INVOICE HEALTH */}
+          {(enabledModules.has("sales-orders") ||
+            enabledModules.has("payments") ||
+            enabledModules.has("invoices")) ? (
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.8fr)]">
             <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)] sm:p-7">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2352,6 +2403,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {enabledModules.has("invoices") ? (
             <InvoiceHealth
               invoices={periodInvoices}
               paid={
@@ -2361,34 +2413,46 @@ export default function DashboardPage() {
               }
               overdueAmount={overdue}
             />
+            ) : null}
           </section>
+          ) : null}
 
           {/* PERFORMANCE STRIP */}
           <section className="grid gap-5 md:grid-cols-3">
+            {enabledModules.has("sales-orders") ? (
             <PerformanceCard
               title="Sales"
               value={money(revenue, regionalSettings)}
               subtitle={`${periodOrders.length} orders`}
               icon={<ShoppingCart className="h-5 w-5" />}
-              href={
-                enabledModules.has("sales-orders") ? "/sales-orders" : undefined
-              }
+              href="/sales"
             />
+            ) : null}
 
+            {enabledModules.has("leads") || enabledModules.has("estimates") ? (
             <PerformanceCard
               title="Pipeline"
               value={money(estimatePipeline, regionalSettings)}
               subtitle={`${activeLeads} open leads`}
               icon={<Target className="h-5 w-5" />}
-              href={enabledModules.has("leads") ? "/leads" : undefined}
+              href={
+                enabledModules.has("leads")
+                  ? "/leads"
+                  : enabledModules.has("estimates")
+                    ? "/estimates"
+                    : undefined
+              }
             />
+            ) : null}
 
+            {enabledModules.has("sales-orders") || enabledModules.has("expenses") ? (
             <PerformanceCard
               title="Net operating"
               value={money(revenue - expensesTotal, regionalSettings)}
               subtitle="Revenue less recorded expenses"
               icon={<Activity className="h-5 w-5" />}
             />
+            ) : null}
           </section>
 
           {/* MODULES */}
@@ -2401,7 +2465,7 @@ export default function DashboardPage() {
                   </h2>
 
                   <p className="mt-1 text-xs text-slate-400">
-                    Metrics from the modules included in your current plan.
+                    Metrics from the modules available to your role and workspace.
                   </p>
                 </div>
 
@@ -2487,7 +2551,7 @@ export default function DashboardPage() {
                 openRmas={enabledModules.has("rma") ? openRmas : 0}
               />
 
-              <QuickActions enabledModules={enabledModules} />
+              <QuickActions enabledModules={enabledModules} hasPermission={hasPermission} />
             </div>
           </section>
 
@@ -2587,6 +2651,8 @@ function RevenueChart({
   max: number;
 }) {
   const { settings: regionalSettings } = useRegionalSettings();
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   const width = 1000;
   const height = 260;
   const paddingX = 36;
@@ -2594,6 +2660,8 @@ function RevenueChart({
 
   const usableWidth = width - paddingX * 2;
   const usableHeight = height - paddingY * 2;
+
+  const safeMax = Math.max(max, 1);
 
   const getX = (index: number) => {
     if (points.length <= 1) {
@@ -2604,7 +2672,7 @@ function RevenueChart({
   };
 
   const getY = (value: number) =>
-    height - paddingY - (value / max) * usableHeight;
+    height - paddingY - (Math.max(value, 0) / safeMax) * usableHeight;
 
   const revenuePoints = points
     .map((point, index) => `${getX(index)},${getY(point.revenue)}`)
@@ -2620,8 +2688,27 @@ function RevenueChart({
     `${getX(points.length - 1)},${height - paddingY}`,
   ].join(" ");
 
+  const hoveredPoint =
+    hoveredIndex !== null ? points[hoveredIndex] : null;
+
+  const hoveredX =
+    hoveredIndex !== null ? getX(hoveredIndex) : null;
+
+  const collectedPct =
+    hoveredPoint && hoveredPoint.revenue > 0
+      ? (hoveredPoint.collected / hoveredPoint.revenue) * 100
+      : 0;
+
+  const gap =
+    hoveredPoint
+      ? hoveredPoint.revenue - hoveredPoint.collected
+      : 0;
+
   return (
-    <div className="relative h-full w-full">
+    <div
+      className="relative h-full w-full"
+      onMouseLeave={() => setHoveredIndex(null)}
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-full w-full overflow-visible"
@@ -2645,7 +2732,10 @@ function RevenueChart({
           );
         })}
 
-        <polygon points={revenueArea} className="fill-emerald-500/[0.08]" />
+        <polygon
+          points={revenueArea}
+          className="fill-emerald-500/[0.08]"
+        />
 
         <polyline
           points={revenuePoints}
@@ -2668,29 +2758,168 @@ function RevenueChart({
           className="text-blue-500"
         />
 
-        {points.map((point, index) => (
-          <g key={index}>
-            <circle
-              cx={getX(index)}
-              cy={getY(point.revenue)}
-              r="4.5"
-              className="fill-white stroke-emerald-500"
-              strokeWidth="2.5"
-            />
+        {hoveredX !== null ? (
+          <line
+            x1={hoveredX}
+            x2={hoveredX}
+            y1={paddingY}
+            y2={height - paddingY}
+            stroke="currentColor"
+            strokeWidth="1"
+            strokeDasharray="4 5"
+            className="text-slate-300"
+          />
+        ) : null}
 
-            <title>
-              {point.label}: {money(point.revenue, regionalSettings)}
-            </title>
-          </g>
-        ))}
+        {points.map((point, index) => {
+          const isHovered = hoveredIndex === index;
+
+          return (
+            <g
+              key={`${point.label}-${index}`}
+              onMouseEnter={() => setHoveredIndex(index)}
+              className="cursor-crosshair"
+            >
+              <circle
+                cx={getX(index)}
+                cy={getY(point.revenue)}
+                r={isHovered ? 6 : 4.5}
+                className="fill-white stroke-emerald-500 transition-all"
+                strokeWidth={isHovered ? 3 : 2.5}
+              />
+
+              <circle
+                cx={getX(index)}
+                cy={getY(point.collected)}
+                r={isHovered ? 5 : 0}
+                className="fill-white stroke-blue-500"
+                strokeWidth="2.5"
+              />
+
+              <title>
+                {point.label}: Revenue{" "}
+                {money(point.revenue, regionalSettings)} · Collected{" "}
+                {money(point.collected, regionalSettings)}
+              </title>
+            </g>
+          );
+        })}
+
+        {/* Invisible interaction zones make the chart easy to explore,
+            just like a professional analytics chart. */}
+        {points.map((_, index) => {
+          const zoneWidth =
+            points.length <= 1
+              ? usableWidth
+              : usableWidth / (points.length - 1);
+
+          const left =
+            points.length <= 1
+              ? paddingX
+              : Math.max(
+                  paddingX,
+                  getX(index) - zoneWidth / 2,
+                );
+
+          return (
+            <rect
+              key={`zone-${index}`}
+              x={left}
+              y={paddingY}
+              width={
+                points.length <= 1
+                  ? usableWidth
+                  : Math.min(
+                      zoneWidth,
+                      width - paddingX - left,
+                    )
+              }
+              height={usableHeight}
+              fill="transparent"
+              onMouseEnter={() => setHoveredIndex(index)}
+            />
+          );
+        })}
       </svg>
+
+      {hoveredPoint ? (
+        <div
+          className={`pointer-events-none absolute top-3 z-20 w-[230px] rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-[0_12px_35px_-12px_rgba(15,23,42,0.28)] backdrop-blur-sm ${
+            hoveredIndex !== null && hoveredIndex > points.length / 2
+              ? "right-3"
+              : "left-3"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-semibold text-slate-900">
+              {hoveredPoint.label}
+            </div>
+
+            <div className="rounded-full bg-slate-50 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+              Performance
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Revenue
+              </div>
+
+              <div className="text-xs font-semibold tabular-nums text-slate-900">
+                {money(hoveredPoint.revenue, regionalSettings)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                Collected
+              </div>
+
+              <div className="text-xs font-semibold tabular-nums text-slate-900">
+                {money(hoveredPoint.collected, regionalSettings)}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-2.5">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[11px] text-slate-400">
+                  Outstanding
+                </span>
+
+                <span
+                  className={`text-xs font-semibold tabular-nums ${
+                    gap > 0 ? "text-amber-600" : "text-emerald-600"
+                  }`}
+                >
+                  {money(Math.max(gap, 0), regionalSettings)}
+                </span>
+              </div>
+
+              <div className="mt-1.5 flex items-center justify-between gap-4">
+                <span className="text-[11px] text-slate-400">
+                  Collection rate
+                </span>
+
+                <span className="text-xs font-semibold tabular-nums text-slate-700">
+                  {collectedPct.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="absolute inset-x-0 bottom-0 flex justify-between px-1 text-[10px] font-medium tracking-wide text-slate-400">
         {points.map((point, index) => (
           <span
             key={`${point.label}-${index}`}
             className={
-              points.length > 8 && index % 2 !== 0 ? "hidden sm:inline" : ""
+              points.length > 8 && index % 2 !== 0
+                ? "hidden sm:inline"
+                : ""
             }
           >
             {point.label}
@@ -2700,7 +2929,6 @@ function RevenueChart({
     </div>
   );
 }
-
 /* -------------------------------------------------------------------------- */
 /* Invoice Health                                                             */
 /* -------------------------------------------------------------------------- */
@@ -3073,33 +3301,47 @@ function AlertsCard({
 /* Quick Actions                                                              */
 /* -------------------------------------------------------------------------- */
 
-function QuickActions({ enabledModules }: { enabledModules: Set<string> }) {
+function QuickActions({
+  enabledModules,
+  hasPermission,
+}: {
+  enabledModules: Set<string>;
+  hasPermission: (module: string, action: string) => boolean;
+}) {
   const actions = [
     {
       slug: "customers",
+      permission: "customers",
       label: "Add customer",
       href: "/customers/new",
       icon: <Users className="h-4 w-4" />,
     },
     {
       slug: "estimates",
+      permission: "quotes",
       label: "Create estimate",
       href: "/estimates/new",
       icon: <FileText className="h-4 w-4" />,
     },
     {
       slug: "invoices",
+      permission: "invoices",
       label: "Create invoice",
       href: "/invoices/new",
       icon: <CreditCard className="h-4 w-4" />,
     },
     {
       slug: "sales-orders",
+      permission: "sales_orders",
       label: "New sales order",
-      href: "/sales-orders/new",
+      href: "/sales/new",
       icon: <ShoppingCart className="h-4 w-4" />,
     },
-  ].filter((action) => enabledModules.has(action.slug));
+  ].filter(
+    (action) =>
+      enabledModules.has(action.slug) &&
+      hasPermission(action.permission, "create"),
+  );
 
   return (
     <div className="rounded-3xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.10)]">

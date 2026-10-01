@@ -62,6 +62,15 @@ type Company = {
   currency: string | null;
 };
 
+type FinancialAccount = {
+  id: string;
+  account_code: string;
+  account_name: string;
+  financial_account_type: string | null;
+  currency: string | null;
+  is_active: boolean;
+};
+
 const EXPENSE_TYPES: {
   value: ExpenseType;
   label: string;
@@ -142,6 +151,9 @@ export default function NewExpensePage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [financialAccounts, setFinancialAccounts] =
+    useState<FinancialAccount[]>([]);
+
 
   const [expenseType, setExpenseType] =
     useState<ExpenseType>("operating_expense");
@@ -159,6 +171,9 @@ export default function NewExpensePage() {
 
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("cash");
+
+  const [paymentAccountId, setPaymentAccountId] =
+    useState("");
 
   const [reference, setReference] =
     useState("");
@@ -225,6 +240,10 @@ export default function NewExpensePage() {
     (method) => method.value === paymentMethod
   );
 
+  const selectedPaymentAccount = financialAccounts.find(
+    (account) => account.id === paymentAccountId
+  );
+
   /* ---------------------------------------------------------
      PAGE LOAD
   --------------------------------------------------------- */
@@ -274,6 +293,7 @@ export default function NewExpensePage() {
         companyResult,
         categoryResult,
         employeeResult,
+        financialAccountResult,
       ] = await Promise.all([
         supabase
           .from("companies")
@@ -297,6 +317,16 @@ export default function NewExpensePage() {
           )
           .eq("company_id", companyId)
           .order("first_name"),
+
+        supabase
+          .from("accounting_accounts")
+          .select(
+            "id, account_code, account_name, financial_account_type, currency, is_active"
+          )
+          .eq("company_id", companyId)
+          .eq("is_active", true)
+          .in("financial_account_type", ["cash", "bank", "petty_cash"])
+          .order("account_code"),
       ]);
 
       if (companyResult.error) {
@@ -313,6 +343,14 @@ export default function NewExpensePage() {
 
       setCategories(
         (categoryResult.data || []) as Category[]
+      );
+
+      if (financialAccountResult.error) {
+        throw financialAccountResult.error;
+      }
+
+      setFinancialAccounts(
+        (financialAccountResult.data || []) as FinancialAccount[]
       );
 
       if (
@@ -365,6 +403,18 @@ export default function NewExpensePage() {
       setEmployeeId("");
     }
   }, [expenseType, isEmployeeExpense]);
+
+  useEffect(() => {
+    if (paymentAccountId) {
+      const account = financialAccounts.find(
+        (item) => item.id === paymentAccountId
+      );
+
+      if (!account) {
+        setPaymentAccountId("");
+      }
+    }
+  }, [financialAccounts, paymentAccountId]);
 
   /* ---------------------------------------------------------
      RECEIPT PREVIEW CLEANUP
@@ -885,6 +935,24 @@ export default function NewExpensePage() {
       }
     }
 
+    if (status === "paid" && !paymentAccountId) {
+      return "Please select the account the payment came from.";
+    }
+
+    if (paymentAccountId) {
+      const paymentAccount = financialAccounts.find(
+        (account) => account.id === paymentAccountId
+      );
+
+      if (!paymentAccount) {
+        return "The selected payment account is no longer available.";
+      }
+
+      if (paymentAccount.currency && paymentAccount.currency !== currency) {
+        return `Payment account currency (${paymentAccount.currency}) does not match the expense currency (${currency}).`;
+      }
+    }
+
     if (
       expenseType ===
       "employee_advance"
@@ -1001,6 +1069,8 @@ export default function NewExpensePage() {
             currency,
             payment_method:
               paymentMethod,
+            payment_account_id:
+              paymentAccountId || null,
             reference:
               reference.trim() ||
               null,
@@ -1485,7 +1555,7 @@ export default function NewExpensePage() {
                     </h2>
 
                     <p className="mt-1 text-sm text-slate-500">
-                      Record how the money was paid or will be paid.
+                      Record how the money was paid or will be paid. Select the actual cash or bank account when the expense is paid.
                     </p>
                   </div>
 
@@ -1532,6 +1602,51 @@ export default function NewExpensePage() {
                           )
                         )}
                       </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="payment-account"
+                        className="mb-2 block text-sm font-medium text-slate-700"
+                      >
+                        Payment Account
+                        {status === "paid" && (
+                          <span className="ml-1 text-red-500">
+                            *
+                          </span>
+                        )}
+                      </label>
+
+                      <select
+                        id="payment-account"
+                        value={paymentAccountId}
+                        onChange={(event) =>
+                          setPaymentAccountId(event.target.value)
+                        }
+                        className="h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                      >
+                        <option value="">
+                          {financialAccounts.length > 0
+                            ? "Select cash / bank account"
+                            : "No cash or bank accounts available"}
+                        </option>
+
+                        {financialAccounts.map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.account_code} — {account.account_name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        Choose the company cash or bank account that actually paid this expense.
+                      </p>
+
+                      {financialAccounts.length === 0 && (
+                        <p className="mt-2 text-xs text-amber-600">
+                          Add an active cash or bank account in Accounting before marking an expense as paid.
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -1989,6 +2104,20 @@ export default function NewExpensePage() {
                         {
                           selectedPaymentMethod?.label
                         }
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Payment Account
+                      </div>
+
+                      <div className="mt-1 break-words text-sm font-medium text-slate-800">
+                        {selectedPaymentAccount
+                          ? `${selectedPaymentAccount.account_code} — ${selectedPaymentAccount.account_name}`
+                          : status === "paid"
+                            ? "Not selected"
+                            : "Selected when paid"}
                       </div>
                     </div>
 

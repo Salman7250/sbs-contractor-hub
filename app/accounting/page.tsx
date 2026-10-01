@@ -87,6 +87,36 @@ export default function AccountingPage() {
   const [showNewTransaction, setShowNewTransaction] =
     useState(false);
 
+  const [showAddFinancialAccount, setShowAddFinancialAccount] =
+    useState(false);
+
+  const [showMoneyMovement, setShowMoneyMovement] =
+    useState(false);
+
+  const [moneyMovementForm, setMoneyMovementForm] = useState({
+    type: "transfer",
+    date: new Date().toISOString().slice(0, 10),
+    amount: "",
+    accountId: "",
+    counterAccountId: "",
+    reference: "",
+    description: "",
+  });
+
+  const [savingMoneyMovement, setSavingMoneyMovement] =
+    useState(false);
+
+  const [financialAccountForm, setFinancialAccountForm] = useState({
+    name: "",
+    type: "bank",
+    bankName: "",
+    last4: "",
+    reconciliation: true,
+  });
+
+  const [savingFinancialAccount, setSavingFinancialAccount] =
+    useState(false);
+
   const [activeReport, setActiveReport] =
     useState<"trial_balance" | "profit_loss" | "balance_sheet" | "general_ledger" | null>(null);
 
@@ -318,9 +348,12 @@ export default function AccountingPage() {
         const entryLines =
           linesByEntry[entry.id] || [];
 
+        // A journal entry is double-entry: the same transaction amount
+        // appears once on the debit side and once on the credit side.
+        // Use the total debit amount as the transaction amount so a
+        // AED 7 expense is displayed as AED 7, not AED 14.
         const amount = entryLines.reduce(
-          (sum, line) =>
-            sum + Math.max(line.debit, line.credit),
+          (sum, line) => sum + line.debit,
           0
         );
 
@@ -441,14 +474,17 @@ export default function AccountingPage() {
       (account) =>
         account.is_active &&
         account.account_type === "asset" &&
-        (
-          /cash|bank|paypal|stripe|wallet/i.test(
-            account.account_name
-          ) ||
-          account.financial_account_type
-        )
+        Boolean(account.financial_account_type)
     );
   }, [accounts]);
+
+  const cashBankAccounts = useMemo(() => {
+    return cashAccounts.filter((account) =>
+      ["cash", "petty_cash", "bank", "digital_wallet", "card", "wallet"].includes(
+        account.financial_account_type || ""
+      )
+    );
+  }, [cashAccounts]);
 
   const totalCash = useMemo(() => {
     return cashAccounts.reduce(
@@ -611,6 +647,293 @@ export default function AccountingPage() {
     setShowNewTransaction(false);
   }
 
+  function resetFinancialAccountForm() {
+    setFinancialAccountForm({
+      name: "",
+      type: "bank",
+      bankName: "",
+      last4: "",
+      reconciliation: true,
+    });
+  }
+
+  async function createFinancialAccount() {
+    setError("");
+
+    const name = financialAccountForm.name.trim();
+    const bankName = financialAccountForm.bankName.trim();
+    const last4 = financialAccountForm.last4.replace(/\D/g, "").slice(-4);
+
+    if (!companyId) {
+      setError("Company could not be identified.");
+      return;
+    }
+
+    if (!name) {
+      setError("Account name is required.");
+      return;
+    }
+
+    if (financialAccountForm.type === "bank" && !bankName) {
+      setError("Bank name is required for a bank account.");
+      return;
+    }
+
+    setSavingFinancialAccount(true);
+
+    try {
+      const { data: codeRows, error: codeError } = await supabase
+        .from("accounting_accounts")
+        .select("account_code")
+        .eq("company_id", companyId);
+
+      if (codeError) {
+        throw codeError;
+      }
+
+      const usedCodes = new Set(
+        (codeRows || []).map((row) => String(row.account_code))
+      );
+
+      let nextCode = 1040;
+      while (usedCodes.has(String(nextCode)) && nextCode < 1100) {
+        nextCode += 10;
+      }
+
+      if (nextCode >= 1100) {
+        throw new Error("No available financial account code is available.");
+      }
+
+      const { error: insertError } = await supabase
+        .from("accounting_accounts")
+        .insert({
+          company_id: companyId,
+          account_code: String(nextCode),
+          account_name: name,
+          account_type: "asset",
+          normal_balance: "debit",
+          is_system: false,
+          is_active: true,
+          financial_account_type: financialAccountForm.type,
+          currency: currency || "USD",
+          bank_name: financialAccountForm.type === "bank" ? bankName : null,
+          account_last4: last4 || null,
+          is_reconciliation_account: financialAccountForm.reconciliation,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      setShowAddFinancialAccount(false);
+      resetFinancialAccountForm();
+      await loadAccounting(true);
+    } catch (err: unknown) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to create financial account."
+      );
+    } finally {
+      setSavingFinancialAccount(false);
+    }
+  }
+
+  function resetMoneyMovementForm() {
+    setMoneyMovementForm({
+      type: "transfer",
+      date: new Date().toISOString().slice(0, 10),
+      amount: "",
+      accountId: "",
+      counterAccountId: "",
+      reference: "",
+      description: "",
+    });
+  }
+
+  function openMoneyMovement() {
+    resetMoneyMovementForm();
+    setShowMoneyMovement(true);
+  }
+
+  function closeMoneyMovement() {
+    if (!savingMoneyMovement) {
+      setShowMoneyMovement(false);
+    }
+  }
+
+  async function createMoneyMovement() {
+    setError("");
+
+    const amount = Number(moneyMovementForm.amount);
+    const type = moneyMovementForm.type;
+
+    if (!companyId) {
+      setError("Company could not be identified.");
+      return;
+    }
+
+    if (!moneyMovementForm.date) {
+      setError("Transaction date is required.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter a valid amount greater than zero.");
+      return;
+    }
+
+    if (!moneyMovementForm.accountId) {
+      setError("Select the cash or bank account.");
+      return;
+    }
+
+    const isOwnerMovement =
+      type === "owner_investment" || type === "owner_withdrawal";
+
+    if (!isOwnerMovement && !moneyMovementForm.counterAccountId) {
+      setError("Select the other account.");
+      return;
+    }
+
+    if (
+      !isOwnerMovement &&
+      moneyMovementForm.accountId === moneyMovementForm.counterAccountId
+    ) {
+      setError("The two accounts must be different.");
+      return;
+    }
+
+    const cashAccount = accountsById.get(moneyMovementForm.accountId);
+    const counterAccount = moneyMovementForm.counterAccountId
+      ? accountsById.get(moneyMovementForm.counterAccountId)
+      : null;
+
+    if (!cashAccount || (!isOwnerMovement && !counterAccount)) {
+      setError("Selected account could not be found.");
+      return;
+    }
+
+    if (!cashAccount.financial_account_type) {
+      setError("The selected account is not configured as a cash or bank account.");
+      return;
+    }
+
+    const cashLikeTypes = [
+      "cash",
+      "petty_cash",
+      "digital_wallet",
+      "card",
+      "wallet",
+    ];
+
+    if (type === "bank_deposit") {
+      if (cashAccount.financial_account_type === "bank") {
+        setError("For a bank deposit, select the bank account as the destination and a cash account as the other account.");
+        return;
+      }
+      if (counterAccount?.financial_account_type !== "bank") {
+        setError("The other account must be a bank account for a bank deposit.");
+        return;
+      }
+    }
+
+    if (type === "bank_withdrawal") {
+      if (cashAccount.financial_account_type !== "bank") {
+        setError("For a bank withdrawal, select the bank account first.");
+        return;
+      }
+      if (!counterAccount?.financial_account_type || !cashLikeTypes.includes(counterAccount.financial_account_type)) {
+        setError("The other account must be a cash, petty cash or payment account for a bank withdrawal.");
+        return;
+      }
+    }
+
+    if (type === "transfer" && (!counterAccount?.is_active || !counterAccount.financial_account_type)) {
+      setError("The other account must be an active financial account for a transfer.");
+      return;
+    }
+
+    setSavingMoneyMovement(true);
+
+    try {
+      let transactionType = type;
+      let fromAccountId = moneyMovementForm.counterAccountId;
+      let toAccountId = moneyMovementForm.accountId;
+
+      if (type === "transfer" || type === "bank_deposit") {
+        fromAccountId = moneyMovementForm.counterAccountId;
+        toAccountId = moneyMovementForm.accountId;
+      } else if (type === "bank_withdrawal") {
+        fromAccountId = moneyMovementForm.accountId;
+        toAccountId = moneyMovementForm.counterAccountId;
+      } else if (type === "cash_received") {
+        fromAccountId = moneyMovementForm.counterAccountId;
+        toAccountId = moneyMovementForm.accountId;
+      } else if (type === "cash_given") {
+        fromAccountId = moneyMovementForm.accountId;
+        toAccountId = moneyMovementForm.counterAccountId;
+      }
+
+      if (type === "owner_investment" || type === "owner_withdrawal") {
+        const { error: rpcError } = await supabase.rpc(
+          "post_owner_equity_transaction",
+          {
+            p_company_id: companyId,
+            p_transaction_type: type,
+            p_cash_account_id: moneyMovementForm.accountId,
+            p_amount: amount,
+            p_currency: currency || "USD",
+            p_transaction_date: moneyMovementForm.date,
+            p_reference: moneyMovementForm.reference.trim() || null,
+            p_description:
+              moneyMovementForm.description.trim() ||
+              (type === "owner_investment"
+                ? "Owner investment"
+                : "Owner withdrawal"),
+            p_employee_id: null,
+          }
+        );
+
+        if (rpcError) throw rpcError;
+      } else {
+        const { error: rpcError } = await supabase.rpc(
+          "post_finance_transaction",
+          {
+            p_company_id: companyId,
+            p_transaction_type: transactionType,
+            p_from_account_id: fromAccountId,
+            p_to_account_id: toAccountId,
+            p_amount: amount,
+            p_currency: currency || "USD",
+            p_transaction_date: moneyMovementForm.date,
+            p_reference: moneyMovementForm.reference.trim() || null,
+            p_description:
+              moneyMovementForm.description.trim() ||
+              getMoneyMovementLabel(type),
+            p_employee_id: null,
+          }
+        );
+
+        if (rpcError) throw rpcError;
+      }
+
+      setShowMoneyMovement(false);
+      resetMoneyMovementForm();
+      await loadAccounting(true);
+    } catch (err: unknown) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to post the finance transaction."
+      );
+    } finally {
+      setSavingMoneyMovement(false);
+    }
+  }
+
   async function createTransaction() {
     setError("");
 
@@ -771,6 +1094,14 @@ export default function AccountingPage() {
 
           <button
             type="button"
+            className="secondary-button"
+            onClick={openMoneyMovement}
+          >
+            Money Movement
+          </button>
+
+          <button
+            type="button"
             className="primary-button"
             onClick={openNewTransaction}
           >
@@ -863,6 +1194,90 @@ export default function AccountingPage() {
                 icon="−"
               />
             </div>
+
+            <section className="cash-bank-card card">
+              <CardHeader
+                title="Cash & Bank"
+                description="Live balances across company cash, bank and payment accounts"
+                action={
+                  <div className="card-actions">
+                    <button
+                      type="button"
+                      className="secondary-button small"
+                      onClick={openMoneyMovement}
+                    >
+                      Move Money
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button small"
+                      onClick={() => {
+                        resetFinancialAccountForm();
+                        setShowAddFinancialAccount(true);
+                      }}
+                    >
+                      + Add Account
+                    </button>
+                  </div>
+                }
+              />
+
+              {cashBankAccounts.length === 0 ? (
+                <div className="empty cash-empty">
+                  No cash or bank accounts configured yet.
+                </div>
+              ) : (
+                <div className="cash-bank-grid">
+                  {cashBankAccounts.map((account) => {
+                    const balance = getBalance(account);
+                    const typeLabel =
+                      account.financial_account_type === "petty_cash"
+                        ? "Petty Cash"
+                        : account.financial_account_type === "digital_wallet"
+                          ? "Digital Wallet"
+                          : account.financial_account_type === "card"
+                            ? "Card"
+                            : account.financial_account_type === "bank"
+                              ? "Bank"
+                              : "Cash";
+
+                    return (
+                      <div className="cash-account-card" key={account.id}>
+                        <div className="cash-account-top">
+                          <div className="cash-account-icon">
+                            {account.financial_account_type === "bank" ? "B" : "$"}
+                          </div>
+                          <div className="cash-account-heading">
+                            <strong>{account.account_name}</strong>
+                            <span>
+                              {typeLabel}
+                              {account.bank_name
+                                ? ` · ${account.bank_name}`
+                                : ""}
+                              {account.account_last4
+                                ? ` ·•••• ${account.account_last4}`
+                                : ""}
+                            </span>
+                          </div>
+                          {account.is_reconciliation_account && (
+                            <span className="reconciliation-badge">
+                              Reconcile
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="cash-account-bottom">
+                          <span>Available balance</span>
+                          <strong className={balance < 0 ? "negative" : ""}>
+                            {money(balance)}
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <div className="two-column">
               <section className="card">
@@ -1375,6 +1790,356 @@ export default function AccountingPage() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {showMoneyMovement && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeMoneyMovement();
+              }
+            }}
+          >
+            <div className="modal create-modal money-movement-modal">
+              <div className="modal-header">
+                <div>
+                  <span className="modal-kicker">
+                    CASH & BANK
+                  </span>
+                  <h2>Move Money</h2>
+                  <p>
+                    Record transfers, deposits, withdrawals and owner money movements with the correct double-entry automatically.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="close"
+                  onClick={closeMoneyMovement}
+                  disabled={savingMoneyMovement}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="movement-type-grid">
+                  {[
+                    ["transfer", "Transfer"],
+                    ["bank_deposit", "Bank Deposit"],
+                    ["bank_withdrawal", "Bank Withdrawal"],
+                    ["cash_received", "Cash Received"],
+                    ["cash_given", "Cash Given"],
+                    ["owner_investment", "Owner Investment"],
+                    ["owner_withdrawal", "Owner Withdrawal"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={
+                        moneyMovementForm.type === value
+                          ? "movement-type active"
+                          : "movement-type"
+                      }
+                      onClick={() =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          type: value,
+                          accountId: "",
+                          counterAccountId: "",
+                        }))
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="form-grid">
+                  <div className="field">
+                    <label>Date</label>
+                    <input
+                      type="date"
+                      value={moneyMovementForm.date}
+                      onChange={(event) =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          date: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Amount</label>
+                    <div className="amount-input">
+                      <span>{currency}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={moneyMovementForm.amount}
+                        onChange={(event) =>
+                          setMoneyMovementForm((current) => ({
+                            ...current,
+                            amount: event.target.value,
+                          }))
+                        }
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>Cash / Bank Account</label>
+                    <select
+                      value={moneyMovementForm.accountId}
+                      onChange={(event) =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          accountId: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select cash or bank account</option>
+                      {cashBankAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.account_code} — {account.account_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label>
+                      {moneyMovementForm.type === "owner_investment" || moneyMovementForm.type === "owner_withdrawal"
+                        ? "Owner Equity Account"
+                        : "Other Account"}
+                    </label>
+                    <select
+                      value={moneyMovementForm.counterAccountId}
+                      onChange={(event) =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          counterAccountId: event.target.value,
+                        }))
+                      }
+                      disabled={
+                        moneyMovementForm.type === "owner_investment" ||
+                        moneyMovementForm.type === "owner_withdrawal"
+                      }
+                    >
+                      <option value="">
+                        {moneyMovementForm.type === "owner_investment" || moneyMovementForm.type === "owner_withdrawal"
+                          ? "Handled automatically"
+                          : "Select account"}
+                      </option>
+                      {accounts
+                        .filter((account) =>
+                          account.is_active &&
+                          account.id !== moneyMovementForm.accountId
+                        )
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.account_code} — {account.account_name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label>Reference <span className="optional">Optional</span></label>
+                    <input
+                      value={moneyMovementForm.reference}
+                      onChange={(event) =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          reference: event.target.value,
+                        }))
+                      }
+                      placeholder="Receipt, bank reference, etc."
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Description <span className="optional">Optional</span></label>
+                    <input
+                      value={moneyMovementForm.description}
+                      onChange={(event) =>
+                        setMoneyMovementForm((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder={getMoneyMovementLabel(moneyMovementForm.type)}
+                    />
+                  </div>
+                </div>
+
+                <div className="movement-note">
+                  {getMoneyMovementHelp(moneyMovementForm.type)}
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={closeMoneyMovement}
+                  disabled={savingMoneyMovement}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void createMoneyMovement()}
+                  disabled={savingMoneyMovement}
+                >
+                  {savingMoneyMovement ? "Posting..." : "Post Transaction"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showAddFinancialAccount && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setShowAddFinancialAccount(false);
+              }
+            }}
+          >
+            <div className="modal financial-account-modal">
+              <div className="modal-header">
+                <div>
+                  <span className="modal-kicker">
+                    CASH & BANK
+                  </span>
+                  <h2>Add Financial Account</h2>
+                  <p>
+                    Add a cash, bank or payment account to track its live ledger balance.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="close"
+                  onClick={() => setShowAddFinancialAccount(false)}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="form-grid">
+                  <div className="field full">
+                    <label>Account Name</label>
+                    <input
+                      value={financialAccountForm.name}
+                      onChange={(event) =>
+                        setFinancialAccountForm((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Emirates NBD Business Account"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label>Account Type</label>
+                    <select
+                      value={financialAccountForm.type}
+                      onChange={(event) =>
+                        setFinancialAccountForm((current) => ({
+                          ...current,
+                          type: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="bank">Bank Account</option>
+                      <option value="cash">Cash</option>
+                      <option value="petty_cash">Petty Cash</option>
+                      <option value="digital_wallet">Digital Wallet</option>
+                      <option value="card">Card</option>
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label>Currency</label>
+                    <input value={currency || "USD"} readOnly />
+                  </div>
+
+                  {financialAccountForm.type === "bank" && (
+                    <div className="field">
+                      <label>Bank Name</label>
+                      <input
+                        value={financialAccountForm.bankName}
+                        onChange={(event) =>
+                          setFinancialAccountForm((current) => ({
+                            ...current,
+                            bankName: event.target.value,
+                          }))
+                        }
+                        placeholder="e.g. Emirates NBD"
+                      />
+                    </div>
+                  )}
+
+                  <div className="field">
+                    <label>Last 4 Digits <span className="optional">Optional</span></label>
+                    <input
+                      value={financialAccountForm.last4}
+                      maxLength={4}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        setFinancialAccountForm((current) => ({
+                          ...current,
+                          last4: event.target.value.replace(/\D/g, "").slice(0, 4),
+                        }))
+                      }
+                      placeholder="1234"
+                    />
+                  </div>
+
+                  <label className="checkbox-field full">
+                    <input
+                      type="checkbox"
+                      checked={financialAccountForm.reconciliation}
+                      onChange={(event) =>
+                        setFinancialAccountForm((current) => ({
+                          ...current,
+                          reconciliation: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Mark this account for reconciliation</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setShowAddFinancialAccount(false)}
+                  disabled={savingFinancialAccount}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void createFinancialAccount()}
+                  disabled={savingFinancialAccount}
+                >
+                  {savingFinancialAccount ? "Adding..." : "Add Account"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2041,6 +2806,133 @@ export default function AccountingPage() {
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
         }
 
+        .cash-bank-card {
+          max-width: 1400px;
+          margin: 0 auto 15px;
+        }
+
+        .cash-bank-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .cash-account-card {
+          min-width: 0;
+          padding: 16px 18px;
+          border-right: 1px solid #eef2f7;
+          border-bottom: 1px solid #eef2f7;
+        }
+
+        .cash-account-card:nth-child(3n) {
+          border-right: 0;
+        }
+
+        .cash-account-top {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .cash-account-icon {
+          width: 34px;
+          height: 34px;
+          flex: 0 0 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9px;
+          background: #ecfdf5;
+          color: #047857;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .cash-account-heading {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .cash-account-heading strong {
+          display: block;
+          overflow: hidden;
+          color: #1e293b;
+          font-size: 11px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .cash-account-heading span {
+          display: block;
+          margin-top: 4px;
+          overflow: hidden;
+          color: #94a3b8;
+          font-size: 8px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .reconciliation-badge {
+          flex: 0 0 auto;
+          padding: 4px 6px;
+          border-radius: 5px;
+          background: #f0fdf4;
+          color: #15803d;
+          font-size: 7px;
+          font-weight: 800;
+        }
+
+        .cash-account-bottom {
+          margin-top: 17px;
+          padding-top: 11px;
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 10px;
+          border-top: 1px solid #f1f5f9;
+        }
+
+        .cash-account-bottom span {
+          color: #94a3b8;
+          font-size: 8px;
+        }
+
+        .cash-account-bottom strong {
+          color: #0f172a;
+          font-size: 14px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .cash-empty {
+          min-height: 130px;
+        }
+
+        .optional {
+          color: #94a3b8;
+          font-size: 8px;
+          font-weight: 500;
+        }
+
+        .checkbox-field {
+          min-height: 39px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #475569;
+          font-size: 10px;
+          cursor: pointer;
+        }
+
+        .checkbox-field input {
+          width: 15px;
+          height: 15px;
+          accent-color: #059669;
+        }
+
+        .financial-account-modal {
+          width: min(620px, 100%);
+        }
+
         .card-header {
           min-height: 67px;
           padding: 14px 18px;
@@ -2075,6 +2967,26 @@ export default function AccountingPage() {
           width: 100%;
         }
 
+        .transaction-header {
+          min-height: 38px;
+          padding: 0 18px;
+          display: grid;
+          grid-template-columns: 110px minmax(0, 1fr) 125px 90px;
+          align-items: center;
+          gap: 14px;
+          border-top: 1px solid #f1f5f9;
+          border-bottom: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #64748b;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+        }
+
+        .transaction-header-amount {
+          text-align: right;
+        }
+
         .transaction-row {
           min-height: 67px;
           padding: 11px 18px;
@@ -2095,9 +3007,12 @@ export default function AccountingPage() {
         }
 
         .entry-number {
+          min-width: 0;
           color: #475569;
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 800;
+          line-height: 1.35;
+          overflow-wrap: anywhere;
         }
 
         .transaction-main {
@@ -2781,6 +3696,68 @@ export default function AccountingPage() {
           border-top: 1px solid #e5e7eb;
         }
 
+        .card-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .movement-type-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
+          margin-bottom: 18px;
+        }
+
+        .movement-type {
+          min-height: 42px;
+          padding: 8px 10px;
+          border: 1px solid #dbe1e8;
+          border-radius: 9px;
+          background: #fff;
+          color: #475569;
+          cursor: pointer;
+          font-size: 9px;
+          font-weight: 700;
+          transition: 0.15s ease;
+        }
+
+        .movement-type:hover {
+          border-color: #a7f3d0;
+          background: #f0fdf4;
+          color: #047857;
+        }
+
+        .movement-type.active {
+          border-color: #10b981;
+          background: #ecfdf5;
+          color: #047857;
+          box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.08);
+        }
+
+        .movement-note {
+          margin-top: 16px;
+          padding: 11px 13px;
+          border: 1px solid #d1fae5;
+          border-radius: 9px;
+          background: #f0fdf4;
+          color: #047857;
+          font-size: 9px;
+          line-height: 1.5;
+        }
+
+        .money-movement-modal {
+          width: min(760px, 100%);
+        }
+
+        .field select:disabled {
+          background: #f8fafc;
+          color: #94a3b8;
+          cursor: not-allowed;
+        }
+
         @media (max-width: 700px) {
           .report-summary,
           .balance-columns {
@@ -2803,6 +3780,18 @@ export default function AccountingPage() {
         }
 
         @media (max-width: 900px) {
+          .cash-bank-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .cash-account-card:nth-child(3n) {
+            border-right: 1px solid #eef2f7;
+          }
+
+          .cash-account-card:nth-child(2n) {
+            border-right: 0;
+          }
+
           .two-column {
             grid-template-columns: 1fr;
           }
@@ -2817,6 +3806,25 @@ export default function AccountingPage() {
         }
 
         @media (max-width: 700px) {
+          .top-actions {
+            width: 100%;
+            flex-wrap: wrap;
+          }
+
+          .top-actions button {
+            flex: 1 1 auto;
+          }
+
+          .cash-bank-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .cash-account-card,
+          .cash-account-card:nth-child(2n),
+          .cash-account-card:nth-child(3n) {
+            border-right: 0;
+          }
+
           .page {
             padding: 15px;
           }
@@ -2842,14 +3850,36 @@ export default function AccountingPage() {
             grid-template-columns: 1fr;
           }
 
-          .transaction-row {
-            grid-template-columns: 1fr auto;
-            gap: 7px;
+          .transaction-header {
+            display: none;
           }
 
-          .transaction-amount,
-          .transaction-status {
-            grid-row: 1 / 3;
+          .transaction-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas:
+              "number amount"
+              "main main";
+            gap: 7px 12px;
+            padding: 13px 14px;
+          }
+
+          .entry-number {
+            grid-area: number;
+          }
+
+          .transaction-main {
+            grid-area: main;
+          }
+
+          .transaction-main strong {
+            white-space: normal;
+            line-height: 1.4;
+          }
+
+          .transaction-amount {
+            grid-area: amount;
+            align-self: start;
+            padding-top: 1px;
           }
 
           .transaction-status {
@@ -2872,6 +3902,19 @@ export default function AccountingPage() {
             grid-template-columns: 1fr;
           }
 
+          .movement-type-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .card-actions {
+            width: 100%;
+            justify-content: stretch;
+          }
+
+          .card-actions button {
+            flex: 1;
+          }
+
           .field.full {
             grid-column: auto;
           }
@@ -2892,6 +3935,44 @@ export default function AccountingPage() {
       `}</style>
     </AppShell>
   );
+}
+
+function getMoneyMovementLabel(type: string) {
+  switch (type) {
+    case "bank_deposit":
+      return "Bank deposit";
+    case "bank_withdrawal":
+      return "Bank withdrawal";
+    case "cash_received":
+      return "Cash received";
+    case "cash_given":
+      return "Cash given";
+    case "owner_investment":
+      return "Owner investment";
+    case "owner_withdrawal":
+      return "Owner withdrawal";
+    default:
+      return "Transfer";
+  }
+}
+
+function getMoneyMovementHelp(type: string) {
+  switch (type) {
+    case "bank_deposit":
+      return "Move money from a cash account into a bank account. Both accounts remain separate in the ledger.";
+    case "bank_withdrawal":
+      return "Move money from a bank account back into cash or another selected account.";
+    case "cash_received":
+      return "Debit the selected cash/bank account and credit the other account.";
+    case "cash_given":
+      return "Credit the selected cash/bank account and debit the other account.";
+    case "owner_investment":
+      return "Debit the selected cash/bank account and credit Owner Equity automatically.";
+    case "owner_withdrawal":
+      return "Debit Owner Drawings and credit the selected cash/bank account automatically.";
+    default:
+      return "Transfer money between two company accounts without changing profit or loss.";
+  }
 }
 
 function SummaryCard({
@@ -2964,6 +4045,7 @@ function TransactionList({
   rows,
   money,
   onSelect,
+  detailed = false,
 }: {
   rows: TransactionRow[];
   currency: string;
@@ -2980,7 +4062,15 @@ function TransactionList({
   }
 
   return (
-    <div className="transaction-list">
+    <div className={detailed ? "transaction-list detailed" : "transaction-list"}>
+      {detailed && (
+        <div className="transaction-header" aria-hidden="true">
+          <div>ENTRY</div>
+          <div>DESCRIPTION</div>
+          <div className="transaction-header-amount">AMOUNT</div>
+          <div>STATUS</div>
+        </div>
+      )}
       {rows.map((entry) => (
         <div
           className="transaction-row"
