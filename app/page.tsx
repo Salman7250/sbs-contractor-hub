@@ -3313,14 +3313,14 @@ function QuickActions({
       slug: "customers",
       permission: "customers",
       label: "Add customer",
-      href: "/customers/new",
+      href: "/customers",
       icon: <Users className="h-4 w-4" />,
     },
     {
       slug: "estimates",
       permission: "quotes",
       label: "Create estimate",
-      href: "/estimates/new",
+      href: "/estimates",
       icon: <FileText className="h-4 w-4" />,
     },
     {
