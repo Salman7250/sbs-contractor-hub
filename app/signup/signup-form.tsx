@@ -687,11 +687,11 @@ export default function SignupForm() {
       {/* Terms */}
       <p className={styles.termsText}>
         By creating an account, you agree to our{" "}
-        <Link href="/terms">
+        <Link href="https://www.sharifbusinesssolutions.com/terms">
           Terms
         </Link>{" "}
         and{" "}
-        <Link href="/privacy">
+        <Link href="https://www.sharifbusinesssolutions.com/privacy">
           Privacy Policy
         </Link>
         .

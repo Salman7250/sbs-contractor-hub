@@ -292,11 +292,11 @@ export default function SignupPage() {
         </span>
 
         <div className={styles.footerLinks}>
-          <Link href="/">Website</Link>
+          <Link href="https://www.sharifbusinesssolutions.com">Website</Link>
           <span>•</span>
-          <Link href="/privacy">Privacy</Link>
+          <Link href="https://www.sharifbusinesssolutions.com/privacy">Privacy</Link>
           <span>•</span>
-          <Link href="/terms">Terms</Link>
+          <Link href="https://www.sharifbusinesssolutions.com/terms">Terms</Link>
         </div>
       </footer>
     </main>
