@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { User } from "lucide-react";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -39,6 +40,8 @@ type Employee = {
   created_at: string;
   updated_at: string;
   employee_roles: EmployeeRole[] | null;
+  profile_full_name: string | null;
+  avatar_url: string | null;
   manager: {
     id: string;
     display_name: string | null;
@@ -381,6 +384,38 @@ export default function EmployeeDetailPage() {
 
         /*
          * =====================================================
+         * Current Profile
+         * =====================================================
+         *
+         * The employee record contains the original HR name.
+         * The profile contains the employee's current SBS name
+         * and profile photo, so the detail header stays in sync
+         * with the employee's own account.
+         */
+
+        let profileFullName: string | null = null;
+        let avatarUrl: string | null = null;
+
+        if (employeeData.user_id) {
+          const {
+            data: profileData,
+            error: profileError,
+          } = await supabase
+            .from("profiles")
+            .select("full_name, avatar_url")
+            .eq("id", employeeData.user_id)
+            .maybeSingle();
+
+          if (profileError) {
+            throw new Error(profileError.message);
+          }
+
+          profileFullName = profileData?.full_name || null;
+          avatarUrl = profileData?.avatar_url || null;
+        }
+
+        /*
+         * =====================================================
          * Manager
          * =====================================================
          */
@@ -513,6 +548,8 @@ export default function EmployeeDetailPage() {
           employee_roles:
             employeeData.employee_roles ||
             [],
+          profile_full_name: profileFullName,
+          avatar_url: avatarUrl,
           manager: managerData,
         });
 
@@ -732,6 +769,7 @@ export default function EmployeeDetailPage() {
     );
 
   const employeeName =
+    employee.profile_full_name?.trim() ||
     employee.display_name ||
     `${employee.first_name} ${employee.last_name}`.trim();
 
@@ -791,9 +829,18 @@ export default function EmployeeDetailPage() {
 
             <div className="employee-heading">
               <div className="large-avatar">
-                {getInitials(
-                  employee.first_name,
-                  employee.last_name
+                {employee.avatar_url ? (
+                  <img
+                    src={employee.avatar_url}
+                    alt={employeeName || "Employee"}
+                    className="large-avatar-image"
+                  />
+                ) : (
+                  <User
+                    size={24}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
                 )}
               </div>
 
@@ -1474,9 +1521,17 @@ export default function EmployeeDetailPage() {
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
             font-size: 16px;
             font-weight: 700;
             flex: 0 0 56px;
+          }
+
+          .large-avatar-image {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
           }
 
           .title-row {
