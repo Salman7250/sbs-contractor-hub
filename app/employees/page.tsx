@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { User } from "lucide-react";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -38,6 +39,8 @@ type Employee = {
   created_at: string;
   updated_at: string;
   employee_roles: EmployeeRole[] | null;
+  avatar_url: string | null;
+  profile_full_name: string | null;
 };
 
 type Company = {
@@ -83,6 +86,7 @@ function formatDate(value: string | null) {
 
 function getEmployeeName(employee: Employee) {
   return (
+    employee.profile_full_name?.trim() ||
     employee.display_name ||
     `${employee.first_name} ${employee.last_name}`.trim() ||
     "Unnamed Employee"
@@ -247,15 +251,57 @@ export default function EmployeesPage() {
          * into the Employee type instead of using
          * "as unknown as Employee[]".
          */
-        const normalizedEmployees: Employee[] = (
-          employeeData || []
-        ).map((employee) => ({
-          ...employee,
-          employee_roles:
-            employee.employee_roles || [],
-        }));
+        const normalizedEmployees = (employeeData || []).map(
+          (employee) => ({
+            ...employee,
+            employee_roles:
+              employee.employee_roles || [],
+          }),
+        );
 
-        setEmployees(normalizedEmployees);
+        const employeeUserIds = normalizedEmployees
+          .map((employee) => employee.user_id)
+          .filter((userId): userId is string => Boolean(userId));
+
+        let avatarMap = new Map<
+          string,
+          { avatar_url: string | null; full_name: string | null }
+        >();
+
+        if (employeeUserIds.length > 0) {
+          const { data: profileData, error: profileError } =
+            await supabase
+              .from("profiles")
+              .select("id, full_name, avatar_url")
+              .in("id", employeeUserIds);
+
+          if (profileError) {
+            throw new Error(profileError.message);
+          }
+
+          avatarMap = new Map(
+            (profileData || []).map((profile) => [
+              profile.id,
+              {
+                avatar_url: profile.avatar_url,
+                full_name: profile.full_name,
+              },
+            ]),
+          );
+        }
+
+        const employeesWithAvatars: Employee[] =
+          normalizedEmployees.map((employee) => ({
+            ...employee,
+            avatar_url: employee.user_id
+              ? avatarMap.get(employee.user_id)?.avatar_url || null
+              : null,
+            profile_full_name: employee.user_id
+              ? avatarMap.get(employee.user_id)?.full_name || null
+              : null,
+          }));
+
+        setEmployees(employeesWithAvatars);
       } catch (error) {
         setErrorMessage(
           error instanceof Error
@@ -749,8 +795,18 @@ export default function EmployeesPage() {
                           <td>
                             <div className="employee-cell">
                               <div className="avatar">
-                                {getInitials(
-                                  employee
+                                {employee.avatar_url ? (
+                                  <img
+                                    src={employee.avatar_url}
+                                    alt={employeeName}
+                                    className="avatar-image"
+                                  />
+                                ) : (
+                                  <User
+                                    size={19}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                  />
                                 )}
                               </div>
 
@@ -1171,6 +1227,10 @@ export default function EmployeesPage() {
   .search-box {
     position: relative;
     min-width: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .search-box input,
@@ -1299,12 +1359,20 @@ export default function EmployeesPage() {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     border: 1px solid #d1fae5;
     border-radius: 10px;
     background: #ecfdf5;
     color: #047857;
     font-size: 11px;
     font-weight: 800;
+  }
+
+  .avatar-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
   }
 
   .employee-info {

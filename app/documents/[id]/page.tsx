@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useParams, useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import AppShell from "@/app/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 
@@ -181,6 +182,1108 @@ function isPreviewable(mimeType: string | null) {
     mimeType.startsWith("image/")
   );
 }
+
+
+type ReportMetadata = {
+  report_type: string;
+  description: string | null;
+  related_warehouse_id: string | null;
+  related_purchase_order_id: string | null;
+  related_customer_id: string | null;
+  tags: string[];
+  row_count: number;
+};
+
+type ReportLookup = {
+  warehouse_name?: string | null;
+  purchase_order_number?: string | null;
+  customer_name?: string | null;
+};
+
+type SheetData = {
+  name: string;
+  rows: unknown[][];
+};
+
+function reportTypeLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    inventory_list: "Inventory List",
+    pallet_list: "Pallet List",
+    asset_list: "Asset List",
+    stock_count: "Stock Count",
+    purchase_list: "Purchase List",
+    sales_list: "Sales List",
+    employee_list: "Employee List",
+    customer_list: "Customer List",
+    general: "General Report",
+  };
+  return labels[value || ""] || (value || "Report").replace(/_/g, " ");
+}
+
+function cellText(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toLocaleString();
+  return String(value);
+}
+
+function isSpreadsheet(document: DocumentRecord | null) {
+  if (!document) return false;
+  const name = (document.file_name || "").toLowerCase();
+  const mime = (document.mime_type || "").toLowerCase();
+  return (
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xls") ||
+    name.endsWith(".csv") ||
+    mime.includes("spreadsheet") ||
+    mime.includes("excel") ||
+    mime.includes("csv")
+  );
+}
+
+function ReportViewer({
+  document,
+  supabase,
+  onDownload,
+  onBack,
+}: {
+  document: DocumentRecord;
+  supabase: ReturnType<typeof createClient>;
+  onDownload: (
+    storagePath: string | null,
+    fileName: string | null
+  ) => Promise<void>;
+  onBack: () => void;
+}) {
+  const [sheets, setSheets] = useState<SheetData[]>([]);
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [search, setSearch] = useState("");
+  const [sortColumn, setSortColumn] = useState<number | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showInfo, setShowInfo] = useState(false);
+  const [metadata, setMetadata] = useState<ReportMetadata | null>(null);
+  const [lookup, setLookup] = useState<ReportLookup>({});
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const loadReport = useCallback(async () => {
+    if (!document.storage_path) {
+      setError("This report does not have an uploaded file.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const [{ data: signed, error: signedError }, { data: meta, error: metaError }] =
+        await Promise.all([
+          supabase.storage
+            .from("documents")
+            .createSignedUrl(document.storage_path, 300),
+          supabase
+            .from("document_report_metadata")
+            .select(
+              "report_type,description,related_warehouse_id,related_purchase_order_id,related_customer_id,tags,row_count"
+            )
+            .eq("document_id", document.id)
+            .maybeSingle(),
+        ]);
+
+      if (signedError) throw signedError;
+      if (!signed?.signedUrl) throw new Error("Unable to generate secure report URL.");
+
+      if (metaError) throw metaError;
+
+      const response = await fetch(signed.signedUrl);
+      if (!response.ok) {
+        throw new Error(`Unable to read the report file (${response.status}).`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      const workbook = XLSX.read(buffer, {
+        type: "array",
+        cellDates: true,
+      });
+
+      const loadedSheets: SheetData[] = workbook.SheetNames.map((name) => ({
+        name,
+        rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+          header: 1,
+          defval: "",
+          raw: true,
+        }) as unknown[][],
+      }));
+
+      setSheets(loadedSheets);
+      setMetadata((meta || null) as ReportMetadata | null);
+
+      if (meta?.related_warehouse_id || meta?.related_purchase_order_id || meta?.related_customer_id) {
+        const [warehouseResult, poResult, customerResult] = await Promise.all([
+          meta.related_warehouse_id
+            ? supabase.from("warehouses").select("id,name").eq("id", meta.related_warehouse_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          meta.related_purchase_order_id
+            ? supabase.from("purchase_orders").select("id,po_number").eq("id", meta.related_purchase_order_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          meta.related_customer_id
+            ? supabase.from("customers").select("id,name").eq("id", meta.related_customer_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+
+        setLookup({
+          warehouse_name: warehouseResult.data?.name || null,
+          purchase_order_number: poResult.data?.po_number || null,
+          customer_name: customerResult.data?.name || null,
+        });
+      } else {
+        setLookup({});
+      }
+    } catch (err) {
+      console.error("Report viewer load error:", err);
+      setError(err instanceof Error ? err.message : "Unable to open this report.");
+    } finally {
+      setLoading(false);
+    }
+  }, [document.id, document.storage_path, supabase]);
+
+  useEffect(() => {
+    loadReport();
+  }, [loadReport]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowInfo(false);
+        setFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const active = sheets[activeSheet] || { name: "", rows: [] };
+  const rawRows = active.rows || [];
+  const columnCount = Math.max(
+    1,
+    ...rawRows.map((row) => (Array.isArray(row) ? row.length : 0))
+  );
+
+  const headers = Array.from({ length: columnCount }, (_, index) => {
+    const value = rawRows[0]?.[index];
+    return cellText(value) || `Column ${index + 1}`;
+  });
+
+  const dataRows = rawRows.length > 0 ? rawRows.slice(1) : [];
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let result = dataRows.filter((row) => {
+      if (!query) return true;
+      return Array.from({ length: columnCount }, (_, index) =>
+        cellText(row?.[index]).toLowerCase()
+      ).some((value) => value.includes(query));
+    });
+
+    if (sortColumn !== null) {
+      result = [...result].sort((a, b) => {
+        const av = cellText(a?.[sortColumn]).toLowerCase();
+        const bv = cellText(b?.[sortColumn]).toLowerCase();
+        const comparison = av.localeCompare(bv, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        return sortDirection === "asc" ? comparison : -comparison;
+      });
+    }
+
+    return result;
+  }, [columnCount, dataRows, search, sortColumn, sortDirection]);
+
+  const toggleSort = (column: number) => {
+    if (sortColumn === column) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="report-viewer-shell">
+        <div className="report-loading">
+          <div className="report-spinner" />
+          <strong>Opening report</strong>
+          <span>Reading the spreadsheet securely...</span>
+        </div>
+        <ReportViewerStyles />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="report-viewer-shell">
+        <div className="report-error">
+          <div className="report-error-icon">!</div>
+          <div>
+            <strong>Unable to open report</strong>
+            <span>{error}</span>
+          </div>
+          <button className="rv-btn" onClick={onBack}>Back to Reports</button>
+        </div>
+        <ReportViewerStyles />
+      </div>
+    );
+  }
+
+  const viewerClass = fullscreen
+    ? "report-viewer-shell fullscreen"
+    : "report-viewer-shell";
+
+  return (
+    <div className={viewerClass}>
+      <div className="report-topbar">
+        <div className="report-title-block">
+          <button className="report-back" onClick={onBack} title="Back to Reports">
+            ←
+          </button>
+          <div className="report-file-badge">
+            {(document.file_name?.split(".").pop() || "FILE").toUpperCase()}
+          </div>
+          <div className="report-title-content">
+            <div className="report-breadcrumb">Reports & Lists</div>
+            <h1>{document.title}</h1>
+            <div className="report-subtitle">
+              {reportTypeLabel(metadata?.report_type || document.document_type)}
+              <span>•</span>
+              <span>{filteredRows.length.toLocaleString()} rows</span>
+              {sheets.length > 1 && (
+                <>
+                  <span>•</span>
+                  <span>{sheets.length} sheets</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="report-actions">
+          <button className="rv-btn" onClick={() => setShowInfo(true)}>
+            Report Info
+          </button>
+          <button
+            className="rv-btn"
+            onClick={() => setFullscreen((current) => !current)}
+          >
+            {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          </button>
+          <button
+            className="rv-btn rv-btn-primary"
+            onClick={() => onDownload(document.storage_path, document.file_name)}
+          >
+            Download
+          </button>
+        </div>
+      </div>
+
+      <div className="report-toolbar">
+        <div className="report-search">
+          <span>⌕</span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search this list..."
+          />
+          {search && (
+            <button onClick={() => setSearch("")}>×</button>
+          )}
+        </div>
+
+        <div className="report-toolbar-meta">
+          <span>{active.name || "Sheet 1"}</span>
+          <span className="toolbar-divider" />
+          <span>{filteredRows.length.toLocaleString()} of {dataRows.length.toLocaleString()} rows</span>
+        </div>
+      </div>
+
+      {sheets.length > 1 && (
+        <div className="sheet-tabs">
+          {sheets.map((sheet, index) => (
+            <button
+              key={sheet.name}
+              className={index === activeSheet ? "sheet-tab active" : "sheet-tab"}
+              onClick={() => {
+                setActiveSheet(index);
+                setSortColumn(null);
+                setSearch("");
+              }}
+            >
+              {sheet.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="spreadsheet-wrap">
+        <div className="spreadsheet">
+          <div
+            className="sheet-header-row"
+            style={{ gridTemplateColumns: `48px repeat(${columnCount}, minmax(150px, max-content))` }}
+          >
+            <div className="row-number-header">#</div>
+            {headers.map((header, index) => (
+              <button
+                key={`header-${index}`}
+                className="sheet-header-cell"
+                onClick={() => toggleSort(index)}
+                title={`Sort by ${header}`}
+              >
+                <span>{header}</span>
+                <span className="sort-indicator">
+                  {sortColumn === index
+                    ? sortDirection === "asc"
+                      ? "↑"
+                      : "↓"
+                    : "↕"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {filteredRows.length === 0 ? (
+            <div className="sheet-empty">
+              <div>⌕</div>
+              <strong>No rows found</strong>
+              <span>
+                {search
+                  ? "Try a different search term."
+                  : "This sheet does not contain any data rows."}
+              </span>
+            </div>
+          ) : (
+            filteredRows.map((row, rowIndex) => (
+              <div
+                className="sheet-data-row"
+                key={`row-${rowIndex}`}
+                style={{ gridTemplateColumns: `48px repeat(${columnCount}, minmax(150px, max-content))` }}
+              >
+                <div className="row-number-cell">{rowIndex + 1}</div>
+                {Array.from({ length: columnCount }, (_, columnIndex) => (
+                  <div
+                    className="sheet-cell"
+                    key={`${rowIndex}-${columnIndex}`}
+                    title={cellText(row?.[columnIndex])}
+                  >
+                    {cellText(row?.[columnIndex])}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="report-statusbar">
+        <span>{document.file_name || "Report file"}</span>
+        <span>•</span>
+        <span>{metadata?.row_count || dataRows.length} source rows</span>
+        <span>•</span>
+        <span>Secure viewer</span>
+      </div>
+
+      {showInfo && (
+        <div className="rv-modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setShowInfo(false);
+        }}>
+          <div className="report-info-modal">
+            <div className="rv-modal-header">
+              <div>
+                <span>Report information</span>
+                <strong>{document.title}</strong>
+              </div>
+              <button onClick={() => setShowInfo(false)}>×</button>
+            </div>
+
+            <div className="report-info-grid">
+              <div><span>File</span><strong>{document.file_name || "—"}</strong></div>
+              <div><span>Type</span><strong>{reportTypeLabel(metadata?.report_type)}</strong></div>
+              <div><span>Rows</span><strong>{metadata?.row_count ?? dataRows.length}</strong></div>
+              <div><span>Sheets</span><strong>{sheets.length}</strong></div>
+              <div><span>Warehouse</span><strong>{lookup.warehouse_name || "—"}</strong></div>
+              <div><span>Purchase Order</span><strong>{lookup.purchase_order_number || "—"}</strong></div>
+              <div><span>Customer</span><strong>{lookup.customer_name || "—"}</strong></div>
+              <div><span>Updated</span><strong>{formatDate(document.updated_at)}</strong></div>
+            </div>
+
+            {metadata?.tags?.length ? (
+              <div className="report-info-section">
+                <span>Tags</span>
+                <div className="report-tags">
+                  {metadata.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                </div>
+              </div>
+            ) : null}
+
+            {metadata?.description && (
+              <div className="report-info-section">
+                <span>Description</span>
+                <p>{metadata.description}</p>
+              </div>
+            )}
+
+            <div className="rv-modal-actions">
+              <button className="rv-btn" onClick={() => setShowInfo(false)}>Close</button>
+              <button
+                className="rv-btn rv-btn-primary"
+                onClick={() => onDownload(document.storage_path, document.file_name)}
+              >
+                Download Original
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ReportViewerStyles />
+    </div>
+  );
+}
+
+function ReportViewerStyles() {
+  return (
+    <style jsx global>{`
+      .report-viewer-shell {
+        min-height: calc(100vh - 0px);
+        display: flex;
+        flex-direction: column;
+        background: #f8fafc;
+        color: #111827;
+      }
+
+      .report-viewer-shell.fullscreen {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #ffffff;
+      }
+
+      .report-topbar {
+        min-height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 12px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #ffffff;
+      }
+
+      .report-title-block {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+
+      .report-back {
+        width: 34px;
+        height: 34px;
+        border: 1px solid #e5e7eb;
+        border-radius: 9px;
+        background: #ffffff;
+        color: #374151;
+        cursor: pointer;
+        font-size: 18px;
+      }
+
+      .report-back:hover {
+        background: #f3f4f6;
+      }
+
+      .report-file-badge {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 9px;
+        font-weight: 800;
+      }
+
+      .report-title-content {
+        min-width: 0;
+      }
+
+      .report-breadcrumb {
+        color: #9ca3af;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+
+      .report-title-content h1 {
+        margin: 2px 0 0;
+        overflow: hidden;
+        color: #111827;
+        font-size: 17px;
+        font-weight: 750;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .report-subtitle {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 2px;
+        color: #6b7280;
+        font-size: 11px;
+      }
+
+      .report-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex: 0 0 auto;
+      }
+
+      .rv-btn {
+        min-height: 35px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 0 11px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 11.5px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .rv-btn:hover {
+        background: #f9fafb;
+        border-color: #9ca3af;
+      }
+
+      .rv-btn-primary {
+        border-color: #059669;
+        background: #059669;
+        color: #ffffff;
+      }
+
+      .rv-btn-primary:hover {
+        border-color: #047857;
+        background: #047857;
+      }
+
+      .report-toolbar {
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        padding: 8px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #ffffff;
+      }
+
+      .report-search {
+        width: min(420px, 100%);
+        height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 0 9px;
+        background: #ffffff;
+        color: #9ca3af;
+      }
+
+      .report-search:focus-within {
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, .10);
+      }
+
+      .report-search input {
+        min-width: 0;
+        flex: 1;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #111827;
+        font-size: 12px;
+      }
+
+      .report-search button {
+        border: 0;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 17px;
+      }
+
+      .report-toolbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #6b7280;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      .toolbar-divider {
+        width: 1px;
+        height: 14px;
+        background: #e5e7eb;
+      }
+
+      .sheet-tabs {
+        display: flex;
+        gap: 2px;
+        overflow-x: auto;
+        padding: 0 20px;
+        border-bottom: 1px solid #d1d5db;
+        background: #f3f4f6;
+      }
+
+      .sheet-tab {
+        min-height: 34px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        padding: 0 13px;
+        background: transparent;
+        color: #6b7280;
+        font-size: 11.5px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .sheet-tab:hover {
+        color: #111827;
+        background: #ffffff;
+      }
+
+      .sheet-tab.active {
+        border-bottom-color: #059669;
+        background: #ffffff;
+        color: #047857;
+      }
+
+      .spreadsheet-wrap {
+        min-height: 0;
+        flex: 1;
+        overflow: auto;
+        background: #ffffff;
+      }
+
+      .spreadsheet {
+        min-width: max-content;
+        border-left: 1px solid #e5e7eb;
+      }
+
+      .sheet-header-row,
+      .sheet-data-row {
+        display: grid;
+        grid-template-columns: 48px auto;
+      }
+
+      .sheet-header-row {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        min-height: 37px;
+        background: #f3f4f6;
+        border-bottom: 1px solid #d1d5db;
+      }
+
+      .row-number-header {
+        position: sticky;
+        left: 0;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-right: 1px solid #d1d5db;
+        background: #f3f4f6;
+        color: #9ca3af;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .sheet-header-cell {
+        min-width: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border: 0;
+        border-right: 1px solid #d1d5db;
+        padding: 0 10px;
+        background: #f3f4f6;
+        color: #374151;
+        font-size: 11px;
+        font-weight: 750;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .sheet-header-cell:hover {
+        background: #e5e7eb;
+      }
+
+      .sort-indicator {
+        color: #9ca3af;
+        font-size: 10px;
+      }
+
+      .sheet-data-row {
+        min-height: 36px;
+        border-bottom: 1px solid #eef0f2;
+      }
+
+      .sheet-data-row:hover {
+        background: #f8fffc;
+      }
+
+      .row-number-cell {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-right: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #9ca3af;
+        font-size: 10px;
+        user-select: none;
+      }
+
+      .sheet-cell {
+        min-width: 150px;
+        max-width: 520px;
+        overflow: hidden;
+        border-right: 1px solid #eef0f2;
+        padding: 8px 10px;
+        color: #374151;
+        font-size: 11.5px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sheet-empty {
+        min-height: 360px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        color: #6b7280;
+      }
+
+      .sheet-empty > div {
+        width: 38px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 4px;
+        border-radius: 10px;
+        background: #ecfdf5;
+        color: #059669;
+        font-size: 20px;
+      }
+
+      .sheet-empty strong {
+        color: #111827;
+        font-size: 13px;
+      }
+
+      .sheet-empty span {
+        font-size: 11px;
+      }
+
+      .report-statusbar {
+        min-height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 12px;
+        border-top: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #9ca3af;
+        font-size: 10px;
+      }
+
+      .report-loading,
+      .report-error {
+        min-height: 420px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .report-loading strong,
+      .report-error strong {
+        color: #111827;
+        font-size: 14px;
+      }
+
+      .report-loading span,
+      .report-error span {
+        max-width: 520px;
+        color: #6b7280;
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .report-spinner {
+        width: 28px;
+        height: 28px;
+        margin-bottom: 4px;
+        border: 3px solid #d1fae5;
+        border-top-color: #059669;
+        border-radius: 50%;
+        animation: report-spin .75s linear infinite;
+      }
+
+      @keyframes report-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .report-error-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 5px;
+        border-radius: 50%;
+        background: #fef2f2;
+        color: #dc2626;
+        font-weight: 800;
+      }
+
+      .report-error > div:nth-child(2) {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+      }
+
+      .report-error .rv-btn {
+        margin-top: 10px;
+      }
+
+      .rv-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .42);
+        backdrop-filter: blur(2px);
+      }
+
+      .report-info-modal {
+        width: min(620px, 100%);
+        max-height: min(720px, calc(100vh - 40px));
+        overflow: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, .22);
+      }
+
+      .rv-modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 15px;
+        padding: 18px 20px;
+        border-bottom: 1px solid #eef0f2;
+      }
+
+      .rv-modal-header > div {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .rv-modal-header span {
+        color: #059669;
+        font-size: 10px;
+        font-weight: 750;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+      }
+
+      .rv-modal-header strong {
+        color: #111827;
+        font-size: 15px;
+      }
+
+      .rv-modal-header button {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 7px;
+        background: #f3f4f6;
+        color: #6b7280;
+        cursor: pointer;
+        font-size: 18px;
+      }
+
+      .report-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+        margin: 18px 20px 0;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #e5e7eb;
+      }
+
+      .report-info-grid > div {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 11px;
+        background: #ffffff;
+      }
+
+      .report-info-grid span,
+      .report-info-section > span {
+        color: #9ca3af;
+        font-size: 9.5px;
+        font-weight: 750;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+
+      .report-info-grid strong {
+        overflow: hidden;
+        color: #374151;
+        font-size: 11.5px;
+        text-overflow: ellipsis;
+      }
+
+      .report-info-section {
+        margin: 18px 20px 0;
+      }
+
+      .report-info-section p {
+        margin: 6px 0 0;
+        color: #4b5563;
+        font-size: 11.5px;
+        line-height: 1.5;
+      }
+
+      .report-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+      }
+
+      .report-tags span {
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 10px;
+        font-weight: 650;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .rv-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 18px 20px;
+        margin-top: 18px;
+        border-top: 1px solid #eef0f2;
+      }
+
+      @media (max-width: 900px) {
+        .report-topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .report-actions {
+          width: 100%;
+          justify-content: flex-end;
+        }
+
+        .report-toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .report-search {
+          width: 100%;
+        }
+
+        .report-toolbar-meta {
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .report-topbar,
+        .report-toolbar {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .report-actions {
+          justify-content: stretch;
+        }
+
+        .report-actions .rv-btn {
+          flex: 1;
+        }
+
+        .report-file-badge {
+          display: none;
+        }
+
+        .report-title-content h1 {
+          max-width: 230px;
+        }
+
+        .report-info-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .rv-modal-backdrop {
+          padding: 10px;
+        }
+      }
+    `}</style>
+  );
+}
+
 
 export default function DocumentInformationPage() {
   const params = useParams();
@@ -1150,6 +2253,19 @@ export default function DocumentInformationPage() {
       entityType.toLowerCase()
     ] || null;
   };
+
+  if (document?.document_type === "report" && isSpreadsheet(document)) {
+    return (
+      <AppShell>
+        <ReportViewer
+          document={document}
+          supabase={supabase}
+          onDownload={handleDownload}
+          onBack={() => router.push("/documents/reports")}
+        />
+      </AppShell>
+    );
+  }
 
   if (loading) {
     return (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AppShell from "@/app/components/app-shell";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type DocumentStatus =
   | "active"
@@ -175,6 +176,13 @@ export default function DocumentsPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const canView = hasPermission("documents", "view");
+  const canCreate = hasPermission("documents", "create");
+  const canEdit = hasPermission("documents", "edit");
+  const canDelete = hasPermission("documents", "delete");
+  const canArchive = canEdit;
+
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -191,7 +199,7 @@ export default function DocumentsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
 
   const [view, setView] = useState<
-    "all" | "recent" | "expiring" | "favorites"
+    "all" | "recent" | "expiring" | "favorites" | "archived"
   >("all");
 
   const [expandedCategories, setExpandedCategories] = useState<
@@ -404,7 +412,8 @@ export default function DocumentsPage() {
 
       expired: documents.filter(
         (document) =>
-          document.status === "expired",
+          document.status === "expired" &&
+          !document.is_archived,
       ).length,
 
       reports: documents.filter(
@@ -509,6 +518,10 @@ export default function DocumentsPage() {
         view === "favorites" &&
         !document.is_favorite
       ) {
+        return false;
+      }
+
+      if (view === "archived" && !document.is_archived) {
         return false;
       }
 
@@ -714,6 +727,105 @@ export default function DocumentsPage() {
     }
   };
 
+  const unarchiveDocument = async (
+    document: DocumentRow,
+  ) => {
+    if (!companyId || !canArchive || !document.is_archived) return;
+
+    const confirmed = window.confirm(
+      `Unarchive "${document.title}"?\n\nThe document will be restored to the active document library.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setErrorMessage("");
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      let restoredStatus: DocumentStatus = "active";
+
+      if (document.expiry_date) {
+        const now = new Date();
+        const expiry = new Date(`${document.expiry_date}T23:59:59`);
+        const thirtyDaysFromNow = new Date(now);
+        thirtyDaysFromNow.setDate(now.getDate() + 30);
+
+        if (expiry < now) {
+          restoredStatus = "expired";
+        } else if (expiry <= thirtyDaysFromNow) {
+          restoredStatus = "expiring";
+        }
+      }
+
+      const { error } = await supabase
+        .from("documents")
+        .update({
+          is_archived: false,
+          status: restoredStatus,
+          updated_by: user?.id ?? null,
+        })
+        .eq("id", document.id)
+        .eq("company_id", companyId);
+
+      if (error) throw error;
+
+      await supabase.from("document_activity").insert({
+        company_id: companyId,
+        document_id: document.id,
+        action: "unarchived",
+        message: `Document "${document.title}" was restored from the archive.`,
+        created_by: user?.id ?? null,
+      });
+
+      await loadData(true);
+    } catch (error) {
+      console.error("UNARCHIVE DOCUMENT ERROR:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to unarchive document.",
+      );
+    }
+  };
+
+  const deleteDocument = async (
+    document: DocumentRow,
+  ) => {
+    if (!companyId || !canDelete) return;
+
+    const confirmed = window.confirm(
+      `Permanently delete "${document.title}"?\n\nThis action cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setErrorMessage("");
+
+      const { error: deleteError } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", document.id)
+        .eq("company_id", companyId);
+
+      if (deleteError) throw deleteError;
+
+      setDocuments((current) =>
+        current.filter((item) => item.id !== document.id),
+      );
+    } catch (error) {
+      console.error("DELETE DOCUMENT ERROR:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to delete document.",
+      );
+    }
+  };
+
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
@@ -724,13 +836,27 @@ export default function DocumentsPage() {
     setExpandedCategories(new Set());
   };
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return (
       <AppShell>
         <div className="page-content">
           <div className="loading-state">
             <div className="loading-spinner" />
             <p>Loading Documents...</p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <AppShell>
+        <div className="page-content documents-page">
+          <div className="empty-state">
+            <div className="empty-icon">!</div>
+            <h3>Access restricted</h3>
+            <p>You do not have permission to view company documents.</p>
           </div>
         </div>
       </AppShell>
@@ -851,7 +977,7 @@ export default function DocumentsPage() {
           .kpi-grid {
             display: grid;
             grid-template-columns:
-              repeat(6, minmax(0, 1fr));
+              repeat(7, minmax(0, 1fr));
             gap: 14px;
             margin-bottom: 20px;
           }
@@ -1379,6 +1505,101 @@ export default function DocumentsPage() {
             white-space: nowrap;
           }
 
+          .document-section-cards {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+          }
+
+          .document-section-card {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 17px 18px;
+            color: inherit;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+            text-decoration: none;
+            transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+          }
+
+          .document-section-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+          }
+
+          .document-section-card.normal-section:hover {
+            border-color: #cbd5e1;
+            background: #fbfdff;
+          }
+
+          .document-section-card.reports-section:hover {
+            border-color: #86efac;
+            background: #f8fff9;
+          }
+
+          .document-section-icon {
+            display: grid;
+            place-items: center;
+            width: 44px;
+            height: 44px;
+            flex: 0 0 44px;
+            color: #166534;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 11px;
+            font-size: 17px;
+            font-weight: 800;
+          }
+
+          .document-section-copy {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+          }
+
+          .document-section-label {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+          }
+
+          .document-section-copy strong {
+            overflow: hidden;
+            color: #0f172a;
+            font-size: 15px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .document-section-copy > span:last-child {
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.45;
+          }
+
+          .document-section-count {
+            display: grid;
+            place-items: center;
+            min-width: 36px;
+            height: 30px;
+            margin-left: auto;
+            padding: 0 9px;
+            color: #166534;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+          }
+
           .row-action {
             box-sizing: border-box;
             appearance: none;
@@ -1411,6 +1632,15 @@ export default function DocumentsPage() {
               border-color 150ms ease,
               box-shadow 150ms ease,
               transform 150ms ease;
+          }
+
+          .row-action-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            font-size: 12px;
+            line-height: 1;
           }
 
           .row-action:hover {
@@ -1455,6 +1685,30 @@ export default function DocumentsPage() {
           }
 
           .row-action.archive:hover {
+            color: #991b1b !important;
+            background: #fef2f2 !important;
+            border-color: #fca5a5 !important;
+          }
+
+          .row-action.restore {
+            color: #166534 !important;
+            background: #f0fdf4 !important;
+            border-color: #bbf7d0 !important;
+          }
+
+          .row-action.restore:hover {
+            color: #14532d !important;
+            background: #dcfce7 !important;
+            border-color: #86efac !important;
+          }
+
+          .row-action.delete {
+            color: #b91c1c !important;
+            background: #fff !important;
+            border-color: #fecaca !important;
+          }
+
+          .row-action.delete:hover {
             color: #991b1b !important;
             background: #fef2f2 !important;
             border-color: #fca5a5 !important;
@@ -1598,6 +1852,10 @@ export default function DocumentsPage() {
           }
 
           @media (max-width: 760px) {
+            .document-section-cards {
+              grid-template-columns: 1fr;
+            }
+
             .kpi-grid {
               grid-template-columns:
                 repeat(2, minmax(0, 1fr));
@@ -1677,19 +1935,23 @@ export default function DocumentsPage() {
                 : "↻ Refresh"}
             </button>
 
-            <Link
-              href="/documents/reports"
-              className="secondary-button"
-            >
-              ▣ Create Report
-            </Link>
+            {canCreate && (
+              <Link
+                href="/documents/reports"
+                className="secondary-button"
+              >
+                ▣ Create Report
+              </Link>
+            )}
 
-            <Link
-              href="/documents/new"
-              className="primary-button"
-            >
-              + Upload Document
-            </Link>
+            {canCreate && (
+              <Link
+                href="/documents/new"
+                className="primary-button"
+              >
+                + Upload Document
+              </Link>
+            )}
           </div>
         </div>
 
@@ -1759,6 +2021,16 @@ export default function DocumentsPage() {
               {stats.reports}
             </div>
           </div>
+
+          <div className="kpi-card">
+            <div className="kpi-label">
+              Archived
+            </div>
+
+            <div className="kpi-value">
+              {documents.filter((document) => document.is_archived).length}
+            </div>
+          </div>
         </div>
 
         <div className="workspace-card">
@@ -1818,6 +2090,20 @@ export default function DocumentsPage() {
                 }
               >
                 Favorites
+              </button>
+
+              <button
+                type="button"
+                className={`view-tab ${
+                  view === "archived"
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  setView("archived")
+                }
+              >
+                Archived
               </button>
             </div>
 
@@ -1958,7 +2244,9 @@ export default function DocumentsPage() {
                     ? "Recently Added"
                     : view === "expiring"
                       ? "Documents Requiring Attention"
-                      : "Favorite Documents"}
+                      : view === "archived"
+                        ? "Archived Documents"
+                        : "Favorite Documents"}
               </h2>
 
               <span className="summary-divider" />
@@ -1997,7 +2285,7 @@ export default function DocumentsPage() {
                   : "Try clearing one or more filters, or upload a new document."}
               </p>
 
-              {documents.length === 0 ? (
+              {documents.length === 0 && canCreate ? (
                 <Link
                   href="/documents/new"
                   className="primary-button"
@@ -2334,46 +2622,67 @@ export default function DocumentsPage() {
 
                                 <div>
                                   <div className="row-actions">
-                                    <button
-                                      type="button"
-                                      className="row-action view"
-                                      onClick={() =>
-                                        router.push(
-                                          `/documents/${document.id}`,
-                                        )
-                                      }
-                                    >
-                                      View
-                                    </button>
+                            <button
+                              type="button"
+                              className="row-action view"
+                              onClick={() => router.push(`/documents/${document.id}`)}
+                              title="View document"
+                            >
+                              <span className="row-action-icon" aria-hidden="true">↗</span>
+                              View
+                            </button>
 
-                                    {!document.is_archived && (
-                                      <button
-                                        type="button"
-                                        className="row-action edit"
-                                        onClick={() =>
-                                          router.push(
-                                            `/documents/${document.id}/edit`,
-                                          )
-                                        }
-                                      >
-                                        Edit
-                                      </button>
-                                    )}
+                            {canEdit && !document.is_archived && (
+                              <button
+                                type="button"
+                                className="row-action edit"
+                                onClick={() => router.push(`/documents/${document.id}/edit`)}
+                                title="Edit document"
+                              >
+                                <span className="row-action-icon" aria-hidden="true">✎</span>
+                                Edit
+                              </button>
+                            )}
 
-                                    {!document.is_archived && (
-                                      <button
-                                        type="button"
-                                        className="row-action archive"
-                                        onClick={() =>
-                                          void archiveDocument(
-                                            document,
-                                          )
-                                        }
-                                      >
-                                        Archive
-                                      </button>
-                                    )}
-                                  </div>
+                            {canArchive && !document.is_archived && (
+                              <button
+                                type="button"
+                                className="row-action archive"
+                                onClick={() =>
+                                  void archiveDocument(document)
+                                }
+                                title="Archive document"
+                              >
+                                Archive
+                              </button>
+                            )}
+
+                            {canArchive && document.is_archived && (
+                              <button
+                                type="button"
+                                className="row-action restore"
+                                onClick={() =>
+                                  void unarchiveDocument(document)
+                                }
+                                title="Unarchive document"
+                              >
+                                Unarchive
+                              </button>
+                            )}
+
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="row-action delete"
+                                onClick={() =>
+                                  void deleteDocument(document)
+                                }
+                                title="Permanently delete document"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
                                 </div>
                               </div>
                             ),

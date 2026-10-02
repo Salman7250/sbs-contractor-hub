@@ -57,6 +57,56 @@ type DocumentRecord = {
   updated_at: string;
 };
 
+type ReportMetadata = {
+  id?: string;
+  report_type: string;
+  description: string | null;
+  related_warehouse_id: string | null;
+  related_purchase_order_id: string | null;
+  related_customer_id: string | null;
+  tags: string[];
+  row_count: number;
+};
+
+type Warehouse = {
+  id: string;
+  name: string;
+};
+
+type PurchaseOrder = {
+  id: string;
+  po_number: string;
+};
+
+type Customer = {
+  id: string;
+  name: string;
+};
+
+const REPORT_TYPES = [
+  { value: "inventory_list", label: "Inventory List" },
+  { value: "pallet_list", label: "Pallet List" },
+  { value: "asset_list", label: "Asset List" },
+  { value: "stock_count", label: "Stock Count" },
+  { value: "purchase_list", label: "Purchase List" },
+  { value: "sales_list", label: "Sales List" },
+  { value: "employee_list", label: "Employee List" },
+  { value: "customer_list", label: "Customer List" },
+  { value: "general", label: "General Report" },
+];
+
+const SPREADSHEET_EXTENSIONS = [".xls", ".xlsx", ".csv"];
+
+function isReportDocument(document: DocumentRecord | null) {
+  return document?.document_type?.toLowerCase() === "report";
+}
+
+function isSpreadsheetFile(fileName: string | null) {
+  if (!fileName) return false;
+  const lower = fileName.toLowerCase();
+  return SPREADSHEET_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
 const ALLOWED_FILE_TYPES = [
@@ -214,6 +264,18 @@ export default function EditDocumentPage() {
   const [replacementFile, setReplacementFile] =
     useState<File | null>(null);
 
+  const [reportMetadata, setReportMetadata] =
+    useState<ReportMetadata | null>(null);
+  const [reportType, setReportType] = useState("general");
+  const [reportRowCount, setReportRowCount] = useState("");
+  const [reportWarehouseId, setReportWarehouseId] = useState("");
+  const [reportPurchaseOrderId, setReportPurchaseOrderId] = useState("");
+  const [reportCustomerId, setReportCustomerId] = useState("");
+  const [reportTags, setReportTags] = useState("");
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
   const [fileInputKey, setFileInputKey] = useState(0);
 
   const loadDocument = useCallback(async () => {
@@ -265,6 +327,10 @@ export default function EditDocumentPage() {
         documentResult,
         categoriesResult,
         employeesResult,
+        reportMetadataResult,
+        warehousesResult,
+        purchaseOrdersResult,
+        customersResult,
       ] = await Promise.all([
         supabase
           .from("documents")
@@ -333,6 +399,32 @@ export default function EditDocumentPage() {
           .order("display_name", {
             ascending: true,
           }),
+
+        supabase
+          .from("document_report_metadata")
+          .select(
+            "id,report_type,description,related_warehouse_id,related_purchase_order_id,related_customer_id,tags,row_count"
+          )
+          .eq("document_id", documentId)
+          .maybeSingle(),
+
+        supabase
+          .from("warehouses")
+          .select("id,name")
+          .eq("company_id", companyId)
+          .order("name", { ascending: true }),
+
+        supabase
+          .from("purchase_orders")
+          .select("id,po_number")
+          .eq("company_id", companyId)
+          .order("po_number", { ascending: false }),
+
+        supabase
+          .from("customers")
+          .select("id,name")
+          .eq("company_id", companyId)
+          .order("name", { ascending: true }),
       ]);
 
       if (documentResult.error) {
@@ -355,6 +447,22 @@ export default function EditDocumentPage() {
         throw employeesResult.error;
       }
 
+      if (reportMetadataResult.error) {
+        throw reportMetadataResult.error;
+      }
+
+      if (warehousesResult.error) {
+        throw warehousesResult.error;
+      }
+
+      if (purchaseOrdersResult.error) {
+        throw purchaseOrdersResult.error;
+      }
+
+      if (customersResult.error) {
+        throw customersResult.error;
+      }
+
       const loadedDocument =
         documentResult.data as DocumentRecord;
 
@@ -367,6 +475,37 @@ export default function EditDocumentPage() {
 
       setEmployees(
         (employeesResult.data || []) as Employee[]
+      );
+
+      setReportMetadata(
+        (reportMetadataResult.data || null) as ReportMetadata | null
+      );
+      setWarehouses((warehousesResult.data || []) as Warehouse[]);
+      setPurchaseOrders(
+        (purchaseOrdersResult.data || []) as PurchaseOrder[]
+      );
+      setCustomers((customersResult.data || []) as Customer[]);
+
+      const loadedReportMetadata =
+        (reportMetadataResult.data || null) as ReportMetadata | null;
+
+      setReportType(loadedReportMetadata?.report_type || "general");
+      setReportRowCount(
+        loadedReportMetadata?.row_count != null
+          ? String(loadedReportMetadata.row_count)
+          : ""
+      );
+      setReportWarehouseId(
+        loadedReportMetadata?.related_warehouse_id || ""
+      );
+      setReportPurchaseOrderId(
+        loadedReportMetadata?.related_purchase_order_id || ""
+      );
+      setReportCustomerId(
+        loadedReportMetadata?.related_customer_id || ""
+      );
+      setReportTags(
+        loadedReportMetadata?.tags?.join(", ") || ""
       );
 
       setTitle(loadedDocument.title || "");
@@ -515,6 +654,40 @@ export default function EditDocumentPage() {
         "Replacement file is too large. Maximum allowed size is 25 MB."
       );
       return;
+    }
+
+    const reportDocument = isReportDocument(document);
+
+    if (reportDocument) {
+      const parsedRowCount = reportRowCount.trim()
+        ? Number(reportRowCount)
+        : 0;
+
+      if (!Number.isInteger(parsedRowCount) || parsedRowCount < 0) {
+        setErrorMessage("Report row count must be a whole number of 0 or greater.");
+        return;
+      }
+
+      if (
+        replacementFile &&
+        !isSpreadsheetFile(replacementFile.name)
+      ) {
+        setErrorMessage(
+          "Reports & Lists must use an XLS, XLSX, or CSV file."
+        );
+        return;
+      }
+
+      if (
+        !reportMetadata &&
+        !replacementFile &&
+        !isSpreadsheetFile(document.file_name)
+      ) {
+        setErrorMessage(
+          "This report does not have a spreadsheet file. Replace it with an XLS, XLSX, or CSV file."
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -775,6 +948,45 @@ export default function EditDocumentPage() {
 
       /*
        * ---------------------------------------------------------
+       * REPORT METADATA
+       * ---------------------------------------------------------
+       */
+      if (reportDocument) {
+        const parsedRowCount = Number(reportRowCount || 0);
+        const parsedTags = reportTags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .filter((tag, index, values) => values.indexOf(tag) === index);
+
+        const { error: reportMetadataError } =
+          await supabase
+            .from("document_report_metadata")
+            .upsert(
+              {
+                company_id: companyId,
+                document_id: document.id,
+                report_type: reportType || "general",
+                description: description.trim() || null,
+                related_warehouse_id: reportWarehouseId || null,
+                related_purchase_order_id:
+                  reportPurchaseOrderId || null,
+                related_customer_id: reportCustomerId || null,
+                tags: parsedTags,
+                row_count: parsedRowCount,
+                created_by: userId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "document_id" }
+            );
+
+        if (reportMetadataError) {
+          throw reportMetadataError;
+        }
+      }
+
+      /*
+       * ---------------------------------------------------------
        * ACTIVITY LOG
        * ---------------------------------------------------------
        */
@@ -855,6 +1067,8 @@ export default function EditDocumentPage() {
       setSuccessMessage(
         replacementFile
           ? `Document updated successfully. Version ${nextVersion} is now active.`
+          : reportDocument
+          ? "Report information updated successfully."
           : "Document updated successfully."
       );
 
@@ -969,7 +1183,78 @@ export default function EditDocumentPage() {
               animation: spin 0.8s linear infinite;
             }
 
-            @keyframes spin {
+            .section-eyebrow {
+          margin-bottom: 4px;
+          color: #059669;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .report-mode-badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 26px;
+          padding: 0 9px;
+          border: 1px solid #a7f3d0;
+          border-radius: 999px;
+          background: #ecfdf5;
+          color: #047857;
+          font-size: 10.5px;
+          font-weight: 750;
+          white-space: nowrap;
+        }
+
+        .field-hint {
+          margin-top: -2px;
+          color: #6b7280;
+          font-size: 10.5px;
+          line-height: 1.4;
+        }
+
+        .report-edit-callout {
+          display: flex;
+          align-items: flex-start;
+          gap: 11px;
+          padding: 13px;
+          border: 1px solid #d1fae5;
+          border-radius: 10px;
+          background: #f0fdf4;
+        }
+
+        .report-edit-icon {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          background: #d1fae5;
+          color: #047857;
+          font-size: 16px;
+          font-weight: 800;
+        }
+
+        .report-edit-callout > div:last-child {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .report-edit-callout strong {
+          color: #065f46;
+          font-size: 12.5px;
+        }
+
+        .report-edit-callout span {
+          color: #4b5563;
+          font-size: 11.5px;
+          line-height: 1.45;
+        }
+
+        @keyframes spin {
               to {
                 transform: rotate(360deg);
               }
@@ -1066,7 +1351,7 @@ export default function EditDocumentPage() {
                   router.push("/documents")
                 }
               >
-                Documents
+                {isReportDocument(document) ? "Reports & Lists" : "Documents"}
               </button>
               <span>/</span>
               <button
@@ -1357,6 +1642,134 @@ export default function EditDocumentPage() {
                 </div>
               </section>
 
+              {isReportDocument(document) && (
+                <section className="card report-settings-card">
+                  <div className="card-header">
+                    <div>
+                      <div className="section-eyebrow">Reports & Lists</div>
+                      <h2>Report Configuration</h2>
+                      <p>
+                        Manage the information shown with the spreadsheet viewer and keep the uploaded list organized.
+                      </p>
+                    </div>
+                    <span className="report-mode-badge">Spreadsheet Report</span>
+                  </div>
+
+                  <div className="form-grid">
+                    <div className="field">
+                      <label htmlFor="report-type">Report Type</label>
+                      <select
+                        id="report-type"
+                        value={reportType}
+                        onChange={(event) => setReportType(event.target.value)}
+                        disabled={saving || document.is_archived}
+                      >
+                        {REPORT_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="report-row-count">Rows / Items</label>
+                      <input
+                        id="report-row-count"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={reportRowCount}
+                        onChange={(event) => setReportRowCount(event.target.value)}
+                        placeholder="e.g. 1250"
+                        disabled={saving || document.is_archived}
+                      />
+                      <small className="field-hint">
+                        Number of source data rows in the uploaded list.
+                      </small>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="report-warehouse">Related Warehouse</label>
+                      <select
+                        id="report-warehouse"
+                        value={reportWarehouseId}
+                        onChange={(event) => setReportWarehouseId(event.target.value)}
+                        disabled={saving || document.is_archived}
+                      >
+                        <option value="">No warehouse</option>
+                        {warehouses.map((warehouse) => (
+                          <option key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="report-purchase-order">Related Purchase Order</label>
+                      <select
+                        id="report-purchase-order"
+                        value={reportPurchaseOrderId}
+                        onChange={(event) => setReportPurchaseOrderId(event.target.value)}
+                        disabled={saving || document.is_archived}
+                      >
+                        <option value="">No purchase order</option>
+                        {purchaseOrders.map((purchaseOrder) => (
+                          <option key={purchaseOrder.id} value={purchaseOrder.id}>
+                            {purchaseOrder.po_number}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="report-customer">Related Customer</label>
+                      <select
+                        id="report-customer"
+                        value={reportCustomerId}
+                        onChange={(event) => setReportCustomerId(event.target.value)}
+                        disabled={saving || document.is_archived}
+                      >
+                        <option value="">No customer</option>
+                        {customers.map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="report-tags">Tags</label>
+                      <input
+                        id="report-tags"
+                        type="text"
+                        value={reportTags}
+                        onChange={(event) => setReportTags(event.target.value)}
+                        placeholder="pallets, inventory, UAE"
+                        disabled={saving || document.is_archived}
+                      />
+                      <small className="field-hint">
+                        Separate multiple tags with commas.
+                      </small>
+                    </div>
+
+                    <div className="field field-full">
+                      <div className="report-edit-callout">
+                        <div className="report-edit-icon">▦</div>
+                        <div>
+                          <strong>Spreadsheet viewer</strong>
+                          <span>
+                            This report opens directly as a Google-Sheets-style viewer. Replacing the file creates a new document version while preserving the report metadata.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <section className="card">
                 <div className="card-header">
                   <div>
@@ -1555,10 +1968,11 @@ export default function EditDocumentPage() {
               <section className="card">
                 <div className="card-header">
                   <div>
-                    <h2>Replace Document File</h2>
+                    <h2>{isReportDocument(document) ? "Replace Report File" : "Replace Document File"}</h2>
                     <p>
-                      Upload a new file to create the next
-                      document version.
+                      {isReportDocument(document)
+                        ? "Upload a new spreadsheet to create the next report version."
+                        : "Upload a new file to create the next document version."}
                     </p>
                   </div>
                 </div>
@@ -1612,8 +2026,9 @@ export default function EditDocumentPage() {
                     </span>
 
                     <span className="upload-subtitle">
-                      PDF, DOC, DOCX, XLS, XLSX, CSV,
-                      JPG, JPEG, PNG or ZIP • Max 25 MB
+                      {isReportDocument(document)
+                        ? "XLS, XLSX or CSV • Max 25 MB"
+                        : "PDF, DOC, DOCX, XLS, XLSX, CSV, JPG, JPEG, PNG or ZIP • Max 25 MB"}
                     </span>
                   </label>
                 </div>

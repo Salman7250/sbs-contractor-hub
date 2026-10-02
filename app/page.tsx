@@ -1861,12 +1861,39 @@ export default function DashboardPage() {
       1,
     );
 
-  const greeting =
+  const displayName =
     profile?.first_name ||
     profile?.full_name?.split(
       " ",
     )[0] ||
     "there";
+
+  const [timeGreeting, setTimeGreeting] =
+    useState("Good morning");
+
+  useEffect(() => {
+    const updateGreeting = () => {
+      const hour = new Date().getHours();
+
+      if (hour < 12) {
+        setTimeGreeting("Good morning");
+      } else if (hour < 18) {
+        setTimeGreeting("Good afternoon");
+      } else {
+        setTimeGreeting("Good evening");
+      }
+    };
+
+    updateGreeting();
+
+    const interval = window.setInterval(
+      updateGreeting,
+      60_000,
+    );
+
+    return () =>
+      window.clearInterval(interval);
+  }, []);
 
   const recentActivity =
     useMemo(() => {
@@ -2215,9 +2242,9 @@ export default function DashboardPage() {
               </div>
 
               <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.6rem] sm:leading-[1.1]">
-                Good morning,{" "}
+                {timeGreeting},{" "}
                 <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
-                  {greeting}.
+                  {displayName}.
                 </span>
               </h1>
 
@@ -3313,14 +3340,14 @@ function QuickActions({
       slug: "customers",
       permission: "customers",
       label: "Add customer",
-      href: "/customers",
+      href: "/customers/new",
       icon: <Users className="h-4 w-4" />,
     },
     {
       slug: "estimates",
       permission: "quotes",
       label: "Create estimate",
-      href: "/estimates",
+      href: "/estimates/new",
       icon: <FileText className="h-4 w-4" />,
     },
     {
