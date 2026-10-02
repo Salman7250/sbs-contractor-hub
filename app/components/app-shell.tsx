@@ -16,6 +16,7 @@ import NotificationCenter from "@/app/components/notification-center";
 import styles from "./app-shell.module.css";
 import UserAvatar from "@/app/components/user-avatar";
 import { useWorkspaceAccess } from "./workspace-access-provider";
+import SbsAiAssistant from "./sbs-ai-assistant";
 
 type AppShellProps = {
   children: ReactNode;
@@ -2345,7 +2346,10 @@ export default function AppShell({
 
           {children}
         </main>
+        <SbsAiAssistant pathname={pathname} />
       </div>
     </div>
+    
   );
+  
 }
