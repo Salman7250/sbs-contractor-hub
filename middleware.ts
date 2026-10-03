@@ -3,6 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasCompanyModuleAccess } from "@/lib/auth/module-access";
 import { getModuleRouteRule } from "@/lib/navigation/module-routes";
 
+type PlatformRuntimePolicy = {
+  maintenance_mode: boolean;
+  platform_lockdown: boolean;
+  new_company_signups_enabled: boolean;
+  is_platform_admin: boolean;
+  platform_admin_role: "super_admin" | "support" | null;
+};
+
 function isPublicPath(pathname: string) {
   return (
     pathname === "/login" ||
@@ -12,6 +20,22 @@ function isPublicPath(pathname: string) {
     pathname === "/set-password" ||
     pathname === "/onboarding" ||
     pathname === "/account-suspended" ||
+    pathname === "/maintenance" ||
+    pathname.startsWith("/auth/")
+  );
+}
+
+function isPlatformAdminPath(pathname: string) {
+  return pathname === "/sbs-admin" || pathname.startsWith("/sbs-admin/");
+}
+
+function isMaintenanceExemptPath(pathname: string) {
+  return (
+    pathname === "/maintenance" ||
+    pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname === "/set-password" ||
     pathname.startsWith("/auth/")
   );
 }
@@ -57,11 +81,12 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const pathname =
-    request.nextUrl.pathname;
+  const pathname = request.nextUrl.pathname;
 
   /*
-   * Always resolve the current Supabase user.
+   * ---------------------------------------------------------
+   * AUTHENTICATION
+   * ---------------------------------------------------------
    */
   const {
     data: { user },
@@ -69,14 +94,148 @@ export async function middleware(request: NextRequest) {
 
   /*
    * ---------------------------------------------------------
-   * SUSPENDED ACCOUNT PAGE
+   * PLATFORM RUNTIME POLICY
    * ---------------------------------------------------------
    *
-   * This page is allowed through middleware so a suspended
-   * company can actually see the suspension message and
-   * log out.
+   * This is intentionally resolved before company-level
+   * authorization so platform-wide emergency controls can
+   * stop access before normal workspace checks run.
    *
-   * It does NOT give access to the application.
+   * Anonymous users do not need this policy because the
+   * public application routes remain available.
+   */
+  let platformPolicy: PlatformRuntimePolicy | null = null;
+
+  if (user) {
+    const {
+      data,
+      error: platformPolicyError,
+    } = await supabase.rpc(
+      "get_platform_runtime_policy",
+    );
+
+    if (platformPolicyError) {
+      console.error(
+        "Platform runtime policy lookup failed:",
+        platformPolicyError,
+      );
+
+      /*
+       * Fail closed for authenticated application users.
+       * Platform-admin routes are also blocked if the platform
+       * policy cannot be safely determined.
+       *
+       * This prevents a runtime policy failure from accidentally
+       * bypassing maintenance or lockdown.
+       */
+      if (
+        pathname !== "/login" &&
+        !isMaintenanceExemptPath(pathname)
+      ) {
+        return NextResponse.redirect(
+          new URL(
+            "/maintenance?reason=policy-check-failed",
+            request.url,
+          ),
+        );
+      }
+    } else {
+      platformPolicy =
+        data as PlatformRuntimePolicy | null;
+    }
+  }
+
+  const isPlatformAdmin =
+    platformPolicy?.is_platform_admin === true;
+
+  const isPlatformAdminRoute =
+    isPlatformAdminPath(pathname);
+
+  /*
+   * ---------------------------------------------------------
+   * PLATFORM ADMIN ACCESS
+   * ---------------------------------------------------------
+   *
+   * Platform admins can always reach /sbs-admin during
+   * maintenance mode or platform lockdown.
+   *
+   * Non-admin users are never allowed to use the platform
+   * admin area.
+   */
+  if (isPlatformAdminRoute) {
+    if (!user) {
+      const loginUrl = new URL(
+        "/login",
+        request.url,
+      );
+
+      loginUrl.searchParams.set(
+        "redirectTo",
+        `${pathname}${request.nextUrl.search}`,
+      );
+
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (!isPlatformAdmin) {
+      return NextResponse.redirect(
+        new URL(
+          "/?error=platform-admin-access-denied",
+          request.url,
+        ),
+      );
+    }
+
+    return response;
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * PLATFORM MAINTENANCE / LOCKDOWN
+   * ---------------------------------------------------------
+   *
+   * Platform admins bypass both controls.
+   *
+   * Maintenance mode and lockdown intentionally stop normal
+   * authenticated application traffic before company-level
+   * authorization is evaluated.
+   */
+  if (
+    user &&
+    platformPolicy &&
+    !isPlatformAdmin &&
+    (
+      platformPolicy.maintenance_mode ||
+      platformPolicy.platform_lockdown
+    ) &&
+    !isMaintenanceExemptPath(pathname)
+  ) {
+    const maintenanceUrl = new URL(
+      "/maintenance",
+      request.url,
+    );
+
+    if (platformPolicy.platform_lockdown) {
+      maintenanceUrl.searchParams.set(
+        "mode",
+        "lockdown",
+      );
+    } else {
+      maintenanceUrl.searchParams.set(
+        "mode",
+        "maintenance",
+      );
+    }
+
+    return NextResponse.redirect(
+      maintenanceUrl,
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * SUSPENDED ACCOUNT PAGE
+   * ---------------------------------------------------------
    */
   if (pathname === "/account-suspended") {
     return response;
@@ -87,22 +246,15 @@ export async function middleware(request: NextRequest) {
    * CUSTOMER PORTAL
    * ---------------------------------------------------------
    */
-
   const isCustomerPortalPath =
     pathname === "/portal" ||
     pathname.startsWith("/portal/");
 
   if (isCustomerPortalPath) {
-    /*
-     * Portal login is public.
-     */
     if (pathname === "/portal/login") {
       return response;
     }
 
-    /*
-     * All other portal pages require authentication.
-     */
     if (!user) {
       const loginUrl = new URL(
         "/portal/login",
@@ -114,14 +266,9 @@ export async function middleware(request: NextRequest) {
         `${pathname}${request.nextUrl.search}`,
       );
 
-      return NextResponse.redirect(
-        loginUrl,
-      );
+      return NextResponse.redirect(loginUrl);
     }
 
-    /*
-     * Verify active customer portal account.
-     */
     const {
       data: portalUser,
       error: portalUserError,
@@ -145,9 +292,6 @@ export async function middleware(request: NextRequest) {
       );
     }
 
-    /*
-     * Customer portal authorization succeeded.
-     */
     return response;
   }
 
@@ -156,78 +300,64 @@ export async function middleware(request: NextRequest) {
    * ONBOARDING
    * ---------------------------------------------------------
    */
-
-  /*
- * ---------------------------------------------------------
- * ONBOARDING
- * ---------------------------------------------------------
- */
-
-if (pathname === "/onboarding") {
-  if (!user) {
-    const loginUrl = new URL(
-      "/login",
-      request.url,
-    );
-
-    loginUrl.searchParams.set(
-      "redirectTo",
-      "/onboarding",
-    );
-
-    return NextResponse.redirect(
-      loginUrl,
-    );
-  }
-
-  /*
-   * Employees must NEVER enter company onboarding.
-   *
-   * Employee accounts already belong to a company and
-   * therefore have no reason to complete company setup.
-   */
-  const {
-    data: employee,
-    error: employeeError,
-  } = await supabase
-    .from("employees")
-    .select("id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (employeeError) {
-    console.error(
-      "Onboarding employee lookup failed:",
-      employeeError,
-    );
-
-    return NextResponse.redirect(
-      new URL(
-        "/?error=employee-check-failed",
+  if (pathname === "/onboarding") {
+    if (!user) {
+      const loginUrl = new URL(
+        "/login",
         request.url,
-      ),
-    );
-  }
+      );
 
-  if (employee) {
-    return NextResponse.redirect(
-      new URL(
-        "/",
-        request.url,
-      ),
-    );
-  }
+      loginUrl.searchParams.set(
+        "redirectTo",
+        "/onboarding",
+      );
 
-  return response;
-}
+      return NextResponse.redirect(
+        loginUrl,
+      );
+    }
+
+    const {
+      data: employee,
+      error: employeeError,
+    } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (employeeError) {
+      console.error(
+        "Onboarding employee lookup failed:",
+        employeeError,
+      );
+
+      return NextResponse.redirect(
+        new URL(
+          "/?error=employee-check-failed",
+          request.url,
+        ),
+      );
+    }
+
+    if (employee) {
+      return NextResponse.redirect(
+        new URL(
+          "/",
+          request.url,
+        ),
+      );
+    }
+
+    return response;
+  }
 
   /*
    * ---------------------------------------------------------
    * PUBLIC APPLICATION ROUTES
    * ---------------------------------------------------------
    */
-
   if (isPublicPath(pathname)) {
     if (
       user &&
@@ -246,21 +376,13 @@ if (pathname === "/onboarding") {
    * EMPLOYEE WORKSPACE ROUTES
    * ---------------------------------------------------------
    */
-
   const rule =
     getModuleRouteRule(pathname);
 
-  /*
-   * Routes outside the employee workspace
-   * are left alone.
-   */
   if (!rule) {
     return response;
   }
 
-  /*
-   * Employee workspace requires authentication.
-   */
   if (!user) {
     const loginUrl = new URL(
       "/login",
@@ -282,7 +404,6 @@ if (pathname === "/onboarding") {
    * RESOLVE COMPANY MEMBERSHIP + COMPANY STATUS
    * ---------------------------------------------------------
    */
-
   const {
     data: membership,
     error: membershipError,
@@ -317,11 +438,6 @@ if (pathname === "/onboarding") {
     );
   }
 
-  /*
-   * Supabase can return the relationship as either
-   * an object or an array depending on the generated
-   * relationship shape.
-   */
   const company = Array.isArray(
     membership.companies,
   )
@@ -332,15 +448,6 @@ if (pathname === "/onboarding") {
    * ---------------------------------------------------------
    * SUSPENDED COMPANY CHECK
    * ---------------------------------------------------------
-   *
-   * This is the important part.
-   *
-   * Once the company status is "suspended",
-   * the user cannot enter ANY employee workspace
-   * route.
-   *
-   * Opening another tab will hit this middleware again
-   * and redirect back to /account-suspended.
    */
   if (
     company?.status ===
@@ -359,7 +466,6 @@ if (pathname === "/onboarding") {
    * MODULE ENTITLEMENT
    * ---------------------------------------------------------
    */
-
   if (rule.entitlementModule) {
     try {
       const hasEntitlement =
@@ -397,7 +503,6 @@ if (pathname === "/onboarding") {
    * EMPLOYEE PERMISSION CHECK
    * ---------------------------------------------------------
    */
-
   const {
     data: allowed,
     error: permissionError,
@@ -408,7 +513,8 @@ if (pathname === "/onboarding") {
         membership.company_id,
       p_module:
         rule.permissionModule,
-      p_action: "view",
+      p_action:
+        "view",
     },
   );
 

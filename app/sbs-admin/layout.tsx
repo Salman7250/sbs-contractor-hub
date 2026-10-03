@@ -3,6 +3,7 @@ import PageTitle from "@/app/components/page-title";
 import Image from "next/image";
 import Link from "next/link";
 import { ReactNode } from "react";
+import PlatformNotifications from "./platform-notifications";
 
 const navigation = [
   {
@@ -173,7 +174,14 @@ export default async function SBSAdminLayout({
                   </div>
                 </div>
 
+                {/* Right Side */}
                 <div className="flex items-center gap-3">
+                  {/* Platform Admin Notifications */}
+                  <PlatformNotifications
+                    userId={user.id}
+                  />
+
+                  {/* Desktop Account Info */}
                   <div className="hidden text-right sm:block">
                     <div className="text-xs font-medium text-slate-700">
                       {user.email}
@@ -184,6 +192,7 @@ export default async function SBSAdminLayout({
                     </div>
                   </div>
 
+                  {/* Mobile Avatar */}
                   <div className="flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-600 sm:hidden">
                     {user.email?.charAt(0).toUpperCase() ?? "A"}
                   </div>

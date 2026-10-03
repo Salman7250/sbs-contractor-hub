@@ -9,6 +9,12 @@ import styles from "./page.module.css";
 
 type BusinessType = "product" | "service";
 
+type SignupPlatformPolicy = {
+  new_company_signups_enabled: boolean;
+  require_email_verification: boolean;
+  default_trial_days: number;
+};
+
 export default function OnboardingPage() {
   const router = useRouter();
 
@@ -25,6 +31,9 @@ export default function OnboardingPage() {
 
   const [trialStarted, setTrialStarted] =
     useState(false);
+
+  const [trialDays, setTrialDays] =
+    useState(14);
 
   const [error, setError] = useState("");
 
@@ -83,6 +92,40 @@ export default function OnboardingPage() {
           router.replace("/login");
           return;
         }
+
+        const {
+          data: platformPolicy,
+          error: platformPolicyError,
+        } = await supabase.rpc(
+          "get_signup_platform_policy",
+        );
+
+        if (platformPolicyError) {
+          throw new Error(
+            platformPolicyError.message,
+          );
+        }
+
+        const policy =
+          platformPolicy as SignupPlatformPolicy | null;
+
+        if (
+          policy &&
+          !policy.new_company_signups_enabled
+        ) {
+          setError(
+            "New company signups are currently disabled. Please try again later.",
+          );
+          setCheckingSession(false);
+          return;
+        }
+
+        setTrialDays(
+          Math.max(
+            0,
+            Number(policy?.default_trial_days ?? 14),
+          ),
+        );
 
         const {
           data: membership,
@@ -185,7 +228,7 @@ export default function OnboardingPage() {
        * - creating the owner membership
        * - selecting the user's plan
        * - creating the subscription
-       * - starting the 14-day trial
+       * - starting the configured trial
        * - assigning the plan's modules
        */
       const {
@@ -234,7 +277,7 @@ export default function OnboardingPage() {
 
       /*
        * The database has successfully created the
-       * workspace and started the 14-day trial.
+       * workspace and started the configured trial.
        *
        * Show a success message before entering
        * the workspace.
@@ -433,8 +476,8 @@ export default function OnboardingPage() {
             Tell us a little about your
             business. We&apos;ll use this
             information to create your SBS
-            workspace and start your
-            14-day free trial.
+            workspace and start your{" "}
+            {trialDays}-day free trial.
           </p>
 
           <div
@@ -492,7 +535,7 @@ export default function OnboardingPage() {
                 }
               >
                 <strong>
-                  14-day free trial
+                  {trialDays}-day free trial
                 </strong>
 
                 <span>
@@ -559,7 +602,7 @@ export default function OnboardingPage() {
 
             <span>
               No payment is required to
-              start your 14-day trial.
+              start your {trialDays}-day trial.
             </span>
           </div>
         </div>
@@ -674,7 +717,7 @@ export default function OnboardingPage() {
                         "#111827",
                     }}
                   >
-                    14 days free
+                    {trialDays} days free
                   </strong>{" "}
                   to explore the platform.
                 </p>
@@ -1208,7 +1251,7 @@ export default function OnboardingPage() {
                       </>
                     ) : (
                       <>
-                        Start my 14-day free
+                        Start my {trialDays}-day free
                         trial
 
                         <svg
@@ -1231,7 +1274,7 @@ export default function OnboardingPage() {
                     }
                   >
                     No credit card required.
-                    Your 14-day trial starts
+                    Your {trialDays}-day trial starts
                     when your workspace is
                     created.
                   </p>

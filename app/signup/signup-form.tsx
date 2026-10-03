@@ -11,6 +11,12 @@ import styles from "./page.module.css";
 
 const CONFIRMATION_PATH = "/auth/confirm";
 
+type SignupPlatformPolicy = {
+  new_company_signups_enabled: boolean;
+  require_email_verification: boolean;
+  default_trial_days: number;
+};
+
 type SelectedPlan = {
   id: string;
   name: string;
@@ -37,6 +43,8 @@ export default function SignupForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [emailVerificationRequired, setEmailVerificationRequired] =
+    useState(true);
 
   async function handleSignup(
     event: FormEvent<HTMLFormElement>
@@ -48,6 +56,44 @@ export default function SignupForm() {
     }
 
     setError("");
+
+    /*
+     * Read the current public signup policy before creating the
+     * account. The database onboarding RPC remains the final
+     * server-side authority for new company creation.
+     */
+    const {
+      data: platformPolicy,
+      error: platformPolicyError,
+    } = await supabase.rpc(
+      "get_signup_platform_policy",
+    );
+
+    if (platformPolicyError) {
+      console.error(
+        "Signup platform policy error:",
+        platformPolicyError,
+      );
+
+      setError(
+        "We could not verify signup availability. Please try again.",
+      );
+      return;
+    }
+
+    const policy =
+      platformPolicy as SignupPlatformPolicy | null;
+
+    if (policy && !policy.new_company_signups_enabled) {
+      setError(
+        "New company signups are currently disabled. Please try again later.",
+      );
+      return;
+    }
+
+    setEmailVerificationRequired(
+      policy?.require_email_verification !== false,
+    );
 
     const trimmedFullName = fullName.trim();
     const trimmedCompanyName = companyName.trim();
@@ -212,12 +258,23 @@ export default function SignupForm() {
     }
 
     /*
-     * Supabase normally returns a user with no active session
-     * when email confirmation is required.
+     * When the platform policy does not require verification and
+     * Supabase returned an active session, continue directly to
+     * onboarding. Otherwise show the existing confirmation state.
      *
-     * The selected plan has already been stored in user metadata,
-     * while the confirmation URL also carries the plan slug.
+     * Supabase Auth project-level confirmation settings can still
+     * require verification independently of this application
+     * setting, so we never claim that verification was bypassed
+     * unless an active session is actually available.
      */
+    if (
+      policy?.require_email_verification === false &&
+      data.session
+    ) {
+      window.location.href = "/onboarding";
+      return;
+    }
+
     setEmailSent(true);
     setLoading(false);
   }
@@ -238,17 +295,35 @@ export default function SignupForm() {
           </svg>
         </div>
 
-        <h3>Check your email</h3>
+        {emailVerificationRequired ? (
+          <h3>Check your email</h3>
+        ) : (
+          <h3>Your account is ready</h3>
+        )}
 
-        <p>
-          We sent a confirmation link to{" "}
-          <strong>{email.trim()}</strong>.
-        </p>
+        {emailVerificationRequired ? (
+          <>
+            <p>
+              We sent a confirmation link to{" "}
+              <strong>{email.trim()}</strong>.
+            </p>
 
-        <p className={styles.successSecondary}>
-          Open the email and click the confirmation
-          link to activate your SBS account.
-        </p>
+            <p className={styles.successSecondary}>
+              Open the email and click the confirmation
+              link to activate your SBS account.
+            </p>
+          </>
+        ) : (
+          <>
+            <p>
+              Your SBS account has been created successfully.
+            </p>
+
+            <p className={styles.successSecondary}>
+              Sign in to continue to your workspace.
+            </p>
+          </>
+        )}
 
         <div className={styles.successActions}>
           <Link
@@ -259,10 +334,12 @@ export default function SignupForm() {
           </Link>
         </div>
 
-        <p className={styles.successHelp}>
-          Didn&apos;t receive it? Check your spam or
-          junk folder.
-        </p>
+        {emailVerificationRequired && (
+          <p className={styles.successHelp}>
+            Didn&apos;t receive it? Check your spam or
+            junk folder.
+          </p>
+        )}
       </div>
     );
   }
